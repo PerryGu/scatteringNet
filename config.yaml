@@ -1,0 +1,6 @@
+# Static experiment knobs for the occupancy MLP MVP.
+# Runtime paths and device are resolved in src/config.py (DATA_DIR, CUDA).
+
+hidden: 64
+depth: 4
+seed: 1
