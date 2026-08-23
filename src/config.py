@@ -1,45 +1,34 @@
-"""Hybrid config loader for the v2 occupancy MLP MVP (Step 2).
+"""Hybrid config loader for the v2 occupancy MLP MVP.
 
-Static knobs (``hidden``, ``depth``, ``seed``) live in ``config.yaml``.
-Runtime values are resolved here:
+Static settings (``hidden``, ``depth``, ``seed``, ``data_dir``) live in
+``config.yaml``. ``device`` is resolved here from CUDA availability.
 
-- ``DATA_DIR`` from the process environment (``.env`` fill-if-missing)
-- ``device`` from CUDA availability
-
-This module does not open NPZ files.
+This module does not read ``.env`` and does not open NPZ files.
 """
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, TypedDict
 
 import torch
 import yaml
 
 # Repo root: src/config.py → parents[1].
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_ENV_PATH = _REPO_ROOT / ".env"
 _DEFAULT_YAML = _REPO_ROOT / "config.yaml"
 
-_REQUIRED_YAML_KEYS = ("hidden", "depth", "seed")
+_REQUIRED_YAML_KEYS = ("hidden", "depth", "seed", "data_dir")
 
 
-def _load_dotenv_file(path: Path) -> None:
-    """Parse a minimal KEY=VALUE .env into os.environ (fill-if-missing)."""
-    if not path.is_file():
-        return
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip().strip("'").strip('"')
-        if key and key not in os.environ:
-            os.environ[key] = value
+class YamlKnobs(TypedDict):
+    """Subset of OccupancyConfig that is stored in YAML."""
+
+    hidden: int
+    depth: int
+    seed: int
+    data_dir: str
 
 
 def get_device() -> torch.device:
@@ -64,8 +53,14 @@ def _as_positive_int(name: str, value: Any) -> int:
     return parsed
 
 
-def load_yaml_knobs(path: Path) -> dict[str, int]:
-    """Read static MLP knobs from YAML. Does not resolve DATA_DIR or device."""
+def _as_data_dir_string(value: Any) -> str:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise ValueError("data_dir must be a non-empty path string in config.yaml")
+    return str(value).strip()
+
+
+def load_yaml_knobs(path: Path) -> YamlKnobs:
+    """Read YAML settings. Does not check that data_dir exists on disk."""
     if not path.is_file():
         raise FileNotFoundError(f"Config YAML not found: {path}")
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -78,12 +73,37 @@ def load_yaml_knobs(path: Path) -> dict[str, int]:
         "hidden": _as_positive_int("hidden", raw["hidden"]),
         "depth": _as_positive_int("depth", raw["depth"]),
         "seed": _as_positive_int("seed", raw["seed"]),
+        "data_dir": _as_data_dir_string(raw["data_dir"]),
     }
+
+
+def _warn_missing_data_dir(data_dir: Path, yaml_path: Path) -> None:
+    """Print a terminal hint so the user can fix config.yaml (no .env involved)."""
+    print(
+        "\n"
+        "Dataset folder not found.\n"
+        f"  Looked for: {data_dir}\n"
+        "\n"
+        "Update `data_dir` in config.yaml to the folder that contains "
+        "`exports/` and `meshes/`.\n"
+        f"  Config file: {yaml_path}\n"
+    )
+
+
+def require_data_dir(data_dir: Path, *, yaml_path: Path) -> None:
+    """Validate the dataset root before training or NPZ loading."""
+    if data_dir.is_dir():
+        return
+    _warn_missing_data_dir(data_dir, yaml_path)
+    raise FileNotFoundError(
+        f"Dataset directory does not exist: {data_dir}. "
+        f"Set data_dir in {yaml_path}."
+    )
 
 
 @dataclass(frozen=True)
 class OccupancyConfig:
-    """Resolved MVP settings: YAML knobs + runtime data_dir/device."""
+    """Resolved MVP settings from YAML plus detected device."""
 
     data_dir: Path
     device: torch.device
@@ -92,19 +112,24 @@ class OccupancyConfig:
     seed: int
 
 
-def load_config(yaml_path: Path | None = None) -> OccupancyConfig:
-    """Compose OccupancyConfig from YAML knobs and the environment."""
-    _load_dotenv_file(_ENV_PATH)
-    knobs = load_yaml_knobs(yaml_path or _DEFAULT_YAML)
+def load_config(
+    yaml_path: Path | None = None,
+    *,
+    require_existing_data_dir: bool = True,
+) -> OccupancyConfig:
+    """Compose OccupancyConfig from ``config.yaml`` (not from ``.env``).
 
-    raw_data_dir = os.environ.get("DATA_DIR", "").strip()
-    if not raw_data_dir:
-        raise RuntimeError(
-            "DATA_DIR is not set. Add it to the environment or to the repo "
-            f".env file ({_ENV_PATH})."
-        )
+    When ``require_existing_data_dir`` is True (default), a missing folder
+    prints a short instruction and then raises FileNotFoundError — used for
+    training and data loading.
+    """
+    cfg_path = yaml_path or _DEFAULT_YAML
+    knobs = load_yaml_knobs(cfg_path)
+    data_dir = Path(knobs["data_dir"])
+    if require_existing_data_dir:
+        require_data_dir(data_dir, yaml_path=cfg_path)
     return OccupancyConfig(
-        data_dir=Path(raw_data_dir),
+        data_dir=data_dir,
         device=get_device(),
         hidden=knobs["hidden"],
         depth=knobs["depth"],
@@ -113,7 +138,7 @@ def load_config(yaml_path: Path | None = None) -> OccupancyConfig:
 
 
 def format_config(cfg: OccupancyConfig) -> str:
-    """Pretty-print for CLI smoke checks (data_dir and device must be real)."""
+    """Pretty-print for CLI smoke checks."""
     return (
         f"OccupancyConfig(\n"
         f"  data_dir={cfg.data_dir}\n"

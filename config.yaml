@@ -1,6 +1,7 @@
-# Static experiment knobs for the occupancy MLP MVP.
-# Runtime paths and device are resolved in src/config.py (DATA_DIR, CUDA).
+# Experiment settings for the occupancy MLP MVP.
+# `device` is still detected at runtime in src/config.py (CUDA vs CPU).
 
 hidden: 64
 depth: 4
 seed: 1
+data_dir: "E:/Work_stuff/scatteringNet/data"
