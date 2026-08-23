@@ -1,7 +1,9 @@
 """Hybrid config loader for the v2 occupancy MLP MVP.
 
-Static settings (``hidden``, ``depth``, ``seed``, ``data_dir``) live in
-``config.yaml``. ``device`` is resolved here from CUDA availability.
+Static experiment knobs live in ``config.yaml``. ``device`` is resolved
+here from CUDA availability. Training defaults (epochs, lr, checkpoint
+path, sample NPZ) are YAML-owned so ``train_one_npz`` does not hardcode
+them.
 
 This module does not read ``.env`` and does not open NPZ files.
 """
@@ -19,16 +21,29 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_YAML = _REPO_ROOT / "config.yaml"
 
-_REQUIRED_YAML_KEYS = ("hidden", "depth", "seed", "data_dir")
+_REQUIRED_YAML_KEYS = (
+    "hidden",
+    "depth",
+    "seed",
+    "data_dir",
+    "epochs",
+    "lr",
+    "checkpoint_path",
+    "sample_npz",
+)
 
 
 class YamlKnobs(TypedDict):
-    """Subset of OccupancyConfig that is stored in YAML."""
+    """Subset of OccupancyConfig that is stored in YAML (paths as strings)."""
 
     hidden: int
     depth: int
     seed: int
     data_dir: str
+    epochs: int
+    lr: float
+    checkpoint_path: str
+    sample_npz: str
 
 
 def get_device() -> torch.device:
@@ -53,10 +68,33 @@ def _as_positive_int(name: str, value: Any) -> int:
     return parsed
 
 
-def _as_data_dir_string(value: Any) -> str:
+def _as_positive_float(name: str, value: Any) -> float:
+    """Learning-rate style knobs must be a finite float > 0."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a float, got {value!r}") from exc
+    if parsed <= 0.0 or parsed != parsed:
+        raise ValueError(f"{name} must be > 0, got {parsed}")
+    return parsed
+
+
+def _as_nonempty_path_string(name: str, value: Any) -> str:
     if value is None or (isinstance(value, str) and not value.strip()):
-        raise ValueError("data_dir must be a non-empty path string in config.yaml")
+        raise ValueError(f"{name} must be a non-empty path string in config.yaml")
     return str(value).strip()
+
+
+def _as_data_dir_string(value: Any) -> str:
+    return _as_nonempty_path_string("data_dir", value)
+
+
+def _resolve_repo_path(value: str) -> Path:
+    """Absolute paths stay as-is; relative paths are rooted at the repo."""
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return _REPO_ROOT / path
 
 
 def load_yaml_knobs(path: Path) -> YamlKnobs:
@@ -74,6 +112,12 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
         "depth": _as_positive_int("depth", raw["depth"]),
         "seed": _as_positive_int("seed", raw["seed"]),
         "data_dir": _as_data_dir_string(raw["data_dir"]),
+        "epochs": _as_positive_int("epochs", raw["epochs"]),
+        "lr": _as_positive_float("lr", raw["lr"]),
+        "checkpoint_path": _as_nonempty_path_string(
+            "checkpoint_path", raw["checkpoint_path"]
+        ),
+        "sample_npz": _as_nonempty_path_string("sample_npz", raw["sample_npz"]),
     }
 
 
@@ -110,6 +154,15 @@ class OccupancyConfig:
     hidden: int
     depth: int
     seed: int
+    epochs: int
+    lr: float
+    checkpoint_path: Path
+    sample_npz: Path
+
+
+def sample_npz_path(cfg: OccupancyConfig) -> Path:
+    """Compose the overfit NPZ path: ``data_dir / sample_npz``."""
+    return cfg.data_dir / cfg.sample_npz
 
 
 def load_config(
@@ -134,6 +187,10 @@ def load_config(
         hidden=knobs["hidden"],
         depth=knobs["depth"],
         seed=knobs["seed"],
+        epochs=knobs["epochs"],
+        lr=knobs["lr"],
+        checkpoint_path=_resolve_repo_path(knobs["checkpoint_path"]),
+        sample_npz=Path(knobs["sample_npz"]),
     )
 
 
@@ -146,6 +203,10 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  hidden={cfg.hidden}\n"
         f"  depth={cfg.depth}\n"
         f"  seed={cfg.seed}\n"
+        f"  epochs={cfg.epochs}\n"
+        f"  lr={cfg.lr}\n"
+        f"  checkpoint_path={cfg.checkpoint_path}\n"
+        f"  sample_npz={cfg.sample_npz}\n"
         f")"
     )
 

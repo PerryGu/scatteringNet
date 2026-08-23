@@ -14,16 +14,13 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from config import OccupancyConfig, load_config
+from config import OccupancyConfig, load_config, sample_npz_path
 from dataset import OccupancyPointDataset, make_dataloader
+from metrics import occupancy_metrics
 from occupancy_mlp import OccupancyMLP
 
+# Checkpoint schema tag (not an experiment knob; stay out of YAML).
 CHECKPOINT_KIND = "occupancy_mlp"
-DEFAULT_EPOCHS = 30
-DEFAULT_LR = 1e-3
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT_PATH = _REPO_ROOT / "models" / "one_npz.pt"
-_SAMPLE_RELATIVE = Path("exports") / "dataset_test" / "sphere__raycast_z_raut_s0.15_inout.npz"
 
 
 @dataclass
@@ -41,12 +38,6 @@ def seed_everything(seed: int) -> None:
     np.random.seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-
-
-def _batch_accuracy(logits: torch.Tensor, y: torch.Tensor) -> float:
-    """Fraction of points with (sigmoid >= 0.5) matching the 0/1 label."""
-    pred = (logits.sigmoid() >= 0.5).to(y.dtype)
-    return float((pred == y).float().mean().item())
 
 
 def save_checkpoint(
@@ -73,19 +64,21 @@ def save_checkpoint(
 def train_one_npz(
     npz_path: Path,
     cfg: OccupancyConfig,
-    *,
-    epochs: int = DEFAULT_EPOCHS,
-    lr: float = DEFAULT_LR,
-    out_path: Path = DEFAULT_OUT_PATH,
 ) -> TrainRunResult:
     """
-    Train on all points in ``npz_path`` and save ``models/one_npz.pt``.
+    Train on all points in ``npz_path`` and save ``cfg.checkpoint_path``.
 
-    Returns per-epoch mean loss / accuracy and the checkpoint path.
-    Prints the same metrics each epoch.
+    Epochs, learning rate, and checkpoint path come from ``OccupancyConfig``
+    (loaded from ``config.yaml``). Returns per-epoch mean loss / accuracy
+    and the checkpoint path. Prints ``occupancy_metrics`` each epoch.
     """
+    epochs = cfg.epochs
+    lr = cfg.lr
+    out_path = cfg.checkpoint_path
     if epochs < 1:
         raise ValueError(f"epochs must be >= 1, got {epochs}")
+    if lr <= 0.0:
+        raise ValueError(f"lr must be > 0, got {lr}")
     if cfg.device.type != "cuda":
         # Short overfit is allowed on CPU; do not pretend this is a production run.
         print(f"Warning: training on {cfg.device} (CUDA not in use).")
@@ -109,6 +102,8 @@ def train_one_npz(
     for epoch in range(1, epochs + 1):
         running_loss = 0.0
         running_acc = 0.0
+        running_prec = 0.0
+        running_rec = 0.0
         n_batches = 0
         for xyz, y in loader:
             xyz = xyz.to(cfg.device, non_blocking=False)
@@ -119,13 +114,23 @@ def train_one_npz(
             loss.backward()
             optimizer.step()
             running_loss += float(loss.item())
-            running_acc += _batch_accuracy(logits.detach(), y)
+            # Decision metrics live in metrics.py (not ad-hoc sigmoid here).
+            batch_scores = occupancy_metrics(logits.detach(), y)
+            running_acc += batch_scores.accuracy
+            running_prec += batch_scores.inside_precision
+            running_rec += batch_scores.inside_recall
             n_batches += 1
         mean_loss = running_loss / max(n_batches, 1)
         mean_acc = running_acc / max(n_batches, 1)
+        mean_prec = running_prec / max(n_batches, 1)
+        mean_rec = running_rec / max(n_batches, 1)
         losses.append(mean_loss)
         accuracies.append(mean_acc)
-        print(f"epoch {epoch:03d}  loss={mean_loss:.6f}  train_acc={mean_acc:.4f}")
+        print(
+            f"epoch {epoch:03d}  loss={mean_loss:.6f}  "
+            f"train_acc={mean_acc:.4f}  "
+            f"inside_prec={mean_prec:.4f}  inside_rec={mean_rec:.4f}"
+        )
 
     save_checkpoint(
         out_path,
@@ -140,5 +145,4 @@ def train_one_npz(
 
 if __name__ == "__main__":
     cfg = load_config()
-    sample = cfg.data_dir / _SAMPLE_RELATIVE
-    train_one_npz(sample, cfg)
+    train_one_npz(sample_npz_path(cfg), cfg)

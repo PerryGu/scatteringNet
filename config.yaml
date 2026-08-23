@@ -5,3 +5,11 @@ hidden: 64
 depth: 4
 seed: 1
 data_dir: "E:/Work_stuff/scatteringNet/data"
+
+# Train-one-NPZ knobs (used by src/train_one_npz.py).
+epochs: 30
+lr: 0.001
+# Relative to the repo root unless absolute.
+checkpoint_path: "models/one_npz.pt"
+# Relative to data_dir (the occupancy query file for the overfit run).
+sample_npz: "exports/dataset_test/sphere__raycast_z_raut_s0.15_inout.npz"

@@ -26,13 +26,22 @@ def _write_sphere_npz(path: Path, n: int = 256) -> None:
     np.savez(path, points=points, labels=labels)
 
 
-def _cpu_cfg() -> OccupancyConfig:
+def _cpu_cfg(
+    *,
+    epochs: int = 20,
+    lr: float = 1e-2,
+    checkpoint_path: Path,
+) -> OccupancyConfig:
     return OccupancyConfig(
         data_dir=Path("."),
         device=torch.device("cpu"),
         hidden=32,
         depth=2,
         seed=1,
+        epochs=epochs,
+        lr=lr,
+        checkpoint_path=checkpoint_path,
+        sample_npz=Path("sphere.npz"),
     )
 
 
@@ -42,13 +51,7 @@ class TrainOneNpzTests(unittest.TestCase):
             npz_path = Path(tmp) / "sphere.npz"
             out_path = Path(tmp) / "one_npz.pt"
             _write_sphere_npz(npz_path, n=256)
-            result = train_one_npz(
-                npz_path,
-                _cpu_cfg(),
-                epochs=20,
-                lr=1e-2,
-                out_path=out_path,
-            )
+            result = train_one_npz(npz_path, _cpu_cfg(checkpoint_path=out_path))
             self.assertTrue(out_path.is_file())
             self.assertEqual(result.out_path, out_path)
             self.assertEqual(len(result.losses), 20)
@@ -68,7 +71,10 @@ class TrainOneNpzTests(unittest.TestCase):
             npz_path = Path(tmp) / "sphere.npz"
             _write_sphere_npz(npz_path, n=8)
             with self.assertRaises(ValueError):
-                train_one_npz(npz_path, _cpu_cfg(), epochs=0, out_path=Path(tmp) / "x.pt")
+                train_one_npz(
+                    npz_path,
+                    _cpu_cfg(epochs=0, checkpoint_path=Path(tmp) / "x.pt"),
+                )
 
 
 if __name__ == "__main__":

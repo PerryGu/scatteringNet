@@ -6,6 +6,33 @@ Format: newest entries at the top.
 
 
 
+## 2026-08-23 18:35 — Env: recreate `scatteringNet`
+
+Replaced the broken mixed conda/pip PyTorch install with a single-source CUDA 12.1 stack named after the project.
+
+- Rewrote `environment.yaml`: conda-only `pytorch=2.5.1`, `pytorch-cuda=12.1`, `torchvision`, `torchaudio` (no pip torch wheels).
+- Recreated `conda` env `scatteringNet`. Verified `torch 2.5.1`, CUDA 12.1, `torch.cuda.is_available() == True`.
+- Full suite in the new env: 23 tests OK (including CUDA).
+- `.cursorrules` and `docs/v2_minimal_plan.md` now name `scatteringNet` (not `scatteringNet_v2`) as the project environment.
+
+## 2026-08-23 18:09 — Config: train knobs in YAML
+
+Moved one-NPZ training defaults out of the train script so experiment knobs live in one place.
+
+- `config.yaml` now holds `epochs`, `lr`, `checkpoint_path` (repo-relative), and `sample_npz` (relative to `data_dir`).
+- `src/config.py`: `OccupancyConfig` / `load_yaml_knobs` load those fields; relative checkpoints resolve against the repo root; added `sample_npz_path()`.
+- `src/train_one_npz.py` reads epochs / lr / checkpoint from `cfg` (no module-level defaults). CLI uses `sample_npz_path(cfg)`. `CHECKPOINT_KIND` stays in code (schema tag, not a train knob).
+- Tests updated (`tests/test_config.py`, `tests/test_train_one_npz.py`). Full suite: 23 tests OK.
+
+## 2026-08-23 17:26 — Step 7: [Metrics helper]
+
+Centralized occupancy decision metrics so the train loop no longer computes accuracy inline.
+
+- Added `src/metrics.py`: `occupancy_metrics` / `accuracy_from_logits` from logits vs `{0, 1}` labels (sigmoid + threshold `0.5`). Returns accuracy plus inside-class precision / recall (zero-denominator → `0.0`; no extra deps).
+- `src/train_one_npz.py` now prints `train_acc` / `inside_prec` / `inside_rec` via `occupancy_metrics`; removed the private `_batch_accuracy` helper. Checkpoint format and `TrainRunResult` are unchanged.
+- Tests: `tests/test_metrics.py` (6 tests OK, including CUDA). Existing `tests/test_train_one_npz.py` still passes (2 tests OK).
+- Smoke: `python src/metrics.py` prints `accuracy=1.0000`, `inside_precision=1.0000`, `inside_recall=1.0000` on a perfect 8-point batch.
+
 ## 2026-08-21 18:30 — Step 6: [Train one NPZ / overfit]
 
 Overfit `OccupancyMLP` on one occupancy NPZ (all points used as train; no val split).
