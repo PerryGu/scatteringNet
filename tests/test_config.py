@@ -33,6 +33,7 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertAlmostEqual(knobs["lr"], float(disk["lr"]))
         self.assertEqual(knobs["checkpoint_path"], str(disk["checkpoint_path"]).strip())
         self.assertEqual(knobs["sample_npz"], str(disk["sample_npz"]).strip())
+        self.assertAlmostEqual(knobs["val_fraction"], float(disk["val_fraction"]))
 
     def test_load_config_resolves_data_dir_and_device(self) -> None:
         cfg = load_config()
@@ -49,6 +50,7 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn("device=", rendered)
         self.assertIn("epochs=", rendered)
         self.assertIn("lr=", rendered)
+        self.assertIn("val_fraction=", rendered)
         print("\n" + rendered)
 
     def test_missing_data_dir_prints_and_raises(self) -> None:
@@ -68,6 +70,7 @@ class OccupancyConfigTests(unittest.TestCase):
                         "lr: 0.001",
                         "checkpoint_path: models/one_npz.pt",
                         "sample_npz: exports/dataset_test/sphere.npz",
+                        "val_fraction: 0.15",
                         "",
                     ]
                 ),

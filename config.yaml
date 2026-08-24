@@ -1,15 +1,21 @@
 # Experiment settings for the occupancy MLP MVP.
 # `device` is still detected at runtime in src/config.py (CUDA vs CPU).
 
-hidden: 64
-depth: 4
-seed: 1
-data_dir: "E:/Work_stuff/scatteringNet/data"
+# --- Model Architecture ---
+hidden: 64        # Number of hidden units (channels) per layer in the OccupancyMLP
+depth: 4          # Number of hidden linear layers in the MLP network
+seed: 1           # Random seed for reproducibility (PyTorch, NumPy, Python random)
 
-# Train-one-NPZ knobs (used by src/train_one_npz.py).
-epochs: 30
-lr: 0.001
-# Relative to the repo root unless absolute.
-checkpoint_path: "models/one_npz.pt"
-# Relative to data_dir (the occupancy query file for the overfit run).
-sample_npz: "exports/dataset_test/sphere__raycast_z_raut_s0.15_inout.npz"
+# --- Path Configuration ---
+data_dir: "E:/Work_stuff/scatteringNet/data"  # Base root directory where all NPZ dataset files are stored
+
+# --- Training Hyperparameters ---
+epochs: 30        # Total number of training epochs for the overfit run
+lr: 0.001         # Initial learning rate for the Adam optimizer
+
+# --- Validation Settings ---
+val_fraction: 0.20  # Fraction of points held out randomly from the NPZ for validation (standard is 0.20 / 20%)
+
+# --- File Paths ---
+checkpoint_path: "models/one_npz.pt"               # Repo-relative path where the trained model checkpoint is saved/loaded
+sample_npz: "exports/dataset_test/sphere__raycast_z_raut_s0.15_inout.npz"  # Path relative to data_dir for the sample NPZ used in training/inference

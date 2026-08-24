@@ -42,6 +42,7 @@ def _cpu_cfg(
         lr=lr,
         checkpoint_path=checkpoint_path,
         sample_npz=Path("sphere.npz"),
+        val_fraction=0.15,
     )
 
 
@@ -55,8 +56,13 @@ class TrainOneNpzTests(unittest.TestCase):
             self.assertTrue(out_path.is_file())
             self.assertEqual(result.out_path, out_path)
             self.assertEqual(len(result.losses), 20)
+            self.assertEqual(len(result.val_accuracies), 20)
+            self.assertEqual(result.n_train + result.n_val, 256)
+            self.assertGreater(result.n_val, 0)
             self.assertLess(result.losses[-1], result.losses[0])
             self.assertGreater(result.accuracies[-1], 0.70)
+            self.assertGreaterEqual(result.val_accuracies[-1], 0.0)
+            self.assertLessEqual(result.val_accuracies[-1], 1.0)
 
             ckpt = torch.load(out_path, map_location="cpu", weights_only=False)
             self.assertEqual(ckpt["kind"], CHECKPOINT_KIND)

@@ -2,8 +2,8 @@
 
 Static experiment knobs live in ``config.yaml``. ``device`` is resolved
 here from CUDA availability. Training defaults (epochs, lr, checkpoint
-path, sample NPZ) are YAML-owned so ``train_one_npz`` does not hardcode
-them.
+path, sample NPZ, val_fraction) are YAML-owned so ``train_one_npz`` does
+not hardcode them.
 
 This module does not read ``.env`` and does not open NPZ files.
 """
@@ -30,6 +30,7 @@ _REQUIRED_YAML_KEYS = (
     "lr",
     "checkpoint_path",
     "sample_npz",
+    "val_fraction",
 )
 
 
@@ -44,6 +45,7 @@ class YamlKnobs(TypedDict):
     lr: float
     checkpoint_path: str
     sample_npz: str
+    val_fraction: float
 
 
 def get_device() -> torch.device:
@@ -76,6 +78,17 @@ def _as_positive_float(name: str, value: Any) -> float:
         raise ValueError(f"{name} must be a float, got {value!r}") from exc
     if parsed <= 0.0 or parsed != parsed:
         raise ValueError(f"{name} must be > 0, got {parsed}")
+    return parsed
+
+
+def _as_open_unit_interval(name: str, value: Any) -> float:
+    """Hold-out fractions must be in (0, 1) so both splits are non-empty."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a float, got {value!r}") from exc
+    if parsed != parsed or parsed <= 0.0 or parsed >= 1.0:
+        raise ValueError(f"{name} must be in (0, 1), got {parsed}")
     return parsed
 
 
@@ -118,6 +131,7 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             "checkpoint_path", raw["checkpoint_path"]
         ),
         "sample_npz": _as_nonempty_path_string("sample_npz", raw["sample_npz"]),
+        "val_fraction": _as_open_unit_interval("val_fraction", raw["val_fraction"]),
     }
 
 
@@ -158,6 +172,7 @@ class OccupancyConfig:
     lr: float
     checkpoint_path: Path
     sample_npz: Path
+    val_fraction: float
 
 
 def sample_npz_path(cfg: OccupancyConfig) -> Path:
@@ -191,6 +206,7 @@ def load_config(
         lr=knobs["lr"],
         checkpoint_path=_resolve_repo_path(knobs["checkpoint_path"]),
         sample_npz=Path(knobs["sample_npz"]),
+        val_fraction=knobs["val_fraction"],
     )
 
 
@@ -207,6 +223,7 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  lr={cfg.lr}\n"
         f"  checkpoint_path={cfg.checkpoint_path}\n"
         f"  sample_npz={cfg.sample_npz}\n"
+        f"  val_fraction={cfg.val_fraction}\n"
         f")"
     )
 

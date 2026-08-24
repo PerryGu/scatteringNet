@@ -6,7 +6,25 @@ Format: newest entries at the top.
 
 
 
-## 2026-08-23 18:35 — Env: recreate `scatteringNet`
+## 2026-08-24 13:00 — Step 9: [Train/val split]
+
+Hold out a random 15% of *points* from the same NPZ (not a new mesh) and report val accuracy.
+
+- `config.yaml` / `OccupancyConfig`: `val_fraction: 0.15`.
+- `src/dataset.py`: `split_train_val_indices`; `make_dataloader` accepts a `Subset`.
+- `src/train_one_npz.py`: train on the complement, eval val each epoch (`val_acc`), AABB `center`/`scale` still from the full cloud so Step 8 inference stays consistent. `TrainRunResult` now includes `val_accuracies`, `n_train`, `n_val`.
+- Tests updated (`test_config`, `test_dataset`, `test_train_one_npz`, `test_infer_one_npz`). Full suite: 28 tests OK. Synthetic sphere: `n_train=218` `n_val=38`, final `train_acc=0.9633` `val_acc=0.8684`.
+
+## 2026-08-24 10:00 — Step 8: [Basic inference]
+
+Classify one occupancy NPZ with a saved checkpoint using the stored AABB map.
+
+- Added `src/infer_one_npz.py`: load `kind=occupancy_mlp` checkpoint, rebuild `OccupancyMLP` from stored `hidden`/`depth`, normalize XYZ with checkpoint `center`/`scale` (not a fresh AABB), `eval` + `no_grad`, sigmoid threshold `0.5` via `occupancy_metrics`.
+- Prints `pred_inside` / `pred_outside` counts and accuracy vs NPZ labels. Writes `pred_labels` to `{checkpoint_stem}_pred.npz` next to the checkpoint. Optional NPZ path argument; default is YAML `sample_npz`.
+- Tests: `tests/test_infer_one_npz.py` (4 tests OK). Full suite: 27 tests OK.
+- Smoke: `python src/infer_one_npz.py` on the train sphere (`N=10661`, CUDA): `pred_inside=5112` `pred_outside=5549` `accuracy=0.9212`. Exit met: overfit accuracy is high.
+
+## 2026-08-23 23:00 — Env: recreate `scatteringNet`
 
 Replaced the broken mixed conda/pip PyTorch install with a single-source CUDA 12.1 stack named after the project.
 
@@ -15,7 +33,7 @@ Replaced the broken mixed conda/pip PyTorch install with a single-source CUDA 12
 - Full suite in the new env: 23 tests OK (including CUDA).
 - `.cursorrules` and `docs/v2_minimal_plan.md` now name `scatteringNet` (not `scatteringNet_v2`) as the project environment.
 
-## 2026-08-23 18:09 — Config: train knobs in YAML
+## 2026-08-23 21:00 — Config: train knobs in YAML
 
 Moved one-NPZ training defaults out of the train script so experiment knobs live in one place.
 
@@ -24,7 +42,7 @@ Moved one-NPZ training defaults out of the train script so experiment knobs live
 - `src/train_one_npz.py` reads epochs / lr / checkpoint from `cfg` (no module-level defaults). CLI uses `sample_npz_path(cfg)`. `CHECKPOINT_KIND` stays in code (schema tag, not a train knob).
 - Tests updated (`tests/test_config.py`, `tests/test_train_one_npz.py`). Full suite: 23 tests OK.
 
-## 2026-08-23 17:26 — Step 7: [Metrics helper]
+## 2026-08-23 20:00 — Step 7: [Metrics helper]
 
 Centralized occupancy decision metrics so the train loop no longer computes accuracy inline.
 
@@ -33,7 +51,7 @@ Centralized occupancy decision metrics so the train loop no longer computes accu
 - Tests: `tests/test_metrics.py` (6 tests OK, including CUDA). Existing `tests/test_train_one_npz.py` still passes (2 tests OK).
 - Smoke: `python src/metrics.py` prints `accuracy=1.0000`, `inside_precision=1.0000`, `inside_recall=1.0000` on a perfect 8-point batch.
 
-## 2026-08-21 18:30 — Step 6: [Train one NPZ / overfit]
+## 2026-08-21 19:00 — Step 6: [Train one NPZ / overfit]
 
 Overfit `OccupancyMLP` on one occupancy NPZ (all points used as train; no val split).
 
@@ -43,7 +61,7 @@ Overfit `OccupancyMLP` on one occupancy NPZ (all points used as train; no val sp
 - Tests: `tests/test_train_one_npz.py` (2 tests OK on CPU synthetic sphere).
 - Smoke: `python src/train_one_npz.py` on `dataset_test/sphere__raycast_z_raut_s0.15_inout.npz` (`N=10661`, CUDA): epoch 1 `loss=0.693` / `acc=0.502` → epoch 30 `loss=0.329` / `acc=0.889` (peak acc `0.914` at epoch 29). Exit met: loss decreased, train acc ≫ 50%.
 
-## 2026-08-21 17:58 — Step 5: [Dataset + DataLoader]
+## 2026-08-21 17:00 — Step 5: [Dataset + DataLoader]
 
 Wrapped one occupancy NPZ as a PyTorch `Dataset` with AABB normalization applied at construction.
 

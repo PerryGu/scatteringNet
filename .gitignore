@@ -1,4 +1,6 @@
 # Data
+models/
+*.pt
 
 # Python
 __pycache__/

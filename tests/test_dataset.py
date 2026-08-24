@@ -14,7 +14,7 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from dataset import OccupancyPointDataset, make_dataloader
+from dataset import OccupancyPointDataset, make_dataloader, split_train_val_indices
 
 
 def _write_npz(path: Path, n: int = 32) -> None:
@@ -49,6 +49,15 @@ class OccupancyPointDatasetTests(unittest.TestCase):
         self.assertEqual(tuple(y.shape), (8, 1))
         self.assertEqual(xyz.dtype, torch.float32)
         self.assertEqual(y.dtype, torch.float32)
+
+    def test_split_train_val_covers_all_points(self) -> None:
+        train_idx, val_idx = split_train_val_indices(20, 0.15, seed=1)
+        n_val = int(val_idx.numel())
+        n_train = int(train_idx.numel())
+        self.assertEqual(n_train + n_val, 20)
+        self.assertGreaterEqual(n_val, 1)
+        combined = torch.cat([train_idx, val_idx])
+        self.assertEqual(int(torch.unique(combined).numel()), 20)
 
 
 if __name__ == "__main__":

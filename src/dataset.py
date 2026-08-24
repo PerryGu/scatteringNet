@@ -47,13 +47,41 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
         return self.xyz[index], self.y[index]
 
 
+def split_train_val_indices(
+    n_points: int,
+    val_fraction: float,
+    seed: int,
+) -> tuple[Tensor, Tensor]:
+    """
+    Random disjoint train/val index tensors for one NPZ.
+
+    Val size is ``round(n * val_fraction)``, at least 1 and at most n-1,
+    so both splits stay non-empty. Same ``seed`` → same split.
+    """
+    if n_points < 2:
+        raise ValueError(f"need at least 2 points to split, got {n_points}")
+    if val_fraction <= 0.0 or val_fraction >= 1.0:
+        raise ValueError(f"val_fraction must be in (0, 1), got {val_fraction}")
+    n_val = int(round(n_points * val_fraction))
+    n_val = min(max(n_val, 1), n_points - 1)
+    generator = torch.Generator()
+    generator.manual_seed(int(seed))
+    perm = torch.randperm(n_points, generator=generator)
+    val_idx = perm[:n_val]
+    train_idx = perm[n_val:]
+    return train_idx, val_idx
+
+
 def make_dataloader(
-    dataset: OccupancyPointDataset,
+    dataset: Dataset[tuple[Tensor, Tensor]],
     *,
     batch_size: int = DEFAULT_BATCH_SIZE,
     shuffle: bool = True,
 ) -> DataLoader:
-    """Train-style loader: shuffle on, default collate, no extra workers."""
+    """Train-style loader: shuffle on, default collate, no extra workers.
+
+    Accepts ``OccupancyPointDataset`` or a ``Subset`` of it (Step 9 split).
+    """
     if batch_size < 1:
         raise ValueError(f"batch_size must be >= 1, got {batch_size}")
     return DataLoader(
