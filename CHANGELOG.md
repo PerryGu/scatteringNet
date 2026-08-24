@@ -6,6 +6,12 @@ Format: newest entries at the top.
 
 
 
+## 2026-08-24 14:00 — Step 10: [Stop and review]
+
+Closed the occupancy MLP MVP with a timestamped review note. No source, tests, or config were changed.
+
+- Added `docs/2026-08-24_14-09_mvp_completion_review.md`: data loop works; xyz MLP fits one field; next product step is a geometry encoder (not in this plan).
+
 ## 2026-08-24 13:00 — Step 9: [Train/val split]
 
 Hold out a random 15% of *points* from the same NPZ (not a new mesh) and report val accuracy.
