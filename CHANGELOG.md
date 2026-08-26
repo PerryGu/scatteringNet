@@ -6,6 +6,18 @@ Format: newest entries at the top.
 
 
 
+## 2026-08-26 10:37 — Step 1: [Port Maya scatter scripts]
+
+Maya OBJ exporters now live in this repo. Export roots match `config.yaml` `data_dir`. No occupancy model changes. No conda-side NPZ sampler (Step 2).
+
+- Added `src/scatter_generation/maya_batch_primitives.py`, `maya_batch_extrude.py`, `maya_batch_helix.py` (Maya Script Editor only; `maya.cmds` unchanged).
+- Export paths: primitives `.../meshes/Primitives`, extrude `.../meshes/Extrude`, helix `.../meshes/Helix`. Loader comments point at `src/scatter_generation/`.
+- Dry-read: `run` / `list_families` (primitives) parse cleanly. Conda `unittest discover -s tests`: 28 tests OK.
+- Maya export smoke: **not run here** (needs Script Editor). Suggested: `exec(open(...maya_batch_primitives.py).read()); run(families=("sphere",))` → `E:/Work_stuff/scatteringNet/data/meshes/Primitives/Sphere`.
+
+
+## ================= END OF PHASE 1 =================
+
 ## 2026-08-24 15:00 — Step 10: [Stop and review]
 
 Closed the occupancy MLP MVP with a timestamped review note. No source, tests, or config were changed.
