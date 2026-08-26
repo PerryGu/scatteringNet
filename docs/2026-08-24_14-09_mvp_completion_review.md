@@ -1,69 +1,53 @@
-# Occupancy MLP MVP — Step 10 review
+# Phase 1 — wrap-up
 
-**Written:** 2026-08-24 14:09  
-**Plan:** `docs/work_plan_phase1.md`  
-**Environment:** conda `scatteringNet`, Python 3.10, PyTorch 2.5.1, CUDA 12.1
+This note closes Phase 1. It does not add code. It records what the occupancy MVP actually proved.
 
-This note closes the occupancy MLP MVP. It does not add product features. No source, tests, or config were changed while writing it.
+We set out to build a simple pipeline that can read **one NPZ file**, train a small network on xyz points, and classify those same points as inside or outside. We did that. We also confirmed the limit we accepted on purpose: the network memorizes one occupancy field. It cannot open a new mesh.
 
-## What the MVP proved
+---
 
-### The data loop works
+## What we proved
 
-NPZ files with `points` `(N, 3)` and `labels` `(N,)` load, AABB-normalize, and batch as `xyz (B, 3)` and `y (B, 1)`. Training uses BCE-with-logits on raw logits. Inference reloads the checkpoint, applies the stored `center` / `scale`, and thresholds `sigmoid(logit)` at `0.5`. The same occupancy query file can be trained, held out, and classified without opening an OBJ.
+The data loop works. We load points and labels, put the cloud in a stable coordinate box, train, then infer with the same box we stored in the checkpoint. We never needed to open an OBJ.
 
-### An xyz-only MLP fits one occupancy field
+The small xyz network can fit one field. On the test-set sphere (about 10,600 points), a 30-epoch CUDA run dropped loss from about 0.69 to about 0.33 and reached train accuracy around 0.89 (peak about 0.91). Inference on that **same** file with the saved checkpoint reported:
 
-`OccupancyMLP` (`hidden=64`, `depth=4`) maps canonical XYZ to one logit. On the `dataset_test` sphere (`N=10661`) a 30-epoch CUDA overfit dropped loss from ~0.693 to ~0.329 and reached train accuracy ~0.89 (peak ~0.914). Inference on that same file with `models/one_npz.pt` reported:
+- accuracy **0.9212**
+- predicted inside **5112**
+- predicted outside **5549**
 
-- **accuracy:** 0.9212
-- **pred_inside:** 5112
-- **pred_outside:** 5549
+When we held out 15% of the *points* from a synthetic sphere (not a new shape), train accuracy was about 0.96 and val about 0.87: still high on an easy primitive, a bit below train, which is what we expected.
 
-A 15% point hold-out on a synthetic sphere reported `train_acc=0.9633` and `val_acc=0.8684`: high on an easy primitive, below train, as the plan expected.
+High accuracy on the train sphere is success for this scaffold. It is **not** evidence that we can populate a new interior.
 
-### This is a teaching scaffold, not the interior-population product
+---
 
-The net memorizes one field. It cannot open a new mesh. It will fail on a different geometry. That limit was accepted on purpose.
+## The path we built
 
-## Loop that now exists
+**one NPZ → load points/labels → normalize → MLP(xyz) → train → infer those same points.**
 
-```text
-NPZ  →  load points/labels  →  AABB center/scale  →  OccupancyMLP(xyz)  →  logit
-         train: Adam + BCEWithLogitsLoss, val split on points from the same file
-         infer: eval, no_grad, sigmoid, threshold 0.5, write pred_labels
-```
+Training uses Adam and binary cross-entropy on the raw scores. A random slice of points from the same file is held out for val — loop health, not a new mesh. Inference reloads the checkpoint, applies the stored center and scale (it must not invent a new box), then turns scores into inside/outside at 0.5.
 
-Checkpoint payload: `kind="occupancy_mlp"`, `state_dict`, `center`, `scale`, `hidden`, `depth`. Inference must reuse stored `center` / `scale`; it must not recompute AABB.
+The ten steps in [`work_plan_phase1.md`](work_plan_phase1.md) are all done. Config knobs (epochs, learning rate, checkpoint path, which NPZ, val fraction) live in `config.yaml`. The conda env is `scatteringNet`. At the end of Step 9 the unit suite was 28 tests OK.
 
-## Steps completed (1–9)
+---
 
-1. **OccupancyMLP** — `(B, 3)` → `(B, 1)` logits. No softmax in `forward`.
-2. **Hybrid config** — knobs in `config.yaml`; device at runtime.
-3. **NPZ loader** — keys `points` and `labels` only; float32 `{0, 1}` labels.
-4. **AABB normalize** — center = midpoint, scale = max half-extent.
-5. **Dataset / DataLoader** — `xyz (3,)` and `y (1,)`; collate `(B, 3)` and `(B, 1)`.
-6. **Train one NPZ** — save `models/one_npz.pt`.
-7. **Metrics helper** — accuracy plus inside precision / recall.
-8. **Infer one NPZ** — print counts; write `models/one_npz_pred.npz`.
-9. **Train/val split** — random 15% point hold-out (same NPZ); report `val_acc` each epoch.
+## What we did not prove
 
-Later knobs (`epochs`, `lr`, `checkpoint_path`, `sample_npz`, `val_fraction`) live in `config.yaml`. The project conda env is `scatteringNet` (not `scatteringNet_v2`). The full unit suite was 28 tests OK at the end of Step 9.
+No voxel grids, FFT, or scattering filters. No loading the OBJ, no points on the envelope, no triangle faces. No training on many files, no held-out *shapes*. The stub in `src/scattering_net.py` was left empty on purpose.
 
-## Explicitly not proven (out of this plan)
+Those layers are Phase 2 — and we may stop on an earlier layer if it is already good enough, or if the next one does not help.
 
-- No voxelization, FFT, `build_filters` / `pad` / `unpad`, or Kymatio
-- No OBJ loading, envelope sampling, face tokens, or normals
-- No PointNet, mesh attention, or shape embeddings
-- No multi-mesh generalization, combo datasets, or helix floods
-- `src/scattering_net.py` was left as a stub on purpose
+---
 
-## Next product step (not in this plan)
+## What comes next
 
-A **geometry encoder**.
+Phase 2. The occupancy question stays the same (is this point inside or outside?). The missing piece is a picture of the **mesh**, so the model is not a lookup table of one point cloud.
 
-The occupancy head can stay (`xyz` + embeddings → inside/outside). The missing piece is a representation of the mesh so the model is not a lookup table of one point cloud. That encoder is the next product design, not a continuation of this MVP.
+The Phase 2 plan is [`work_plan_phase2.md`](work_plan_phase2.md). Next action: approve or edit **Step 1** (Maya scatter scripts) before any prototype files are copied.
 
-## Honest limitation (keep visible)
+---
 
-v1 stage 2a already showed: an xyz-only MLP can reach high accuracy on **one** occupancy field and will **fail** on a different mesh. This MVP reproduced that lesson with a clean PyTorch loop. High accuracy on the train sphere is success for the scaffold, not evidence that interior population is solved.
+## Keep this in view
+
+An xyz-only MLP can look excellent on **one** occupancy field and will fail on a different mesh. Phase 1 reproduced that lesson with a clean train/infer loop. The product we want — filling a new interior — starts only when geometry is in the loop, and even then it is a measurement, not a finished system.

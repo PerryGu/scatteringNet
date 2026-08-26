@@ -6,7 +6,7 @@ Format: newest entries at the top.
 
 
 
-## 2026-08-24 14:00 — Step 10: [Stop and review]
+## 2026-08-24 15:00 — Step 10: [Stop and review]
 
 Closed the occupancy MLP MVP with a timestamped review note. No source, tests, or config were changed.
 
@@ -37,7 +37,7 @@ Replaced the broken mixed conda/pip PyTorch install with a single-source CUDA 12
 - Rewrote `environment.yaml`: conda-only `pytorch=2.5.1`, `pytorch-cuda=12.1`, `torchvision`, `torchaudio` (no pip torch wheels).
 - Recreated `conda` env `scatteringNet`. Verified `torch 2.5.1`, CUDA 12.1, `torch.cuda.is_available() == True`.
 - Full suite in the new env: 23 tests OK (including CUDA).
-- `.cursorrules` and `docs/v2_minimal_plan.md` now name `scatteringNet` (not `scatteringNet_v2`) as the project environment.
+- `.cursorrules` and `docs/work_plan_phase1_AI.md` now name `scatteringNet` (not `scatteringNet_v2`) as the project environment.
 
 ## 2026-08-23 21:00 — Config: train knobs in YAML
 
