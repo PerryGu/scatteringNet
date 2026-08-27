@@ -2,11 +2,45 @@
 
 Completed work for the occupancy MLP MVP.  
 
-Format: newest entries at the top.  
+Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
+
+## 2026-08-27 15:00 — Operator notes for NPZ generation
+
+Operating notes for occupancy NPZ sets: [`docs/npz_dataset_generation.md`](docs/npz_dataset_generation.md). Covers CLI parameters, NPZ keys, a 10-point example from the sphere file, and copy-paste commands. No sampler or training code changed.
+
+## 2026-08-27 15:00 — Full occupancy NPZ batch (r=0 and r=0.04)
+
+Ran ``dataset_builder.py`` over all 3660 OBJs under ``data/meshes/``. Two NPZs per mesh: lattice (``random_range=0``) and low jitter (``0.04``). Spacing ``0.15``, seed ``1``, method occupancy.
+
+- Output: ``E:/Work_stuff/scatteringNet/data/exports/dataset`` (7320 NPZs, ``ok=7320`` ``fail=0`` ``skipped=0``).
+- Filenames: ``<stem>__occupancy_s0.15_inout.npz`` and ``<stem>__occupancy_s0.15_j0.04_inout.npz``.
+- Spot-check ``TorusX4``: ``mesh_path=meshes/varied/TorusX4.obj``; r=0 N=125000; r=0.04 N=132651.
+
+## 2026-08-27 12:00 — NPZ ``mesh_path`` relative to ``data_dir``
+
+Stored OBJ paths are now relative to ``config.yaml`` ``data_dir`` (e.g. ``meshes/Primitives/Sphere/...obj``). Paths outside that folder still fall back to absolute POSIX. Re-run ``dataset_builder.py`` to refresh existing NPZs.
 
 
+## 2026-08-27 12:00 — Step 2: [NPZ dataset generation]
 
-## 2026-08-26 10:37 — Step 1: [Port Maya scatter scripts]
+Conda-side occupancy sampling now lives in this repo. Phase 1 `OccupancyMLP` / `train_one_npz.py` / `infer_one_npz.py` were not changed.
+
+- Ported `mesh_loader.py`, `raycast_scatter.py`, `dataset_builder.py`, `paths.py`, `near_surface.py` (tagging default off) into `src/scatter_generation/`. Imports use `scatter_generation.*` (no `scattering_net`).
+- CLI: `python src/scatter_generation/build_dataset.py <mesh_root> --method occupancy --spacings … --random-ranges … --seed … --limit N`.
+- NPZ contract: `points (N,3)`, `labels (N,)`, `mesh_path`, plus `random_range` / `jitter` metadata. Order: lattice → offset → labels on the moved points. `r=0` is a no-op.
+- Pinned `open3d>=0.18` and `trimesh>=4.0` in `environment.yaml` (env has Open3D 0.19.0, trimesh 5.0.0).
+- Tests: `tests/test_scatter_generation.py` 4 OK. Full suite 32 tests: 31 OK; `test_load_config_resolves_data_dir_and_device` ERROR because `E:/Work_stuff/scatteringNet/data` is missing on this machine (not a Step 2 regression).
+- Smoke (synthetic watertight cube OBJ, occupancy, spacing=0.35, random_range=0.04, seed=7): N=216, inside=9, outside=207, method=occupancy, occupancy_verified=True, `mesh_path` set. Maya Step 1 mesh tree not present, so no primitive OBJ batch from `data/meshes`.
+- Optional Phase 1 compatibility: `train_one_npz` 2 epochs on a generated box NPZ (N=343, CUDA, hidden=64, depth=4). epoch 001 `loss=0.687535 train_acc=0.6460 val_acc=0.5942`; epoch 002 `loss=0.684318 train_acc=0.6460 val_acc=0.5942`. Loader/train loop accepted the file; this is not an overfit claim.
+
+## 2026-08-27 09:00 — Maya OBJ export: load `objExport` plugin
+
+Sphere batch failed in Maya with `Invalid file type specified: OBJexport` because the OBJ exporter plugin is off by default.
+
+- `maya_batch_primitives.py`, `maya_batch_extrude.py`, `maya_batch_helix.py`: load `objExport` before `cmds.file(..., typ="OBJexport")`.
+- Reload the script in Script Editor (`exec(open(...).read())`) then `run(...)` again.
+
+## 2026-08-26 10:00 — Step 1: [Port Maya scatter scripts]
 
 Maya OBJ exporters now live in this repo. Export roots match `config.yaml` `data_dir`. No occupancy model changes. No conda-side NPZ sampler (Step 2).
 

@@ -48,7 +48,14 @@ def _mesh_name(coils, height, width, radius):
     )
 
 
+def _ensure_obj_export_plugin():
+    # Type "OBJexport" exists only after plugin objExport is loaded (off by default).
+    if not cmds.pluginInfo("objExport", query=True, loaded=True):
+        cmds.loadPlugin("objExport")
+
+
 def _export_selected(path):
+    _ensure_obj_export_plugin()
     cmds.file(
         path,
         force=True,
@@ -68,7 +75,23 @@ def _delete_nodes(nodes):
 
 
 def run(out_dir=OUT_DIR, coils=COILS, heights=HEIGHTS, widths=WIDTHS, radii=RADII, dry_run=False):
-    """Create one OBJ per (coils, height, width, radius) combo. Returns write count."""
+    """
+    Create one OBJ per (coils, height, width, radius) combo.
+
+    Parameters
+    ----------
+    out_dir:
+        Export folder. Default :data:`OUT_DIR`.
+    coils, heights, widths, radii:
+        Sweep lists (Cartesian product). Defaults are module constants.
+    dry_run:
+        If True, print planned files without exporting.
+
+    Returns
+    -------
+    int
+        Number of OBJ files written (0 when ``dry_run``).
+    """
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
 

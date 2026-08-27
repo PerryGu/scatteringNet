@@ -4,6 +4,14 @@ These three scripts create meshes in **Maya** and export **OBJ** files (no `.mtl
 
 Open Maya → Script Editor → **Python** tab. Load a script with `exec(open(...).read())`, then call `run(...)`.
 
+If you see `Invalid file type specified: OBJexport`, the OBJ plugin was not loaded. The scripts now call `loadPlugin("objExport")` before export. Reload the `.py` from disk (`exec(open(...).read())`) so Maya is not still using an old copy in memory, then `run(...)` again.
+
+You can also load it by hand once per session:
+
+```python
+cmds.loadPlugin("objExport")
+```
+
 Script folder:
 
 `scatteringNet/src/scatter_generation/`

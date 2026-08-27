@@ -28,6 +28,16 @@ class OccupancyMLP(nn.Module):
     """
 
     def __init__(self, hidden: int = 64, depth: int = 4) -> None:
+        """
+        Build Linear→ReLU blocks then a 1-logit head.
+
+        Parameters
+        ----------
+        hidden:
+            Channel width of each hidden Linear (must be ``>= 1``).
+        depth:
+            Number of hidden Linear+ReLU blocks (must be ``>= 1``).
+        """
         super().__init__()
         if hidden < 1:
             raise ValueError(f"hidden must be >= 1, got {hidden}")

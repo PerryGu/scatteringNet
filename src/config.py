@@ -49,10 +49,16 @@ class YamlKnobs(TypedDict):
 
 
 def get_device() -> torch.device:
-    """Prefer CUDA when a GPU is visible; otherwise CPU.
+    """
+    Prefer CUDA when a GPU is visible; otherwise CPU.
 
     Training scripts (later steps) should still refuse a long run on CPU.
     Config only reports the device that is available right now.
+
+    Returns
+    -------
+    torch.device
+        ``cuda`` or ``cpu``.
     """
     if torch.cuda.is_available():
         return torch.device("cuda")
@@ -111,7 +117,19 @@ def _resolve_repo_path(value: str) -> Path:
 
 
 def load_yaml_knobs(path: Path) -> YamlKnobs:
-    """Read YAML settings. Does not check that data_dir exists on disk."""
+    """
+    Read YAML settings. Does not check that data_dir exists on disk.
+
+    Parameters
+    ----------
+    path:
+        Path to ``config.yaml``.
+
+    Returns
+    -------
+    YamlKnobs
+        Typed dict of experiment knobs (paths still strings).
+    """
     if not path.is_file():
         raise FileNotFoundError(f"Config YAML not found: {path}")
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -176,7 +194,19 @@ class OccupancyConfig:
 
 
 def sample_npz_path(cfg: OccupancyConfig) -> Path:
-    """Compose the overfit NPZ path: ``data_dir / sample_npz``."""
+    """
+    Compose the overfit NPZ path: ``data_dir / sample_npz``.
+
+    Parameters
+    ----------
+    cfg:
+        Resolved config.
+
+    Returns
+    -------
+    Path
+        Absolute or joined sample NPZ path.
+    """
     return cfg.data_dir / cfg.sample_npz
 
 
@@ -185,11 +215,24 @@ def load_config(
     *,
     require_existing_data_dir: bool = True,
 ) -> OccupancyConfig:
-    """Compose OccupancyConfig from ``config.yaml`` (not from ``.env``).
+    """
+    Compose OccupancyConfig from ``config.yaml`` (not from ``.env``).
 
     When ``require_existing_data_dir`` is True (default), a missing folder
     prints a short instruction and then raises FileNotFoundError — used for
     training and data loading.
+
+    Parameters
+    ----------
+    yaml_path:
+        Config file; default is repo-root ``config.yaml``.
+    require_existing_data_dir:
+        If True, refuse to return a config whose ``data_dir`` is missing.
+
+    Returns
+    -------
+    OccupancyConfig
+        YAML knobs plus detected ``device``.
     """
     cfg_path = yaml_path or _DEFAULT_YAML
     knobs = load_yaml_knobs(cfg_path)
@@ -211,7 +254,19 @@ def load_config(
 
 
 def format_config(cfg: OccupancyConfig) -> str:
-    """Pretty-print for CLI smoke checks."""
+    """
+    Pretty-print for CLI smoke checks.
+
+    Parameters
+    ----------
+    cfg:
+        Resolved config.
+
+    Returns
+    -------
+    str
+        Multi-line ``OccupancyConfig(...)`` dump.
+    """
     return (
         f"OccupancyConfig(\n"
         f"  data_dir={cfg.data_dir}\n"

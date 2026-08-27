@@ -98,7 +98,18 @@ def accuracy_from_logits(
     *,
     threshold: float = 0.5,
 ) -> float:
-    """Fraction of points whose thresholded sigmoid matches the 0/1 label."""
+    """Fraction of points whose thresholded sigmoid matches the 0/1 label.
+
+    Parameters
+    ----------
+    logits, labels, threshold:
+        Same meaning as :func:`occupancy_metrics`.
+
+    Returns
+    -------
+    float
+        Accuracy in ``[0, 1]``.
+    """
     return occupancy_metrics(logits, labels, threshold=threshold).accuracy
 
 

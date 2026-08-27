@@ -71,7 +71,14 @@ def _mesh_name(sx, sy, sz, n_rounds, variant):
     )
 
 
+def _ensure_obj_export_plugin():
+    # Type "OBJexport" exists only after plugin objExport is loaded (off by default).
+    if not cmds.pluginInfo("objExport", query=True, loaded=True):
+        cmds.loadPlugin("objExport")
+
+
 def _export_selected(path):
+    _ensure_obj_export_plugin()
     cmds.file(
         path,
         force=True,
@@ -271,12 +278,30 @@ def run(
     limit=0,
 ):
     """
-    Create OBJs under ``out_dir``. Returns write count.
+    Create extruded-cube OBJs under ``out_dir``.
 
-    ``limit`` > 0 stops after that many exports.
-    ``variant_offset`` shifts filename ``v`` ids (use 100+ to add a new batch).
-    ``round_weights``: relative weights for 1..max_rounds (e.g. (0,0,0.5,0.5)
-    → only 3–4 rounds).
+    Parameters
+    ----------
+    out_dir:
+        Export folder. Default :data:`OUT_DIR`.
+    subdivs, variants_per_subdiv, aspect_flat_frac:
+        Sweep knobs for the job iterator.
+    max_rounds:
+        Maximum extrusion rounds (1..4).
+    round_weights:
+        Relative weights for 1..max_rounds (e.g. ``(0, 0, 0.5, 0.5)``
+        keeps only 3–4 rounds).
+    base_seed:
+        RNG seed for the batch.
+    variant_offset:
+        Added to filename ``v`` ids (use 100+ to add a new batch).
+    limit:
+        If ``> 0``, stop after that many exports.
+
+    Returns
+    -------
+    int
+        Number of OBJ files written.
     """
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)

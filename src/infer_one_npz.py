@@ -51,6 +51,19 @@ def load_occupancy_checkpoint(path: Path, device: torch.device) -> dict[str, Any
 
     ``weights_only=False`` is required: the file stores numpy ``center`` plus
     a ``state_dict``, not a raw tensor.
+
+    Parameters
+    ----------
+    path:
+        Checkpoint file.
+    device:
+        ``map_location`` for ``torch.load``.
+
+    Returns
+    -------
+    dict
+        Payload with ``kind``, ``state_dict``, ``center``, ``scale``,
+        ``hidden``, ``depth``.
     """
     ckpt_path = Path(path)
     if not ckpt_path.is_file():
@@ -79,7 +92,24 @@ def _logits_for_points(
     *,
     batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> torch.Tensor:
-    """Forward in chunks so a large NPZ does not need one giant (N, 3) batch."""
+    """Forward in chunks so a large NPZ does not need one giant (N, 3) batch.
+
+    Parameters
+    ----------
+    model:
+        Occupancy MLP already on ``device``.
+    xyz_np:
+        Normalized XYZ, ``float32 (N, 3)``.
+    device:
+        CUDA or CPU.
+    batch_size:
+        Chunk size along N.
+
+    Returns
+    -------
+    Tensor
+        Logits ``(N, 1)`` on CPU.
+    """
     n = int(xyz_np.shape[0])
     chunks: list[torch.Tensor] = []
     model.eval()
@@ -102,6 +132,22 @@ def infer_one_npz(
 
     Architecture (hidden/depth) comes from the checkpoint, not from YAML,
     so a file trained with other knobs still loads. Device comes from ``cfg``.
+
+    Parameters
+    ----------
+    npz_path:
+        Occupancy NPZ to classify.
+    cfg:
+        Provides ``device`` and default ``checkpoint_path``.
+    ckpt_path:
+        Override checkpoint; default is ``cfg.checkpoint_path``.
+    write_pred:
+        If True, write ``{stem}_pred.npz`` next to the checkpoint.
+
+    Returns
+    -------
+    InferRunResult
+        Counts, accuracy vs NPZ labels, and optional prediction path.
     """
     ckpt_file = Path(ckpt_path) if ckpt_path is not None else cfg.checkpoint_path
     payload = load_occupancy_checkpoint(ckpt_file, cfg.device)

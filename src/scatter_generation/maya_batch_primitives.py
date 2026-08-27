@@ -54,7 +54,14 @@ def _tag(**kwargs):
     return "_".join(parts)
 
 
+def _ensure_obj_export_plugin():
+    # Type "OBJexport" exists only after plugin objExport is loaded (off by default).
+    if not cmds.pluginInfo("objExport", query=True, loaded=True):
+        cmds.loadPlugin("objExport")
+
+
 def _export_selected(path):
+    _ensure_obj_export_plugin()
     cmds.file(
         path,
         force=True,
@@ -611,6 +618,14 @@ FAMILIES = {
 
 
 def list_families():
+    """
+    Print family keys, export subfolders, and planned variant counts.
+
+    Returns
+    -------
+    None
+        Writes to stdout for Script Editor use.
+    """
     print("Available families:")
     for key, (subdir, it_fn) in sorted(FAMILIES.items()):
         n = sum(1 for _ in it_fn())
@@ -618,7 +633,21 @@ def list_families():
 
 
 def run_family(family, out_root=OUT_ROOT):
-    """Export one family. Returns (written, skipped_errors)."""
+    """
+    Export one primitive family to ``out_root/<Family>/``.
+
+    Parameters
+    ----------
+    family:
+        Key from :data:`FAMILIES` (e.g. ``sphere``).
+    out_root:
+        Parent of family subfolders. Default :data:`OUT_ROOT`.
+
+    Returns
+    -------
+    written, errors:
+        Export success count and exception count.
+    """
     if family not in FAMILIES:
         raise ValueError("Unknown family %r. Call list_families()." % family)
     subdir, it_fn = FAMILIES[family]
@@ -659,7 +688,18 @@ def run(families=None, out_root=OUT_ROOT):
     """
     Export selected families (default: all).
 
-    families: None | str | sequence of str keys from FAMILIES.
+    Parameters
+    ----------
+    families:
+        ``None`` (all keys), one family name, or a sequence of keys from
+        :data:`FAMILIES`.
+    out_root:
+        Parent of family subfolders. Default :data:`OUT_ROOT`.
+
+    Returns
+    -------
+    None
+        Prints per-family write/error counts.
     """
     if families is None:
         keys = list(FAMILIES.keys())

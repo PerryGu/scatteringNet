@@ -1,6 +1,25 @@
-"""Maya batch OBJ exporters (Phase 2 Step 1).
-
-These modules use ``maya.cmds`` and must be executed inside Maya Script Editor.
-Do not import them from the conda ``scatteringNet`` env (Maya is not on sys.path).
-Conda-side NPZ sampling is Step 2 and is not in this package yet.
 """
+Maya exporters (Script Editor only) plus conda-side occupancy NPZ sampling.
+
+Conda imports from this package load Open3D/trimesh. Maya scripts must be
+``exec``'d as files; they do not import this ``__init__``.
+"""
+
+from scatter_generation.dataset_builder import build_singles_dataset, expand_param_grid
+from scatter_generation.mesh_loader import load_mesh
+from scatter_generation.raycast_scatter import (
+    ScatterResult,
+    export_occupancy_npz,
+    export_scatter_npz,
+    scatter_volume,
+)
+
+__all__ = [
+    "ScatterResult",
+    "build_singles_dataset",
+    "expand_param_grid",
+    "export_occupancy_npz",
+    "export_scatter_npz",
+    "load_mesh",
+    "scatter_volume",
+]

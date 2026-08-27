@@ -25,9 +25,22 @@ DEFAULT_BATCH_SIZE = 1024
 
 
 class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
-    """One scatter NPZ as normalized query points and occupancy labels."""
+    """
+    One scatter NPZ as normalized query points and occupancy labels.
+
+    Item convention: ``xyz`` is ``float32 (3,)`` (collated ``(B, 3)``);
+    ``y`` is ``float32 (1,)`` (collated ``(B, 1)``) to match OccupancyMLP logits.
+    """
 
     def __init__(self, npz_path: Path) -> None:
+        """
+        Load points, compute AABB ``center`` / ``scale``, store CPU tensors.
+
+        Parameters
+        ----------
+        npz_path:
+            Scatter NPZ with ``points (N, 3)`` and ``labels (N,)``.
+        """
         points, labels = load_points_labels(Path(npz_path))
         center, scale = compute_center_scale(points)
         normed = apply_normalization(points, center, scale)
@@ -57,6 +70,20 @@ def split_train_val_indices(
 
     Val size is ``round(n * val_fraction)``, at least 1 and at most n-1,
     so both splits stay non-empty. Same ``seed`` → same split.
+
+    Parameters
+    ----------
+    n_points:
+        Total points in the NPZ (must be ``>= 2``).
+    val_fraction:
+        Hold-out fraction in ``(0, 1)``.
+    seed:
+        RNG seed for ``torch.randperm``.
+
+    Returns
+    -------
+    train_idx, val_idx:
+        1-D long tensors that partition ``0 .. n_points-1``.
     """
     if n_points < 2:
         raise ValueError(f"need at least 2 points to split, got {n_points}")
@@ -78,9 +105,24 @@ def make_dataloader(
     batch_size: int = DEFAULT_BATCH_SIZE,
     shuffle: bool = True,
 ) -> DataLoader:
-    """Train-style loader: shuffle on, default collate, no extra workers.
+    """
+    Train-style loader: shuffle on, default collate, no extra workers.
 
     Accepts ``OccupancyPointDataset`` or a ``Subset`` of it (Step 9 split).
+
+    Parameters
+    ----------
+    dataset:
+        Point dataset or a ``Subset``.
+    batch_size:
+        Must be ``>= 1``. Default :data:`DEFAULT_BATCH_SIZE`.
+    shuffle:
+        Shuffle each epoch (True for train, False for val).
+
+    Returns
+    -------
+    DataLoader
+        ``num_workers=0``.
     """
     if batch_size < 1:
         raise ValueError(f"batch_size must be >= 1, got {batch_size}")

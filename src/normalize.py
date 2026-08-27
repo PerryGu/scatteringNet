@@ -22,6 +22,11 @@ def compute_center_scale(points: np.ndarray) -> tuple[PointsArray, float]:
     """
     AABB center and max half-extent for an ``(N, 3)`` point array.
 
+    Parameters
+    ----------
+    points:
+        Query XYZ, shape ``(N, 3)``, at least one row.
+
     Returns
     -------
     center:
@@ -52,7 +57,23 @@ def apply_normalization(
     center: np.ndarray,
     scale: float,
 ) -> PointsArray:
-    """Return ``(points - center) / scale`` as ``float32 (N, 3)``."""
+    """
+    Return ``(points - center) / scale`` as ``float32 (N, 3)``.
+
+    Parameters
+    ----------
+    points:
+        Query XYZ, shape ``(N, 3)``.
+    center:
+        AABB midpoint, shape ``(3,)``.
+    scale:
+        Positive max half-extent.
+
+    Returns
+    -------
+    ndarray
+        Normalized points, ``float32 (N, 3)``.
+    """
     if scale <= 0.0:
         raise ValueError(f"scale must be > 0, got {scale}")
     pts = np.asarray(points, dtype=np.float32)

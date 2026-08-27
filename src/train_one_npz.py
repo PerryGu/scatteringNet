@@ -97,8 +97,20 @@ def train_one_npz(
     """
     Train on a random subset of ``npz_path`` and save ``cfg.checkpoint_path``.
 
-    ``cfg.val_fraction`` of points are held out (same mesh). Returns per-epoch
-    train loss / acc, val acc, split sizes, and the checkpoint path.
+    ``cfg.val_fraction`` of points are held out (same mesh). AABB
+    ``center`` / ``scale`` still come from the full cloud so inference matches.
+
+    Parameters
+    ----------
+    npz_path:
+        Occupancy NPZ with ``points`` and ``labels``.
+    cfg:
+        Resolved :class:`~config.OccupancyConfig` (epochs, lr, device, split).
+
+    Returns
+    -------
+    TrainRunResult
+        Per-epoch train loss / acc, val acc, split sizes, and checkpoint path.
     """
     epochs = cfg.epochs
     lr = cfg.lr
