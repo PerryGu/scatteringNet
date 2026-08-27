@@ -4,6 +4,11 @@ Completed work for the occupancy MLP MVP.
 
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
+
+## 2026-08-27 16:00 — Phase 2 ladder: loader + runs before first train
+
+Reordered Phase 2 in [`docs/work_plan_phase2.md`](docs/work_plan_phase2.md). There is no Phase 3. After Step 2, the ladder is: multi-NPZ reader (3) → ``runs/`` + ``best.pt`` (4) → first occupancy train (5). Geometry steps shifted to 6–10. No training code changed.
+
 ## 2026-08-27 15:00 — Operator notes for NPZ generation
 
 Operating notes for occupancy NPZ sets: [`docs/npz_dataset_generation.md`](docs/npz_dataset_generation.md). Covers CLI parameters, NPZ keys, a 10-point example from the sphere file, and copy-paste commands. No sampler or training code changed.
@@ -39,6 +44,8 @@ Sphere batch failed in Maya with `Invalid file type specified: OBJexport` becaus
 
 - `maya_batch_primitives.py`, `maya_batch_extrude.py`, `maya_batch_helix.py`: load `objExport` before `cmds.file(..., typ="OBJexport")`.
 - Reload the script in Script Editor (`exec(open(...).read())`) then `run(...)` again.
+
+Operating notes for OBJ export: [`docs/maya_batch_scatter_scripts.md`](docs/maya_batch_scatter_scripts.md)
 
 ## 2026-08-26 10:00 — Step 1: [Port Maya scatter scripts]
 

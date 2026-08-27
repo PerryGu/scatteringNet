@@ -89,7 +89,7 @@ Each file is an uncompressed NumPy archive (`np.savez`). Training today only nee
 
 | Key | Shape / type | Meaning |
 |---|---|---|
-| `points` | `(N, 3)` float32 | Query XYZ in **mesh coordinates** |
+| `points` | `(N, 3)` float32 | Query XYZ in **points coordinates** |
 | `labels` | `(N,)` uint8 | `1` = inside, `0` = outside |
 | `mesh_path` | string | OBJ path relative to `data_dir` |
 | `method` | string | `occupancy` or `raycast` |

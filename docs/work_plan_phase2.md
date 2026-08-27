@@ -2,44 +2,53 @@
 
 Now that we've established the first phase—creating a simple pipeline that knows how to read a single NPZ file—we can move on to the second phase: 
 adding capabilities and complexity to the existing pipeline so the model can truly "understand" the geometry rather than just memorizing a single file. 
-Here, we build the path step by step: from generating OBJ files in Maya and sampling inside/outside points, through multi-file training and clean run tracking, 
-up to feeding geometric data and faces into the network to test whether we can generalize to entirely new shapes.
+Here, we build the path step by step: from generating OBJ files in Maya and sampling inside/outside points, through a multi-file reader, run logs, and checkpoints, 
+then the **first** occupancy train, up to feeding geometric data and faces into the network to test whether we can generalize to entirely new shapes.
 The idea is mainly to add one more layer of complexity at a time—points on the envelope, then vertices and normals, 
 and so on—and to look at each layer before deciding whether we even need the next.
 We might get good enough results without moving on. Some layers may not help at all; some may even make things worse.
+
+This is still **Phase 2**. There is no Phase 3 in this repo. The numbered items below are *steps inside Phase 2*.
 
 ---
 
 ## How to read this plan
 
 Work proceeds **one step at a time**. After each step we stop for review. Anything that trains also gets a short smoke run (~20 epochs) so we have numbers, not just code. 
-Steps 1–2 are generation, not occupancy training; they still leave a measurable artifact (exported meshes, NPZ counts).
+Steps 1–2 are generation. Steps 3–5 are training *infrastructure* (many NPZs, then `runs/` logs, then `models/` checkpoints) — they do not start occupancy training. Step 6 is the first occupancy train.
 
-Progress is visible in three places:
+Progress is visible in:
 
 - this file
 - `CHANGELOG.md` (what shipped, with date, time, and metrics)
-- `runs/` (after Step 4: TensorBoard curves, JSON logs, best checkpoint)
+- `runs/` (thin logs from Step 4; first real occupancy logs when Step 6 trains)
+- `models/<run_id>/` (weights from Step 5; first real occupancy weights when Step 6 trains)
 
 ---
 
-## The nine steps at a glance
+## The eleven steps at a glance
 
 | Step | Theme | What we learn |
 |---|---|---|
 | 1 | Maya scatter scripts live in *this* repo | We can generate source OBJs without depending on the prototype tree |
 | 2 | NPZ inside/outside sampling | We can turn those OBJs into occupancy files (points, labels, mesh path) at a density we choose, then optionally nudge each point by a random range (0 / low / high) **before** labeling |
-| 3 | Train the Phase 1 MLP on many NPZs | Multi-file training works; still no mesh in the model |
-| 4 | Experiment tracking | Every run is comparable; we keep the *best* weights, not just the last epoch |
-| 5 | Join NPZ to OBJ | Each occupancy file can load the mesh it came from |
-| 6 | Sample the surface envelope | Do dense points on the shell help occupancy *before* we use faces? |
-| 7 | Describe the mesh as triangles | Vertices + normals become a geometry language the net can consume later |
-| 8 | Encode faces and fuse with xyz | The occupancy head finally looks at mesh structure |
-| 9 | Hold out entire shapes | The real test: a mesh the model has never trained as an identity |
+| 3 | Read many NPZs | The dataset can load a whole set of occupancy files, not only one |
+| 4 | Experiment *logs* | A `runs/` folder holds config + JSON (+ TensorBoard). No `.pt` files here |
+| 5 | Checkpoints | `last.pt` and **`best.pt`** live under `models/<run_id>/`, linked by the same run id |
+| 6 | First occupancy train (Phase 1 MLP, many NPZs) | Multi-file xyz training uses the reader, the logs, and the checkpoint saver |
+| 7 | Join NPZ to OBJ | Each occupancy file can load the mesh it came from |
+| 8 | Sample the surface envelope | Do dense points on the shell help occupancy *before* we use faces? |
+| 9 | Describe the mesh as triangles | Vertices + normals become a geometry language the net can consume later |
+| 10 | Encode faces and fuse with xyz | The occupancy head finally looks at mesh structure |
+| 11 | Hold out entire shapes | The real test: a mesh the model has never trained as an identity |
 
 The path in one line:
 
-**Maya OBJ → occupancy NPZ → multi-file xyz train → tracked runs → live mesh load → envelope experiment → face tokens → face encoder → held-out shapes.**
+**Maya OBJ → occupancy NPZ → multi-file NPZ reader → runs/ logs → models/ checkpoints → first xyz train → live mesh load → envelope experiment → face tokens → face encoder → held-out shapes.**
+
+Why logs and weights are two steps: JSON and a config snapshot are small and can live in git. `*.pt` files are large binaries. They share a **run id**, but they do not share a folder.
+
+Why the train is not Step 3: Phase 1 still reads **one** file. The first Phase 2 train should already see many files, write a `runs/` log, and keep the **best** weights under `models/` (last epoch is often worse).
 
 ---
 
@@ -69,44 +78,69 @@ Think of this as: “Maya gave us geometry; now we manufacture the occupancy que
 
 ---
 
-## Step 3 — Train on many files, still only xyz
+## Step 3 — Read a set of NPZ files
 
-Before we add geometry into the network, we prove the training loop can swallow **several NPZs at once** — a few primitive shapes from Step 2 (or the existing test set), not combo dumps.
+Phase 1 can open **one** occupancy file. The catalog we just built is thousands of files. Before anyone hits train, the data layer must glob or list many NPZs, concatenate their points and labels, and feed batches the trainer will use later.
 
-The network is still the Phase 1 MLP: it sees query points and labels, not the mesh. Validation is a random split of *points*, which only tells us the loop is healthy. High accuracy here is expected and **does not** mean the model generalizes.
+The network is not trained here. We do not write `runs/` or `models/` checkpoints. We only prove: “give me a folder (or a glob), get one dataset.”
 
-Think of this step as: “can we train on a small catalog of occupancy fields without breaking anything?”
-
-**Done when:** multi-file xyz training runs and logs. We do not claim generalization.
+**Done when:** we can load several NPZs in one dataset, count the pooled points, and iterate a DataLoader. Occupancy training has not started.
 
 ---
 
-## Step 4 — Make every experiment inspectable
+## Step 4 — Run logs (`runs/`, no weights)
 
-Once multi-file training works, we need a paper trail. Each train creates a timestamped folder under `runs/` with:
+If the first multi-file train has no paper trail, we throw away the only numbers that matter. Each later train creates a timestamped folder under `runs/` with **thin** artifacts:
 
 - the config that was actually used
 - per-epoch metrics in JSON
-- TensorBoard curves
-- `last.pt` (end of training) and `best.pt` (peak validation — last epoch is often worse)
+- TensorBoard event files (binary; not for git)
 
-From here on, smokes are comparable. Inference prefers the best checkpoint, not whichever weights happened to sit at epoch 20.
+No `last.pt` / `best.pt` in this folder. Those are Step 5.
 
-**Done when:** a train leaves a folder you can open later, TensorBoard shows curves, and peak weights are saved.
+This step **builds the log helper** and tests it on a tiny fake loop (dummy metrics only). It does **not** run the occupancy MLP.
+
+JSON + config may be committed. TensorBoard events stay gitignored.
+
+**Done when:** the helper can create `runs/<id>/`, write JSON and TensorBoard scalars, and record the run id. No occupancy smoke yet. No `.pt` files.
 
 ---
 
-## Step 5 — Connect occupancy files to their meshes
+## Step 5 — Checkpoints (`models/<run_id>/`)
+
+Weights are a different product from logs. `last.pt` (always) and `best.pt` (only when the selection metric strictly improves) go under `models/<same run id>/`.
+
+The log folder stores a pointer to that checkpoint directory so the two stay joined. Inference loads from `models/`, not from `runs/`. We do not overwrite Phase 1’s `models/one_npz.pt` as the Phase 2 default.
+
+This step tests a fake loop: epoch 2 better than epoch 3 keeps epoch-2 weights in `best.pt`. Still no occupancy MLP.
+
+**Done when:** dummy checkpoints land in `models/<id>/`, `best.pt` updates only on improvement, and `runs/<id>/` names that folder. `*.pt` files are gitignored.
+
+---
+
+## Step 6 — First occupancy train (many files, still only xyz)
+
+Now we actually train. The loop uses Step 3’s multi-file dataset, Step 4’s `runs/` logs, and Step 5’s `models/` checkpoints. The network is still the Phase 1 MLP: it sees query points and labels, not the mesh.
+
+Validation is a random split of *points*, which only tells us the loop is healthy. High accuracy here is expected and **does not** mean the model generalizes.
+
+Think of this step as: “can we train on a small catalog of occupancy fields, with curves and a best checkpoint, without breaking anything?”
+
+**Done when:** multi-file xyz training writes `runs/<id>/` logs and `models/<id>/best.pt`. We do not claim generalization.
+
+---
+
+## Step 7 — Connect occupancy files to their meshes
 
 Each NPZ already stores a path to its OBJ (Step 2 writes it; older files already had it). Phase 1 ignored that on purpose. Now we load the mesh: vertices and triangles, resolved against our data directory.
 
-The occupancy head still only sees xyz. This step is a join, not a new model. If we re-train for a short smoke, numbers should look like Step 4. If they do not, the join is wrong and we stop.
+The occupancy head still only sees xyz. This step is a join, not a new model. If we re-train for a short smoke, numbers should look like Step 6. If they do not, the join is wrong and we stop.
 
 **Done when:** every training example can name and load its OBJ. Occupancy is still xyz-only.
 
 ---
 
-## Step 6 — Surface envelope points (the first geometry experiment)
+## Step 8 — Surface envelope points (the first geometry experiment)
 
 The simplest picture of a shape is a dense cloud of points sitting on its **skin** — the envelope of the mesh.
 
@@ -114,36 +148,36 @@ We sample those points from the OBJ, keep them in the same coordinate frame as t
 
 This is an R&D measurement, not the final architecture. The prototype later preferred triangle faces over surface clouds. We still run this step so we have our own number: did the shell help, sit still, or make training worse?
 
-Compare on the **same** few primitives we used in Steps 3–5. This is not a holdout yet.
+Compare on the **same** few primitives we used in Step 6. This is not a holdout yet.
 
 **Done when:** envelope clouds are a real batched input, and we have a recorded comparison against xyz-only.
 
 ---
 
-## Step 7 — Talk about the mesh as triangles
+## Step 9 — Talk about the mesh as triangles
 
 A mesh is not only a point cloud. It is triangles, each with three corners and a facing direction (the normal).
 
 This step builds that description and lines it up with the same bounding-box normalization we already use for query points. We attach it to the data pipeline but **do not yet train** on it. 
-The occupancy head stays on the envelope signal from Step 6, so we can see that tokenization did not break training.
+The occupancy head stays on the envelope signal from Step 8, so we can see that tokenization did not break training.
 
 **Done when:** each mesh has a stable triangle description, aligned with occupancy queries. The face encoder is not trained yet.
 
 ---
 
-## Step 8 — Let the occupancy head see faces
+## Step 10 — Let the occupancy head see faces
 
 Now the intended geometry encoder comes in: a module that reads the triangle tokens, compresses them into a shape vector, and concatenates that vector with each query point.
 
-Envelope sampling can stay around for comparison, but the trained head uses **faces**. We smoke the same small primitive set and compare to Step 6. If faces are worse, we write that down instead of quietly deleting the envelope path.
+Envelope sampling can stay around for comparison, but the trained head uses **faces**. We smoke the same small primitive set and compare to Step 8. If faces are worse, we write that down instead of quietly deleting the envelope path.
 
 We still are not claiming “unseen OBJ.” We are claiming: xyz + mesh faces trains, logs, and keeps a best checkpoint.
 
-**Done when:** occupancy is geometry-conditioned on faces, with a tracked run and a best checkpoint.
+**Done when:** occupancy is geometry-conditioned on faces, with a tracked run and a best checkpoint under `models/`.
 
 ---
 
-## Step 9 — Hold out whole shapes
+## Step 11 — Hold out whole shapes
 
 Randomly hiding some *points* from a cone you already trained on can look like 99% accuracy and prove nothing. The model already knows that occupancy field.
 
@@ -156,7 +190,7 @@ A control xyz-only model trained only on the train shapes should struggle on the
 
 ---
 
-## What we are not doing in these nine steps
+## What we are not doing in these eleven steps
 
 Voxel grids, FFT / scattering filters, and Kymatio stay out. We are not shipping a learned “shape name” embedding as the model — that cannot open a new OBJ.
 Attention between query points and faces, fancy viewers, combo-scene floods, and helix-heavy mixes are later work, after this sequence.
@@ -172,11 +206,13 @@ torus holes, and stacked parts will remain hard even if holdout looks promising.
 |---|---|
 | The current step | this file |
 | What actually shipped | `CHANGELOG.md` |
-| Curves and checkpoints (from Step 4) | `runs/` |
+| Curves and JSON (from Step 6) | `runs/<id>/` |
+| Weights to load (from Step 6) | `models/<id>/best.pt` |
+| How to build NPZs | [`npz_dataset_generation.md`](npz_dataset_generation.md) |
 | Phase 1 | [`work_plan_phase1.md`](work_plan_phase1.md) |
 
 ---
 
 ## Next action
 
-**Approve or edit Step 1** (port Maya scatter scripts into this repo) before any prototype files are copied and before any occupancy code changes.
+**Steps 1–2 are done.** Approve or edit **Step 3** (multi-NPZ reader, no training) before any occupancy train loop is written.
