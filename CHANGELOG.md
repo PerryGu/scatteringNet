@@ -5,6 +5,16 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
 
+## 2026-08-27 17:00 — Step 3: [Multi-NPZ dataset reader]
+
+Catalog loader for many occupancy NPZs. Phase 1 ``load_points_labels`` / ``OccupancyPointDataset`` / ``train_one_npz.py`` unchanged. No occupancy train.
+
+- ``resolve_npz_catalog`` in ``data_npz.py``: glob or explicit list under ``data_dir``, skip ``combo*``, cap ``max_files_per_shape``. Per-mesh key is the stem before ``__``.
+- ``OccupancyMultiNpzDataset``: concatenates one ``OccupancyPointDataset`` per file (per-mesh AABB). DataLoader still yields ``xyz (B, 3)``, ``y (B, 1)``.
+- ``config.yaml`` additive: ``npz_glob``, optional ``npz_paths``, ``max_files_per_shape``.
+- Tests: ``tests/test_multi_npz.py`` 5 OK. Phase 1 loader/train/infer tests still green.
+- Smoke: ``python src/data_npz.py --catalog`` → 2 sphere NPZs (lattice + j0.04), ``dataset_N=1729`` (729+1000), inside 270 / outside 1459, batch ``(8, 3)``.
+
 ## 2026-08-27 16:00 — Phase 2 ladder: loader + runs before first train
 
 Reordered Phase 2 in [`docs/work_plan_phase2.md`](docs/work_plan_phase2.md). There is no Phase 3. After Step 2, the ladder is: multi-NPZ reader (3) → ``runs/`` + ``best.pt`` (4) → first occupancy train (5). Geometry steps shifted to 6–10. No training code changed.

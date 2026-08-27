@@ -46,6 +46,9 @@ class YamlKnobs(TypedDict):
     checkpoint_path: str
     sample_npz: str
     val_fraction: float
+    npz_glob: str
+    npz_paths: tuple[str, ...]
+    max_files_per_shape: int | None
 
 
 def get_device() -> torch.device:
@@ -108,6 +111,29 @@ def _as_data_dir_string(value: Any) -> str:
     return _as_nonempty_path_string("data_dir", value)
 
 
+def _as_optional_positive_int(name: str, value: Any) -> int | None:
+    """YAML null → unlimited catalog cap; otherwise int >= 1."""
+    if value is None:
+        return None
+    return _as_positive_int(name, value)
+
+
+def _as_npz_paths(value: Any) -> tuple[str, ...]:
+    """Explicit NPZ list relative to data_dir (empty → use glob)."""
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        item = value.strip()
+        return (item,) if item else ()
+    if not isinstance(value, list):
+        raise ValueError(f"npz_paths must be a list of strings or null, got {type(value).__name__}")
+    out: list[str] = []
+    for i, raw in enumerate(value):
+        text = _as_nonempty_path_string(f"npz_paths[{i}]", raw)
+        out.append(text)
+    return tuple(out)
+
+
 def _resolve_repo_path(value: str) -> Path:
     """Absolute paths stay as-is; relative paths are rooted at the repo."""
     path = Path(value)
@@ -150,6 +176,17 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
         ),
         "sample_npz": _as_nonempty_path_string("sample_npz", raw["sample_npz"]),
         "val_fraction": _as_open_unit_interval("val_fraction", raw["val_fraction"]),
+        "npz_glob": (
+            _as_nonempty_path_string("npz_glob", raw["npz_glob"])
+            if "npz_glob" in raw
+            else "exports/dataset/*.npz"
+        ),
+        "npz_paths": _as_npz_paths(raw.get("npz_paths")),
+        "max_files_per_shape": (
+            _as_optional_positive_int("max_files_per_shape", raw["max_files_per_shape"])
+            if "max_files_per_shape" in raw
+            else 2
+        ),
     }
 
 
@@ -191,6 +228,10 @@ class OccupancyConfig:
     checkpoint_path: Path
     sample_npz: Path
     val_fraction: float
+    # Step 3 catalog knobs (optional in YAML; defaults keep Phase 1 configs valid).
+    npz_glob: str = "exports/dataset/*.npz"
+    npz_paths: tuple[str, ...] = ()
+    max_files_per_shape: int | None = 2
 
 
 def sample_npz_path(cfg: OccupancyConfig) -> Path:
@@ -250,6 +291,9 @@ def load_config(
         checkpoint_path=_resolve_repo_path(knobs["checkpoint_path"]),
         sample_npz=Path(knobs["sample_npz"]),
         val_fraction=knobs["val_fraction"],
+        npz_glob=knobs["npz_glob"],
+        npz_paths=knobs["npz_paths"],
+        max_files_per_shape=knobs["max_files_per_shape"],
     )
 
 
@@ -279,6 +323,9 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  checkpoint_path={cfg.checkpoint_path}\n"
         f"  sample_npz={cfg.sample_npz}\n"
         f"  val_fraction={cfg.val_fraction}\n"
+        f"  npz_glob={cfg.npz_glob}\n"
+        f"  npz_paths={list(cfg.npz_paths)}\n"
+        f"  max_files_per_shape={cfg.max_files_per_shape}\n"
         f")"
     )
 

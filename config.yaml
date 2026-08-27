@@ -19,3 +19,10 @@ val_fraction: 0.20  # Fraction of points held out randomly from the NPZ for vali
 # --- File Paths ---
 checkpoint_path: "models/one_npz.pt"               # Repo-relative path where the trained model checkpoint is saved/loaded
 sample_npz: "exports/dataset_test/sphere__raycast_z_raut_s0.15_inout.npz"  # Path relative to data_dir for the sample NPZ used in training/inference
+
+# --- Multi-NPZ catalog (Step 3; not used by train_one_npz.py) ---
+# Glob is relative to data_dir. Explicit npz_paths (if non-empty) replaces the glob.
+npz_glob: "exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15*.npz"
+# npz_paths:
+#   - exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15_inout.npz
+max_files_per_shape: 2

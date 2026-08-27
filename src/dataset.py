@@ -13,12 +13,13 @@ Item convention (locked here for the rest of the MVP):
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
 
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
-from data_npz import load_points_labels
+from data_npz import load_points_labels, resolve_npz_catalog
 from normalize import apply_normalization, compute_center_scale
 
 DEFAULT_BATCH_SIZE = 1024
@@ -58,6 +59,63 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
 
     def __getitem__(self, index: int) -> tuple[Tensor, Tensor]:
         return self.xyz[index], self.y[index]
+
+
+class OccupancyMultiNpzDataset(ConcatDataset[tuple[Tensor, Tensor]]):
+    """
+    Several occupancy NPZs, each AABB-normalized on its own mesh.
+
+    Item convention matches :class:`OccupancyPointDataset`: ``xyz (3,)``,
+    ``y (1,)``. Per-file ``center`` / ``scale`` stay on ``.parts[i]``.
+    """
+
+    def __init__(self, npz_paths: Sequence[Path | str]) -> None:
+        """
+        Load each NPZ as :class:`OccupancyPointDataset` and concatenate.
+
+        Parameters
+        ----------
+        npz_paths:
+            Existing occupancy files. Empty list is rejected.
+        """
+        paths = [Path(p) for p in npz_paths]
+        if not paths:
+            raise ValueError("OccupancyMultiNpzDataset needs at least one NPZ")
+        # One AABB per file so later mesh join can reuse the same map.
+        parts = [OccupancyPointDataset(path) for path in paths]
+        super().__init__(parts)
+        self.parts = parts
+        self.npz_paths = [part.npz_path for part in parts]
+
+    @classmethod
+    def from_catalog(
+        cls,
+        data_dir: Path | str,
+        *,
+        npz_glob: str = "exports/dataset/*.npz",
+        npz_paths: Sequence[str | Path] | None = None,
+        max_files_per_shape: int | None = 2,
+    ) -> OccupancyMultiNpzDataset:
+        """
+        Build from :func:`resolve_npz_catalog`.
+
+        Parameters
+        ----------
+        data_dir, npz_glob, npz_paths, max_files_per_shape:
+            Forwarded to :func:`resolve_npz_catalog`.
+
+        Returns
+        -------
+        OccupancyMultiNpzDataset
+            Pooled queries; ``len`` is the sum of file lengths.
+        """
+        catalog = resolve_npz_catalog(
+            data_dir,
+            npz_glob=npz_glob,
+            npz_paths=npz_paths,
+            max_files_per_shape=max_files_per_shape,
+        )
+        return cls(catalog)
 
 
 def split_train_val_indices(
@@ -108,7 +166,8 @@ def make_dataloader(
     """
     Train-style loader: shuffle on, default collate, no extra workers.
 
-    Accepts ``OccupancyPointDataset`` or a ``Subset`` of it (Step 9 split).
+    Accepts ``OccupancyPointDataset``, :class:`OccupancyMultiNpzDataset`,
+    or a ``Subset`` of either (Phase 1 split).
 
     Parameters
     ----------

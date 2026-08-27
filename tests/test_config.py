@@ -51,6 +51,7 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn("epochs=", rendered)
         self.assertIn("lr=", rendered)
         self.assertIn("val_fraction=", rendered)
+        self.assertIn("npz_glob=", rendered)
         print("\n" + rendered)
 
     def test_missing_data_dir_prints_and_raises(self) -> None:
