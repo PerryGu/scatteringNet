@@ -4,8 +4,28 @@ Completed work for the occupancy MLP MVP.
 
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
+## 2026-08-27 20:00 — Step 5: [Checkpoints ``last.pt`` + ``best.pt``]
 
-## 2026-08-27 17:00 — Step 3: [Multi-NPZ dataset reader]
+Checkpoint API under ``models/<run_id>/``. No occupancy train. Phase 1 ``train_one_npz.py`` / ``OccupancyMLP`` / ``models/one_npz.pt`` unchanged.
+
+- ``src/checkpointing.py``: always write ``last.pt``; write ``best.pt`` only when the metric strictly improves (apex). Pointer ``runs/<id>/checkpoint_dir.txt``.
+- Run snapshot ``runs/<id>/config.yaml`` now stamps ``total`` (planned epochs) and ``checkpoint`` (epoch of the last ``last.pt`` write), plus ``best_epoch`` / ``best_metric``.
+- YAML additive ``checkpoint_metric: val_acc``. ``total`` / ``checkpoint`` are runtime snapshot fields, not project knobs.
+- Tests: ``tests/test_checkpointing.py`` 1 OK (3 dummy epochs; ``best.pt`` keeps epoch 2 when epoch 3 is worse; no ``.pt`` under ``runs/``).
+- Smoke: ``python src/checkpointing.py`` → ``runs/2026-08-27_18-45-58_ckpt_dummy``, ``models/2026-08-27_18-45-58_ckpt_dummy``; ``last_epoch=3`` ``best_epoch=2``; snapshot ``total=3`` ``checkpoint=3``; ``runs_has_pt=False``.
+
+## 2026-08-27 19:00 — Step 4: [Run logs under ``runs/``]
+
+Standalone log API. No occupancy train, no ``.pt``, Phase 1 ``train_one_npz.py`` / ``OccupancyMLP`` unchanged.
+
+- ``src/run_tracking.py``: ``runs/<YYYY-MM-DD_HH-MM-SS>_<name>/`` with config snapshot, ``metrics.jsonl`` (one JSON object per epoch), TensorBoard scalars under ``train/`` and ``val/``.
+- ``config.yaml`` additive ``run_name`` (optional in the loader). Device stays runtime-only.
+- Gitignore TensorBoard event files only; JSON + YAML under ``runs/`` remain commitable.
+- ``environment.yaml``: ``tensorboard>=2.14`` for ``SummaryWriter``.
+- Tests: ``tests/test_run_tracking.py`` 2 OK (fake 3-epoch CPU loop; no ``.pt`` under ``runs/``). Phase 1 tests still green.
+- Smoke: ``python src/run_tracking.py`` → ``runs/2026-08-27_17-06-04_dummy``; ``metrics.jsonl`` 3 rows; ``has_pt=False``; ``has_tfevents=True``.
+
+## 2026-08-27 18:00 — Step 3: [Multi-NPZ dataset reader]
 
 Catalog loader for many occupancy NPZs. Phase 1 ``load_points_labels`` / ``OccupancyPointDataset`` / ``train_one_npz.py`` unchanged. No occupancy train.
 

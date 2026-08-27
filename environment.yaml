@@ -26,3 +26,5 @@ dependencies:
     # Mesh IO + occupancy queries for Step 2 NPZ generation (not PyTorch).
     - open3d>=0.18
     - trimesh>=4.0
+    # torch.utils.tensorboard.SummaryWriter (Step 4 run logs).
+    - tensorboard>=2.14

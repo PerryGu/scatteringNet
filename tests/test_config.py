@@ -34,6 +34,8 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertEqual(knobs["checkpoint_path"], str(disk["checkpoint_path"]).strip())
         self.assertEqual(knobs["sample_npz"], str(disk["sample_npz"]).strip())
         self.assertAlmostEqual(knobs["val_fraction"], float(disk["val_fraction"]))
+        self.assertEqual(knobs["run_name"], str(disk["run_name"]).strip())
+        self.assertEqual(knobs["checkpoint_metric"], str(disk["checkpoint_metric"]).strip())
 
     def test_load_config_resolves_data_dir_and_device(self) -> None:
         cfg = load_config()
@@ -52,6 +54,8 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn("lr=", rendered)
         self.assertIn("val_fraction=", rendered)
         self.assertIn("npz_glob=", rendered)
+        self.assertIn("run_name=", rendered)
+        self.assertIn("checkpoint_metric=", rendered)
         print("\n" + rendered)
 
     def test_missing_data_dir_prints_and_raises(self) -> None:

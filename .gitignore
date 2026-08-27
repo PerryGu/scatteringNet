@@ -1,6 +1,8 @@
-# Data
-models/
+# Phase 1 + Phase 2 weights (keep models/.gitkeep; never commit .pt)
 *.pt
+
+# TensorBoard events under runs/ (JSON + config.yaml stay commitable)
+**/events.out.tfevents*
 
 # Python
 __pycache__/

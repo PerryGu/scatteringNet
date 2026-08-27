@@ -1,0 +1,16 @@
+checkpoint_path: F:/Work_stuff/VisualStudio_cursor/scatteringNet/models/one_npz.pt
+data_dir: E:/Work_stuff/scatteringNet/data
+depth: 4
+device: cuda
+epochs: 30
+hidden: 64
+lr: 0.001
+max_files_per_shape: 2
+npz_glob: exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15*.npz
+npz_paths: []
+run_dir: runs/2026-08-27_17-06-04_dummy
+run_id: 2026-08-27_17-06-04_dummy
+run_name: run
+sample_npz: exports/dataset_test/sphere__raycast_z_raut_s0.15_inout.npz
+seed: 1
+val_fraction: 0.2

@@ -26,3 +26,14 @@ npz_glob: "exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15*.npz"
 # npz_paths:
 #   - exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15_inout.npz
 max_files_per_shape: 2
+
+# --- Run logs (Step 4; occupancy train is still Step 6) ---
+# Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
+run_name: run
+
+# --- Checkpoints (Step 5; occupancy train is still Step 6) ---
+# Scalar used to decide models/<run_id>/best.pt (strict improve). last.pt is always written.
+# The run snapshot (runs/<id>/config.yaml) records:
+#   total      — planned epoch count (copied from epochs)
+#   checkpoint — epoch index of the last last.pt write (runtime; not a project knob)
+checkpoint_metric: val_acc

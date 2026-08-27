@@ -49,6 +49,8 @@ class YamlKnobs(TypedDict):
     npz_glob: str
     npz_paths: tuple[str, ...]
     max_files_per_shape: int | None
+    run_name: str
+    checkpoint_metric: str
 
 
 def get_device() -> torch.device:
@@ -116,6 +118,21 @@ def _as_optional_positive_int(name: str, value: Any) -> int | None:
     if value is None:
         return None
     return _as_positive_int(name, value)
+
+
+def _as_run_name(value: Any) -> str:
+    """Optional YAML suffix for ``runs/<timestamp>_<name>/``; empty → ``run``."""
+    if value is None:
+        return "run"
+    text = str(value).strip()
+    return text if text else "run"
+
+
+def _as_checkpoint_metric(value: Any) -> str:
+    """Name of the scalar used to decide ``best.pt`` (strict improve)."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise ValueError("checkpoint_metric must be a non-empty string")
+    return str(value).strip()
 
 
 def _as_npz_paths(value: Any) -> tuple[str, ...]:
@@ -187,6 +204,14 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             if "max_files_per_shape" in raw
             else 2
         ),
+        "run_name": (
+            _as_run_name(raw["run_name"]) if "run_name" in raw else "run"
+        ),
+        "checkpoint_metric": (
+            _as_checkpoint_metric(raw["checkpoint_metric"])
+            if "checkpoint_metric" in raw
+            else "val_acc"
+        ),
     }
 
 
@@ -232,6 +257,10 @@ class OccupancyConfig:
     npz_glob: str = "exports/dataset/*.npz"
     npz_paths: tuple[str, ...] = ()
     max_files_per_shape: int | None = 2
+    # Step 4: suffix for runs/<timestamp>_<name>/ (device stays runtime-only).
+    run_name: str = "run"
+    # Step 5: which logged scalar selects best.pt (strict improve).
+    checkpoint_metric: str = "val_acc"
 
 
 def sample_npz_path(cfg: OccupancyConfig) -> Path:
@@ -294,6 +323,8 @@ def load_config(
         npz_glob=knobs["npz_glob"],
         npz_paths=knobs["npz_paths"],
         max_files_per_shape=knobs["max_files_per_shape"],
+        run_name=knobs["run_name"],
+        checkpoint_metric=knobs["checkpoint_metric"],
     )
 
 
@@ -326,6 +357,8 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  npz_glob={cfg.npz_glob}\n"
         f"  npz_paths={list(cfg.npz_paths)}\n"
         f"  max_files_per_shape={cfg.max_files_per_shape}\n"
+        f"  run_name={cfg.run_name}\n"
+        f"  checkpoint_metric={cfg.checkpoint_metric}\n"
         f")"
     )
 
