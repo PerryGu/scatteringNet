@@ -20,7 +20,7 @@ from run_tracking import start_run
 
 
 class CheckpointingTests(unittest.TestCase):
-    def test_last_always_best_on_strict_improve(self) -> None:
+    def test_best_only_on_strict_improve(self) -> None:
         when = datetime(2026, 8, 27, 18, 0, 0)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -45,19 +45,16 @@ class CheckpointingTests(unittest.TestCase):
                         best_metric=saver.best_metric,
                     )
 
-            self.assertTrue(saver.last_path.is_file())
             self.assertTrue(saver.best_path.is_file())
-            last = torch.load(saver.last_path, map_location="cpu", weights_only=False)
+            self.assertFalse((saver.dir / "last.pt").is_file())
             best = torch.load(saver.best_path, map_location="cpu", weights_only=False)
-            self.assertEqual(int(last["epoch"]), 3)
             self.assertEqual(int(best["epoch"]), 2)
-            self.assertEqual(int(last["total"]), 3)
+            self.assertEqual(int(best["total"]), 3)
             self.assertEqual(float(best["w"].item()), 2.0)
-            self.assertEqual(float(last["w"].item()), 3.0)
 
             snap = yaml.safe_load(run.config_path.read_text(encoding="utf-8"))
             self.assertEqual(snap["total"], 3)
-            self.assertEqual(snap["checkpoint"], 3)
+            self.assertEqual(snap["checkpoint"], 2)
             self.assertEqual(snap["best_epoch"], 2)
             self.assertAlmostEqual(float(snap["best_metric"]), 0.90)
 

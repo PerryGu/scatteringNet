@@ -12,6 +12,8 @@ data_dir: "E:/Work_stuff/scatteringNet/data"  # Base root directory where all NP
 # --- Training Hyperparameters ---
 epochs: 30        # Total number of training epochs for the overfit run
 lr: 0.001         # Initial learning rate for the Adam optimizer
+batch_size: 1024  # Points per optimizer step (GPU mini-batch)
+optimizer: adam   # adam | adamw | sgd  (used by train_multi_npz)
 
 # --- Validation Settings ---
 val_fraction: 0.20  # Fraction of points held out randomly from the NPZ for validation (standard is 0.20 / 20%)
@@ -21,9 +23,9 @@ checkpoint_path: "models/one_npz.pt"               # Repo-relative path where th
 sample_npz: "exports/dataset_test/sphere__raycast_z_raut_s0.15_inout.npz"  # Path relative to data_dir for the sample NPZ used in training/inference
 
 # --- Multi-NPZ catalog (Step 3; not used by train_one_npz.py) ---
-# Glob is relative to data_dir. Explicit npz_paths (if non-empty) replaces the glob.
+# Glob is relative to data_dir. If npz_paths is set (non-empty), it replaces the glob.
 npz_glob: "exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15*.npz"
-# npz_paths:
+# npz_paths:   # optional explicit list; leave unset/empty to use npz_glob
 #   - exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15_inout.npz
 max_files_per_shape: 2
 
@@ -32,8 +34,12 @@ max_files_per_shape: 2
 run_name: run
 
 # --- Checkpoints (Step 5; occupancy train is still Step 6) ---
-# Scalar used to decide models/<run_id>/best.pt (strict improve). last.pt is always written.
+# Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.
 # The run snapshot (runs/<id>/config.yaml) records:
-#   total      — planned epoch count (copied from epochs)
-#   checkpoint — epoch index of the last last.pt write (runtime; not a project knob)
+#   total      — planned epoch count (copied from smoke_epochs for multi-NPZ train)
+#   checkpoint — epoch index stored in best.pt (runtime; not a project knob)
 checkpoint_metric: val_acc
+
+# --- Multi-NPZ train (Step 6) ---
+# First occupancy train on the catalog glob above. Phase 1 train_one_npz.py still uses epochs.
+smoke_epochs: 20

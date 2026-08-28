@@ -34,7 +34,7 @@ Progress is visible in:
 | 2 | NPZ inside/outside sampling | We can turn those OBJs into occupancy files (points, labels, mesh path) at a density we choose, then optionally nudge each point by a random range (0 / low / high) **before** labeling |
 | 3 | Read many NPZs | The dataset can load a whole set of occupancy files, not only one |
 | 4 | Experiment *logs* | A `runs/` folder holds config + JSON (+ TensorBoard). No `.pt` files here |
-| 5 | Checkpoints | `last.pt` and **`best.pt`** live under `models/<run_id>/`, linked by the same run id |
+| 5 | Checkpoints | **`best.pt`** lives under `models/<run_id>/`, linked by the same run id |
 | 6 | First occupancy train (Phase 1 MLP, many NPZs) | Multi-file xyz training uses the reader, the logs, and the checkpoint saver |
 | 7 | Join NPZ to OBJ | Each occupancy file can load the mesh it came from |
 | 8 | Sample the surface envelope | Do dense points on the shell help occupancy *before* we use faces? |
@@ -96,7 +96,7 @@ If the first multi-file train has no paper trail, we throw away the only numbers
 - per-epoch metrics in JSON
 - TensorBoard event files (binary; not for git)
 
-No `last.pt` / `best.pt` in this folder. Those are Step 5.
+No `best.pt` in this folder. Those are Step 5.
 
 This step **builds the log helper** and tests it on a tiny fake loop (dummy metrics only). It does **not** run the occupancy MLP.
 
@@ -108,7 +108,7 @@ JSON + config may be committed. TensorBoard events stay gitignored.
 
 ## Step 5 — Checkpoints (`models/<run_id>/`)
 
-Weights are a different product from logs. `last.pt` (always) and `best.pt` (only when the selection metric strictly improves) go under `models/<same run id>/`.
+Weights are a different product from logs. `best.pt` (only when the selection metric strictly improves) goes under `models/<same run id>/`.
 
 The log folder stores a pointer to that checkpoint directory so the two stay joined. Inference loads from `models/`, not from `runs/`. We do not overwrite Phase 1’s `models/one_npz.pt` as the Phase 2 default.
 

@@ -4,6 +4,43 @@ Completed work for the occupancy MLP MVP.
 
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
+## 2026-08-28 21:00 — YAML ``batch_size`` and ``optimizer``
+
+``config.yaml`` now owns mini-batch size (default 1024) and optimizer family (``adam`` / ``adamw`` / ``sgd``). ``train_multi_npz`` uses both; the run snapshot records them. Phase 1 ``train_one_npz.py`` is unchanged (still Adam, still 1024).
+
+## 2026-08-28 19:00 — Run snapshot records GPU name
+
+``runs/<id>/config.yaml`` now stamps ``gpu`` (CUDA card name from PyTorch, or null on CPU) next to ``device``. ``train_multi_npz`` prints the same name. Root ``config.yaml`` is unchanged (runtime-only, like ``device``).
+
+## 2026-08-28 17:00 — Whole-run wall timer
+
+Each ``runs/<id>/`` stamps ``started_at``, ``finished_at``, ``wall_seconds``, and  ``wall`` in ``config.yaml``. ``train_multi_npz`` prints the same duration at the end of the workout. Per-epoch ``wall_seconds`` in ``metrics.jsonl`` is unchanged.
+
+
+## 2026-08-28 08:00 — Run catalog list moved out of ``config.yaml``
+
+Resolved NPZ paths no longer live in the run snapshot. ``runs/<id>/catalog.txt`` is one data-relative path per line. ``config.yaml`` only records ``catalog_file`` and ``catalog_n``. Empty YAML ``npz_paths`` is omitted from the snapshot (glob was used). Existing sphere and extrude run folders were migrated.
+
+## 2026-08-27 20:00 — Run snapshots store relative paths
+
+``runs/<id>/config.yaml`` and multi-NPZ checkpoint payloads no longer dump absolute ``E:/`` / ``F:/`` paths.
+
+- ``catalog_npz_paths``, ``sample_npz``, ``npz_paths`` → relative to ``data_dir`` (e.g. ``exports/dataset/...``).
+- ``checkpoint_path``, ``run_dir`` → relative to the git repo (e.g. ``models/one_npz.pt``).
+- ``data_dir`` stays absolute when the dataset disk is not inside the repo (this machine: ``E:`` data vs ``F:`` git).
+- ``best.pt`` / ``last.pt`` ``npz`` keys use the same data-relative strings.
+- Tests: ``test_as_data_and_repo_relative``, ``test_snapshot_strips_absolute_data_and_repo_paths``. Phase 1 train/infer unchanged.
+
+## 2026-08-27 19:00 — Step 6: [First multi-NPZ occupancy train]
+
+``src/train_multi_npz.py`` trains Phase 1 ``OccupancyMLP`` on the catalog glob. Logs → ``runs/<id>/``; weights → ``models/<id>/last.pt`` + ``best.pt``. No OccupancyMLP edits. ``train_one_npz.py`` unchanged.
+
+- Val: random point split of the pooled queries (loop health).
+- YAML additive ``smoke_epochs: 20`` (this CLI). Phase 1 still uses ``epochs``.
+- Checkpoint stores ``kind=occupancy_mlp``, NPZ paths, per-mesh AABB.
+- Tests: ``tests/test_train_multi_npz.py`` 1 OK (two synthetic NPZs, 2 CPU epochs, ``n=100``, ``best.pt`` + ``metrics.jsonl``, no ``.pt`` under ``runs/``).
+- First real smoke: run ``python src/train_multi_npz.py`` on the current glob (2 sphere NPZs). Record ``runs/<id>`` / ``models/<id>`` and metrics after that run.
+
 ## 2026-08-27 20:00 — Step 5: [Checkpoints ``last.pt`` + ``best.pt``]
 
 Checkpoint API under ``models/<run_id>/``. No occupancy train. Phase 1 ``train_one_npz.py`` / ``OccupancyMLP`` / ``models/one_npz.pt`` unchanged.

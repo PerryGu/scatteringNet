@@ -51,6 +51,9 @@ class YamlKnobs(TypedDict):
     max_files_per_shape: int | None
     run_name: str
     checkpoint_metric: str
+    smoke_epochs: int
+    batch_size: int
+    optimizer: str
 
 
 def get_device() -> torch.device:
@@ -68,6 +71,23 @@ def get_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+
+def gpu_name(device: torch.device | None = None) -> str | None:
+    """
+    Human GPU name for the run snapshot (``None`` on CPU).
+
+    Uses ``cfg.device`` when given so a forced-CPU train does not stamp a
+    card that was not used.
+    """
+    dev = device if device is not None else get_device()
+    if dev.type != "cuda" or not torch.cuda.is_available():
+        return None
+    index = 0 if dev.index is None else int(dev.index)
+    if index < 0 or index >= torch.cuda.device_count():
+        return None
+    name = str(torch.cuda.get_device_name(index)).strip()
+    return name or None
 
 
 def _as_positive_int(name: str, value: Any) -> int:
@@ -135,6 +155,21 @@ def _as_checkpoint_metric(value: Any) -> str:
     return str(value).strip()
 
 
+# Names accepted in config.yaml ``optimizer``. Used by train_multi_npz.
+_ALLOWED_OPTIMIZERS = ("adam", "adamw", "sgd")
+
+
+def _as_optimizer(value: Any) -> str:
+    """Optimizer family for multi-NPZ train; default Adam."""
+    if value is None or (isinstance(value, str) and not str(value).strip()):
+        return "adam"
+    name = str(value).strip().lower()
+    if name not in _ALLOWED_OPTIMIZERS:
+        allowed = ", ".join(_ALLOWED_OPTIMIZERS)
+        raise ValueError(f"optimizer must be one of {allowed}, got {value!r}")
+    return name
+
+
 def _as_npz_paths(value: Any) -> tuple[str, ...]:
     """Explicit NPZ list relative to data_dir (empty → use glob)."""
     if value is None:
@@ -157,6 +192,47 @@ def _resolve_repo_path(value: str) -> Path:
     if path.is_absolute():
         return path
     return _REPO_ROOT / path
+
+
+def as_repo_relative(path: Path | str, *, root: Path | None = None) -> str:
+    """
+    POSIX string relative to the git repo when ``path`` is inside it.
+
+    Already-relative inputs are returned as POSIX. Absolute paths on another
+    drive (the dataset disk) cannot be repo-relative and stay absolute POSIX.
+    """
+    text = str(path).strip()
+    if not text:
+        return text
+    parsed = Path(text)
+    if not parsed.is_absolute():
+        return parsed.as_posix()
+    base = (root or _REPO_ROOT).resolve()
+    try:
+        return parsed.resolve().relative_to(base).as_posix()
+    except ValueError:
+        return parsed.resolve().as_posix()
+
+
+def as_data_relative(path: Path | str, data_dir: Path | str) -> str:
+    """
+    POSIX string relative to ``data_dir`` (``exports/...``, not ``E:/...``).
+
+    Already-relative inputs are returned as POSIX. Paths outside ``data_dir``
+    (unit-test temp trees) fall back to absolute POSIX.
+    """
+    text = str(path).strip()
+    if not text:
+        return text
+    parsed = Path(text)
+    if not parsed.is_absolute():
+        return parsed.as_posix()
+    root = Path(data_dir).expanduser().resolve()
+    resolved = parsed.expanduser().resolve()
+    try:
+        return resolved.relative_to(root).as_posix()
+    except ValueError:
+        return resolved.as_posix()
 
 
 def load_yaml_knobs(path: Path) -> YamlKnobs:
@@ -212,6 +288,19 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             if "checkpoint_metric" in raw
             else "val_acc"
         ),
+        "smoke_epochs": (
+            _as_positive_int("smoke_epochs", raw["smoke_epochs"])
+            if "smoke_epochs" in raw
+            else 20
+        ),
+        "batch_size": (
+            _as_positive_int("batch_size", raw["batch_size"])
+            if "batch_size" in raw
+            else 1024
+        ),
+        "optimizer": (
+            _as_optimizer(raw["optimizer"]) if "optimizer" in raw else "adam"
+        ),
     }
 
 
@@ -261,6 +350,11 @@ class OccupancyConfig:
     run_name: str = "run"
     # Step 5: which logged scalar selects best.pt (strict improve).
     checkpoint_metric: str = "val_acc"
+    # Step 6: multi-NPZ train length (Phase 1 one-NPZ still uses epochs).
+    smoke_epochs: int = 20
+    # Mini-batch size and optimizer family (train_multi_npz).
+    batch_size: int = 1024
+    optimizer: str = "adam"
 
 
 def sample_npz_path(cfg: OccupancyConfig) -> Path:
@@ -325,6 +419,9 @@ def load_config(
         max_files_per_shape=knobs["max_files_per_shape"],
         run_name=knobs["run_name"],
         checkpoint_metric=knobs["checkpoint_metric"],
+        smoke_epochs=knobs["smoke_epochs"],
+        batch_size=knobs["batch_size"],
+        optimizer=knobs["optimizer"],
     )
 
 
@@ -346,6 +443,7 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"OccupancyConfig(\n"
         f"  data_dir={cfg.data_dir}\n"
         f"  device={cfg.device}\n"
+        f"  gpu={gpu_name(cfg.device)}\n"
         f"  hidden={cfg.hidden}\n"
         f"  depth={cfg.depth}\n"
         f"  seed={cfg.seed}\n"
@@ -359,6 +457,9 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  max_files_per_shape={cfg.max_files_per_shape}\n"
         f"  run_name={cfg.run_name}\n"
         f"  checkpoint_metric={cfg.checkpoint_metric}\n"
+        f"  smoke_epochs={cfg.smoke_epochs}\n"
+        f"  batch_size={cfg.batch_size}\n"
+        f"  optimizer={cfg.optimizer}\n"
         f")"
     )
 

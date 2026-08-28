@@ -7,7 +7,8 @@ gitignore-ing the whole tree (``.pt`` files belong in ``models/`` in Step 5).
 Layout::
 
     runs/<YYYY-MM-DD_HH-MM-SS>_<name>/
-      config.yaml          # knobs + device + seed + NPZ list when known
+      config.yaml          # knobs (no resolved file list)
+      catalog.txt          # one data-relative NPZ path per line (Step 6+)
       metrics.jsonl        # one JSON object per epoch
       events.out.tfevents* # TensorBoard (gitignored)
 
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -25,11 +27,12 @@ from typing import Any, Mapping, Sequence
 import yaml
 from torch.utils.tensorboard import SummaryWriter
 
-from config import OccupancyConfig
+from config import OccupancyConfig, as_data_relative, as_repo_relative, gpu_name
 
 # Repo root: src/run_tracking.py → parents[1].
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SAFE_NAME = re.compile(r"[^a-zA-Z0-9._-]+")
+_CATALOG_FILENAME = "catalog.txt"
 _DEFAULT_RUN_NAME = "run"
 
 # TensorBoard tags stay split so curves are comparable across later train steps.
@@ -37,6 +40,20 @@ _TB_TRAIN_LOSS = "train/loss"
 _TB_TRAIN_ACC = "train/acc"
 _TB_VAL_ACC = "val/acc"
 _TB_WALL = "time/wall_seconds"
+_TB_RUN_WALL = "time/run_wall_seconds"
+
+
+def format_duration(seconds: float) -> str:
+    """Human-readable wall time for the terminal and the run snapshot."""
+    total = max(0.0, float(seconds))
+    hours = int(total // 3600)
+    minutes = int((total % 3600) // 60)
+    secs = total - hours * 3600 - minutes * 60
+    if hours > 0:
+        return f"{hours}h {minutes:02d}m {secs:05.2f}s"
+    if minutes > 0:
+        return f"{minutes}m {secs:05.2f}s"
+    return f"{secs:.2f}s"
 
 
 def _sanitize_name(name: str) -> str:
@@ -61,39 +78,48 @@ def _jsonable(value: Any) -> Any:
 
 def occupancy_config_snapshot(
     cfg: OccupancyConfig,
-    *,
-    npz_paths: Sequence[Path | str] | None = None,
 ) -> dict[str, Any]:
     """
     Flatten OccupancyConfig into a JSON-safe dict for the run snapshot.
 
-    ``device`` is recorded here (runtime) even though it is not a YAML knob.
-    ``npz_paths`` is optional so Step 3 catalogs can be attached without
-    coupling this helper to the catalog loader.
+    Paths under the repo or ``data_dir`` are stored relative (POSIX).
+    ``data_dir`` itself is the dataset root: relative to the git repo when
+    it lives there, otherwise absolute POSIX (data disk vs git disk).
+    ``device`` and ``gpu`` are recorded here (runtime) even though they
+    are not YAML knobs. ``gpu`` is the CUDA card name, or null on CPU.
+
+    The resolved train file list is **not** stored here (see
+    :meth:`RunTracker.write_catalog`). ``npz_paths`` is the YAML knob:
+    empty means the glob was used.
     """
     payload: dict[str, Any] = {
-        "data_dir": cfg.data_dir,
+        "data_dir": as_repo_relative(cfg.data_dir),
         "device": str(cfg.device),
+        "gpu": gpu_name(cfg.device),
         "hidden": int(cfg.hidden),
         "depth": int(cfg.depth),
         "seed": int(cfg.seed),
         "epochs": int(cfg.epochs),
         # ``total`` is the planned epoch count; ``checkpoint`` is filled by Step 5
-        # with the epoch index of the last ``last.pt`` write (null until then).
+        # with the epoch index stored in ``best.pt`` (null until then).
         "total": int(cfg.epochs),
         "checkpoint": None,
         "lr": float(cfg.lr),
-        "checkpoint_path": cfg.checkpoint_path,
-        "sample_npz": cfg.sample_npz,
+        "checkpoint_path": as_repo_relative(cfg.checkpoint_path),
+        "sample_npz": as_data_relative(cfg.sample_npz, cfg.data_dir),
         "val_fraction": float(cfg.val_fraction),
-        "npz_glob": str(cfg.npz_glob),
-        "npz_paths": list(cfg.npz_paths),
+        "npz_glob": Path(str(cfg.npz_glob)).as_posix(),
         "max_files_per_shape": cfg.max_files_per_shape,
         "run_name": str(cfg.run_name),
         "checkpoint_metric": str(cfg.checkpoint_metric),
+        "smoke_epochs": int(cfg.smoke_epochs),
+        "batch_size": int(cfg.batch_size),
+        "optimizer": str(cfg.optimizer),
     }
-    if npz_paths is not None:
-        payload["catalog_npz_paths"] = [str(p) for p in npz_paths]
+    # Explicit list knob: only snapshot it when it actually replaced the glob.
+    explicit = [as_data_relative(p, cfg.data_dir) for p in cfg.npz_paths]
+    if explicit:
+        payload["npz_paths"] = explicit
     return _jsonable(payload)
 
 
@@ -106,6 +132,8 @@ class RunTracker:
         *,
         root: Path | None = None,
         created_at: datetime | None = None,
+        t0: float | None = None,
+        clock_start: datetime | None = None,
     ) -> None:
         when = created_at or datetime.now()
         stamp = when.strftime("%Y-%m-%d_%H-%M-%S")
@@ -122,8 +150,14 @@ class RunTracker:
         self.dir.mkdir(parents=True, exist_ok=False)
         self.config_path = self.dir / "config.yaml"
         self.metrics_path = self.dir / "metrics.jsonl"
+        self.catalog_path = self.dir / _CATALOG_FILENAME
         # SummaryWriter writes events.out.tfevents* into this directory.
         self._tb: SummaryWriter | None = SummaryWriter(log_dir=str(self.dir))
+        # Wall clock for the whole workout. Train can pass ``t0`` /
+        # ``clock_start`` so catalog load is included before this folder exists.
+        self.started_at = clock_start or datetime.now()
+        self._t0 = t0 if t0 is not None else time.perf_counter()
+        self._timing_written = False
 
     @property
     def relative_dir(self) -> str:
@@ -143,6 +177,10 @@ class RunTracker:
         payload = _jsonable(dict(config))
         payload.setdefault("run_id", self.run_id)
         payload.setdefault("run_dir", self.relative_dir)
+        payload.setdefault(
+            "started_at",
+            self.started_at.isoformat(timespec="seconds"),
+        )
         text = yaml.safe_dump(
             payload,
             sort_keys=True,
@@ -156,6 +194,31 @@ class RunTracker:
         self._tb.add_text("config", brief, 0)
         self._tb.flush()
         return self.config_path
+
+    def write_catalog(
+        self,
+        paths: Sequence[Path | str],
+        *,
+        data_dir: Path | str,
+    ) -> Path:
+        """
+        Write resolved train NPZs to ``catalog.txt`` (one relative path per line).
+
+        Keeps ``config.yaml`` small: the snapshot only records ``catalog_file``
+        and ``catalog_n``. Paths are data-dir relative.
+        """
+        rel = [as_data_relative(p, data_dir) for p in paths]
+        text = "\n".join(rel)
+        if rel:
+            text += "\n"
+        self.catalog_path.write_text(text, encoding="utf-8")
+        self.update_config(
+            {
+                "catalog_file": _CATALOG_FILENAME,
+                "catalog_n": len(rel),
+            }
+        )
+        return self.catalog_path
 
     def log_epoch(
         self,
@@ -221,12 +284,34 @@ class RunTracker:
             self._tb.add_scalar(str(key), float(value), int(step))
         self._tb.flush()
 
+    def write_timing(self) -> dict[str, Any]:
+        """
+        Stamp whole-run wall time into ``config.yaml`` and TensorBoard.
+
+        Call at the end of a train (or let ``__exit__`` do it). ``wall_seconds``
+        is the precise elapsed time; ``wall`` is the same value for humans.
+        """
+        elapsed = time.perf_counter() - self._t0
+        finished = datetime.now()
+        payload = {
+            "started_at": self.started_at.isoformat(timespec="seconds"),
+            "finished_at": finished.isoformat(timespec="seconds"),
+            "wall_seconds": round(elapsed, 3),
+            "wall": format_duration(elapsed),
+        }
+        self.update_config(payload)
+        if self._tb is not None:
+            self._tb.add_scalar(_TB_RUN_WALL, float(elapsed), 0)
+            self._tb.flush()
+        self._timing_written = True
+        return payload
+
     def update_config(self, updates: Mapping[str, Any]) -> Path:
         """
         Merge keys into the existing snapshot and rewrite ``config.yaml``.
 
         Used by Step 5 to stamp ``total`` (planned epochs) and ``checkpoint``
-        (epoch index of the last ``last.pt`` write) without dropping knobs.
+        (epoch index stored in ``best.pt``) without dropping knobs.
         """
         current: dict[str, Any] = {}
         if self.config_path.is_file():
@@ -247,6 +332,8 @@ class RunTracker:
         return self
 
     def __exit__(self, *args: Any) -> None:
+        if not self._timing_written:
+            self.write_timing()
         self.close()
 
 
@@ -255,9 +342,17 @@ def start_run(
     *,
     root: Path | None = None,
     created_at: datetime | None = None,
+    t0: float | None = None,
+    clock_start: datetime | None = None,
 ) -> RunTracker:
     """Create a ``RunTracker`` under ``root/runs`` (default: repo root)."""
-    return RunTracker(name=name, root=root, created_at=created_at)
+    return RunTracker(
+        name=name,
+        root=root,
+        created_at=created_at,
+        t0=t0,
+        clock_start=clock_start,
+    )
 
 
 def _has_pt_under(path: Path) -> bool:
@@ -283,9 +378,11 @@ if __name__ == "__main__":
                 val_acc=0.4 + 0.1 * epoch,
                 wall_seconds=0.01 * (epoch + 1),
             )
+        timing = run.write_timing()
         print(f"run_dir={run.dir.resolve()}")
         print(f"run_id={run.run_id}")
         print(f"metrics={run.metrics_path}")
         print(f"config={run.config_path}")
+        print(f"wall={timing['wall']} ({timing['wall_seconds']}s)")
     print(f"has_pt={_has_pt_under(run.dir)}")
     print(f"has_tfevents={_has_tfevents(run.dir)}")

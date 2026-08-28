@@ -1,13 +1,14 @@
-"""Checkpoints under ``models/<run_id>/`` — ``last.pt`` and ``best.pt``.
+"""Checkpoints under ``models/<run_id>/best.pt``.
 
 Step 5 keeps weights out of ``runs/`` so logs stay commitable. The same
-``run_id`` joins the two trees. ``best.pt`` is the apex: written only when
-the selection metric **strictly improves**. Last epoch is often not best.
+``run_id`` joins the two trees. ``best.pt`` is the only weight file: written
+when the selection metric **strictly improves** (first epoch always qualifies).
+The last epoch is often worse; we do not keep a second copy of those weights.
 
-``runs/<id>/config.yaml`` is updated on every save:
+``runs/<id>/config.yaml`` is updated on every compared epoch:
 
 - ``total`` — planned epoch count for this run
-- ``checkpoint`` — epoch index of the last ``last.pt`` write (this saved moment)
+- ``checkpoint`` — epoch index stored in ``best.pt`` (the saved moment)
 
 This module does not import OccupancyMLP and does not train.
 """
@@ -31,7 +32,6 @@ _PHASE1_CKPT = _REPO_ROOT / "models" / "one_npz.pt"
 class CheckpointSaveResult:
     """Outcome of one ``Checkpointer.save`` call."""
 
-    last_path: Path
     best_path: Path
     epoch: int
     is_best: bool
@@ -40,7 +40,7 @@ class CheckpointSaveResult:
 
 
 class Checkpointer:
-    """Write ``last.pt`` always and ``best.pt`` on a strict metric improve."""
+    """Write ``best.pt`` only when the selection metric strictly improves."""
 
     def __init__(
         self,
@@ -58,11 +58,8 @@ class Checkpointer:
         self.metric_name = str(metric_name).strip() or "val_acc"
         self._root = (root or _REPO_ROOT).resolve()
         self.dir = self._root / "models" / self.run_id
-        self.last_path = self.dir / "last.pt"
         self.best_path = self.dir / "best.pt"
         # Never clobber the Phase 1 one-NPZ file.
-        if self.last_path.resolve() == _PHASE1_CKPT.resolve():
-            raise ValueError(f"refusing to overwrite Phase 1 checkpoint {_PHASE1_CKPT}")
         if self.best_path.resolve() == _PHASE1_CKPT.resolve():
             raise ValueError(f"refusing to overwrite Phase 1 checkpoint {_PHASE1_CKPT}")
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -91,31 +88,29 @@ class Checkpointer:
         metric: float,
     ) -> CheckpointSaveResult:
         """
-        Write ``last.pt``. Write ``best.pt`` only if ``metric`` strictly improves.
+        Write ``best.pt`` only if ``metric`` strictly improves.
 
         Parameters
         ----------
         payload:
-            Caller-owned checkpoint dict (dummy weights in this step; model
-            state in Step 6). ``epoch`` / ``total`` are stamped here.
+            Caller-owned checkpoint dict (dummy weights or model state).
+            ``epoch`` / ``total`` are stamped here when a file is written.
         epoch:
-            1-based epoch index of this saved moment.
+            1-based epoch index of this compared moment.
         metric:
             Selection scalar (default ``val_acc``).
         """
         if epoch < 1:
             raise ValueError(f"epoch must be >= 1, got {epoch}")
         score = float(metric)
-        blob: dict[str, Any] = dict(payload)
-        blob["epoch"] = int(epoch)
-        blob["total"] = self.total_epochs
-        blob["metric_name"] = self.metric_name
-        blob["metric"] = score
-        blob["run_id"] = self.run_id
-
-        torch.save(blob, self.last_path)
         is_best = self.best_metric is None or score > self.best_metric
         if is_best:
+            blob: dict[str, Any] = dict(payload)
+            blob["epoch"] = int(epoch)
+            blob["total"] = self.total_epochs
+            blob["metric_name"] = self.metric_name
+            blob["metric"] = score
+            blob["run_id"] = self.run_id
             self.best_metric = score
             self.best_epoch = int(epoch)
             torch.save(blob, self.best_path)
@@ -124,7 +119,7 @@ class Checkpointer:
         self.run.update_config(
             {
                 "total": self.total_epochs,
-                "checkpoint": int(epoch),
+                "checkpoint": self.best_epoch,
                 "best_epoch": self.best_epoch,
                 "best_metric": self.best_metric,
             }
@@ -132,13 +127,11 @@ class Checkpointer:
         self.run.log_scalars(
             int(epoch),
             {
-                "checkpoint/last_epoch": float(epoch),
                 "checkpoint/best_epoch": float(self.best_epoch),
                 "checkpoint/best_metric": float(self.best_metric),
             },
         )
         return CheckpointSaveResult(
-            last_path=self.last_path,
             best_path=self.best_path,
             epoch=int(epoch),
             is_best=is_best,
@@ -161,7 +154,6 @@ if __name__ == "__main__":
             total_epochs=3,
             metric_name=cfg.checkpoint_metric,
         )
-        # val_acc peaks at epoch 2 so best.pt must keep those weights.
         vals = (0.50, 0.90, 0.60)
         for epoch, val_acc in enumerate(vals, start=1):
             tag = torch.tensor([float(epoch)])
@@ -175,12 +167,12 @@ if __name__ == "__main__":
                 best_epoch=result.best_epoch,
                 best_metric=result.best_metric,
             )
-        last = torch.load(saver.last_path, map_location="cpu", weights_only=False)
         best = torch.load(saver.best_path, map_location="cpu", weights_only=False)
         snap = yaml.safe_load(run.config_path.read_text(encoding="utf-8"))
         print(f"run_dir={run.dir.resolve()}")
         print(f"model_dir={saver.dir.resolve()}")
-        print(f"last_epoch={last['epoch']} best_epoch={best['epoch']}")
+        print(f"best_epoch={best['epoch']}")
         print(f"snapshot_total={snap['total']} snapshot_checkpoint={snap['checkpoint']}")
+        print(f"has_last_pt={(saver.dir / 'last.pt').exists()}")
         print(f"runs_has_pt={any(run.dir.rglob('*.pt'))}")
         print(f"phase1_untouched={_PHASE1_CKPT}")

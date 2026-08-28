@@ -14,7 +14,16 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from config import OccupancyConfig, format_config, load_config, load_yaml_knobs, sample_npz_path
+from config import (
+    OccupancyConfig,
+    as_data_relative,
+    as_repo_relative,
+    format_config,
+    gpu_name,
+    load_config,
+    load_yaml_knobs,
+    sample_npz_path,
+)
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +45,9 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertAlmostEqual(knobs["val_fraction"], float(disk["val_fraction"]))
         self.assertEqual(knobs["run_name"], str(disk["run_name"]).strip())
         self.assertEqual(knobs["checkpoint_metric"], str(disk["checkpoint_metric"]).strip())
+        self.assertEqual(knobs["smoke_epochs"], int(disk["smoke_epochs"]))
+        self.assertEqual(knobs["batch_size"], int(disk["batch_size"]))
+        self.assertEqual(knobs["optimizer"], str(disk["optimizer"]).strip().lower())
 
     def test_load_config_resolves_data_dir_and_device(self) -> None:
         cfg = load_config()
@@ -50,12 +62,23 @@ class OccupancyConfigTests(unittest.TestCase):
         rendered = format_config(cfg)
         self.assertIn("data_dir=", rendered)
         self.assertIn("device=", rendered)
+        self.assertIn("gpu=", rendered)
         self.assertIn("epochs=", rendered)
         self.assertIn("lr=", rendered)
         self.assertIn("val_fraction=", rendered)
         self.assertIn("npz_glob=", rendered)
         self.assertIn("run_name=", rendered)
         self.assertIn("checkpoint_metric=", rendered)
+        self.assertIn("smoke_epochs=", rendered)
+        self.assertIn("batch_size=", rendered)
+        self.assertIn("optimizer=", rendered)
+        self.assertIsNone(gpu_name(torch.device("cpu")))
+        name = gpu_name(cfg.device)
+        if cfg.device.type == "cuda":
+            self.assertIsInstance(name, str)
+            self.assertTrue(name)
+        else:
+            self.assertIsNone(name)
         print("\n" + rendered)
 
     def test_missing_data_dir_prints_and_raises(self) -> None:
@@ -83,6 +106,51 @@ class OccupancyConfigTests(unittest.TestCase):
             )
             with self.assertRaises(FileNotFoundError):
                 load_config(yaml_path)
+
+    def test_as_data_and_repo_relative(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        self.assertEqual(as_repo_relative("models/one_npz.pt"), "models/one_npz.pt")
+        self.assertEqual(
+            as_repo_relative(repo / "models" / "one_npz.pt"),
+            "models/one_npz.pt",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"
+            target = data / "exports" / "dataset" / "a.npz"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"")
+            self.assertEqual(
+                as_data_relative(target, data),
+                "exports/dataset/a.npz",
+            )
+            self.assertEqual(
+                as_data_relative("exports/dataset/a.npz", data),
+                "exports/dataset/a.npz",
+            )
+
+    def test_unknown_optimizer_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            yaml_path = Path(tmp) / "config.yaml"
+            yaml_path.write_text(
+                "\n".join(
+                    [
+                        "hidden: 64",
+                        "depth: 4",
+                        "seed: 1",
+                        f'data_dir: "{Path(tmp).as_posix()}"',
+                        "epochs: 30",
+                        "lr: 0.001",
+                        "checkpoint_path: models/one_npz.pt",
+                        "sample_npz: exports/x.npz",
+                        "val_fraction: 0.2",
+                        "optimizer: human",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                load_yaml_knobs(yaml_path)
 
 
 if __name__ == "__main__":

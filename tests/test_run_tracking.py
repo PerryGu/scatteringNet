@@ -6,6 +6,7 @@ import json
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -17,7 +18,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from config import OccupancyConfig
-from run_tracking import occupancy_config_snapshot, start_run
+from run_tracking import format_duration, occupancy_config_snapshot, start_run
 
 
 def _cpu_cfg() -> OccupancyConfig:
@@ -41,6 +42,11 @@ def _tfevent_files(run_dir: Path) -> list[Path]:
 
 
 class RunTrackingTests(unittest.TestCase):
+    def test_format_duration(self) -> None:
+        self.assertEqual(format_duration(0.4), "0.40s")
+        self.assertEqual(format_duration(75.0), "1m 15.00s")
+        self.assertEqual(format_duration(3661.2), "1h 01m 01.20s")
+
     def test_fake_three_epoch_loop_writes_logs_not_pt(self) -> None:
         when = datetime(2026, 8, 27, 16, 0, 0)
         with tempfile.TemporaryDirectory() as tmp:
@@ -48,11 +54,12 @@ class RunTrackingTests(unittest.TestCase):
             with start_run("dummy", root=root, created_at=when) as run:
                 self.assertEqual(run.run_id, "2026-08-27_16-00-00_dummy")
                 self.assertTrue(run.dir.is_dir())
-                snap = occupancy_config_snapshot(
-                    _cpu_cfg(),
-                    npz_paths=["exports/a.npz", "exports/b.npz"],
-                )
+                snap = occupancy_config_snapshot(_cpu_cfg())
                 run.write_config(snap)
+                run.write_catalog(
+                    ["exports/a.npz", "exports/b.npz"],
+                    data_dir=Path("."),
+                )
                 for epoch in range(3):
                     run.log_epoch(
                         epoch=epoch,
@@ -66,8 +73,20 @@ class RunTrackingTests(unittest.TestCase):
             dumped = yaml.safe_load(run.config_path.read_text(encoding="utf-8"))
             self.assertEqual(dumped["run_id"], run.run_id)
             self.assertEqual(dumped["device"], "cpu")
+            self.assertIsNone(dumped["gpu"])
             self.assertEqual(dumped["seed"], 1)
-            self.assertEqual(dumped["catalog_npz_paths"], ["exports/a.npz", "exports/b.npz"])
+            self.assertNotIn("catalog_npz_paths", dumped)
+            self.assertNotIn("npz_paths", dumped)
+            self.assertEqual(dumped["catalog_file"], "catalog.txt")
+            self.assertEqual(dumped["catalog_n"], 2)
+            self.assertEqual(dumped["checkpoint_path"], "models/one_npz.pt")
+            self.assertEqual(dumped["sample_npz"], "exports/sample.npz")
+            self.assertIn("started_at", dumped)
+            self.assertIn("finished_at", dumped)
+            self.assertIn("wall", dumped)
+            self.assertGreaterEqual(float(dumped["wall_seconds"]), 0.0)
+            catalog_lines = run.catalog_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(catalog_lines, ["exports/a.npz", "exports/b.npz"])
 
             lines = run.metrics_path.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(len(lines), 3)
@@ -94,6 +113,43 @@ class RunTrackingTests(unittest.TestCase):
             self.assertEqual(second.run_id, "2026-08-27_16-00-01_has_a_space_1")
             self.assertTrue(first.dir.is_dir())
             self.assertTrue(second.dir.is_dir())
+
+    def test_snapshot_strips_absolute_data_and_repo_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"
+            exports = data / "exports" / "dataset"
+            exports.mkdir(parents=True)
+            abs_a = (exports / "sphere__occupancy.npz").resolve()
+            abs_a.write_bytes(b"")
+            abs_ckpt = Path(tmp) / "repo" / "models" / "one_npz.pt"
+            cfg = OccupancyConfig(
+                data_dir=data.resolve(),
+                device=torch.device("cpu"),
+                hidden=32,
+                depth=2,
+                seed=1,
+                epochs=3,
+                lr=1e-3,
+                checkpoint_path=abs_ckpt,
+                sample_npz=Path("exports/dataset_test/sphere.npz"),
+                val_fraction=0.2,
+            )
+            snap = occupancy_config_snapshot(cfg)
+            self.assertNotIn("catalog_npz_paths", snap)
+            self.assertIsNone(snap["gpu"])
+            self.assertEqual(snap["sample_npz"], "exports/dataset_test/sphere.npz")
+            # checkpoint_path is outside this repo → absolute POSIX fallback.
+            self.assertTrue(str(snap["checkpoint_path"]).replace("\\", "/").endswith(
+                "models/one_npz.pt"
+            ))
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA not available")
+    def test_snapshot_records_cuda_gpu_name(self) -> None:
+        cfg = replace(_cpu_cfg(), device=torch.device("cuda"))
+        snap = occupancy_config_snapshot(cfg)
+        self.assertEqual(snap["device"], "cuda")
+        self.assertIsInstance(snap["gpu"], str)
+        self.assertTrue(snap["gpu"])
 
 
 if __name__ == "__main__":
