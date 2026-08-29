@@ -1,7 +1,7 @@
 """Load occupancy query points and labels from scatter NPZ files.
 
-Phase 1 uses :func:`load_points_labels` on **one** file. Step 3 adds a catalog
-resolver so many NPZs can be listed (glob or explicit paths) without training.
+:func:`load_points_labels` reads **one** file. A catalog resolver lists
+many NPZs (glob or explicit paths) without training.
 
 Only ``points`` and ``labels`` are used for arrays. Other keys (``mesh_path``,
 ``tags``, ``method``, …) are ignored on purpose so occupancy stays xyz + label.
@@ -77,7 +77,7 @@ def load_points_labels(path: Path) -> tuple[PointsArray, LabelsArray]:
 
 
 def _is_combo_npz(path: Path) -> bool:
-    """True when the filename looks like a combo dump (excluded from Step 3)."""
+    """True when the filename looks like a combo dump (excluded from the catalog)."""
     return "combo" in path.name.lower()
 
 

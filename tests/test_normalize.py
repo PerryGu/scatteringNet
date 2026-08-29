@@ -1,4 +1,4 @@
-"""Tests for AABB normalization (Step 4). No training."""
+"""Tests for AABB normalization. No training."""
 
 from __future__ import annotations
 

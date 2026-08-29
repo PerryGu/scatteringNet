@@ -45,7 +45,6 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertAlmostEqual(knobs["val_fraction"], float(disk["val_fraction"]))
         self.assertEqual(knobs["run_name"], str(disk["run_name"]).strip())
         self.assertEqual(knobs["checkpoint_metric"], str(disk["checkpoint_metric"]).strip())
-        self.assertEqual(knobs["smoke_epochs"], int(disk["smoke_epochs"]))
         self.assertEqual(knobs["batch_size"], int(disk["batch_size"]))
         self.assertEqual(knobs["optimizer"], str(disk["optimizer"]).strip().lower())
 
@@ -69,7 +68,6 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn("npz_glob=", rendered)
         self.assertIn("run_name=", rendered)
         self.assertIn("checkpoint_metric=", rendered)
-        self.assertIn("smoke_epochs=", rendered)
         self.assertIn("batch_size=", rendered)
         self.assertIn("optimizer=", rendered)
         self.assertIsNone(gpu_name(torch.device("cpu")))

@@ -1,9 +1,9 @@
 """Hybrid config loader for the v2 occupancy MLP MVP.
 
 Static experiment knobs live in ``config.yaml``. ``device`` is resolved
-here from CUDA availability. Training defaults (epochs, lr, checkpoint
-path, sample NPZ, val_fraction) are YAML-owned so ``train_one_npz`` does
-not hardcode them.
+here from CUDA availability. Training knobs (epochs, lr, batch_size,
+optimizer, catalog) are YAML-owned so ``train_multi_npz`` does not
+hardcode them.
 
 This module does not read ``.env`` and does not open NPZ files.
 """
@@ -51,7 +51,6 @@ class YamlKnobs(TypedDict):
     max_files_per_shape: int | None
     run_name: str
     checkpoint_metric: str
-    smoke_epochs: int
     batch_size: int
     optimizer: str
 
@@ -288,11 +287,6 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             if "checkpoint_metric" in raw
             else "val_acc"
         ),
-        "smoke_epochs": (
-            _as_positive_int("smoke_epochs", raw["smoke_epochs"])
-            if "smoke_epochs" in raw
-            else 20
-        ),
         "batch_size": (
             _as_positive_int("batch_size", raw["batch_size"])
             if "batch_size" in raw
@@ -342,16 +336,14 @@ class OccupancyConfig:
     checkpoint_path: Path
     sample_npz: Path
     val_fraction: float
-    # Step 3 catalog knobs (optional in YAML; defaults keep Phase 1 configs valid).
+    # Catalog knobs (optional in YAML; omitted keys keep these defaults).
     npz_glob: str = "exports/dataset/*.npz"
     npz_paths: tuple[str, ...] = ()
     max_files_per_shape: int | None = 2
-    # Step 4: suffix for runs/<timestamp>_<name>/ (device stays runtime-only).
+    # Suffix for runs/<timestamp>_<name>/ (device stays runtime-only).
     run_name: str = "run"
-    # Step 5: which logged scalar selects best.pt (strict improve).
+    # Which logged scalar selects best.pt (strict improve).
     checkpoint_metric: str = "val_acc"
-    # Step 6: multi-NPZ train length (Phase 1 one-NPZ still uses epochs).
-    smoke_epochs: int = 20
     # Mini-batch size and optimizer family (train_multi_npz).
     batch_size: int = 1024
     optimizer: str = "adam"
@@ -359,7 +351,7 @@ class OccupancyConfig:
 
 def sample_npz_path(cfg: OccupancyConfig) -> Path:
     """
-    Compose the overfit NPZ path: ``data_dir / sample_npz``.
+    Compose the default infer NPZ path: ``data_dir / sample_npz``.
 
     Parameters
     ----------
@@ -419,7 +411,6 @@ def load_config(
         max_files_per_shape=knobs["max_files_per_shape"],
         run_name=knobs["run_name"],
         checkpoint_metric=knobs["checkpoint_metric"],
-        smoke_epochs=knobs["smoke_epochs"],
         batch_size=knobs["batch_size"],
         optimizer=knobs["optimizer"],
     )
@@ -457,7 +448,6 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  max_files_per_shape={cfg.max_files_per_shape}\n"
         f"  run_name={cfg.run_name}\n"
         f"  checkpoint_metric={cfg.checkpoint_metric}\n"
-        f"  smoke_epochs={cfg.smoke_epochs}\n"
         f"  batch_size={cfg.batch_size}\n"
         f"  optimizer={cfg.optimizer}\n"
         f")"

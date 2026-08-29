@@ -1,4 +1,4 @@
-"""Tests for occupancy metrics from logits vs labels (Step 7)."""
+"""Tests for occupancy metrics from logits vs labels."""
 
 from __future__ import annotations
 

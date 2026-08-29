@@ -1,14 +1,14 @@
 """Per-run log folders under ``runs/<timestamp>_<name>/``.
 
-Step 4 is logs only: config snapshot, ``metrics.jsonl``, TensorBoard scalars.
+Logs only: config snapshot, ``metrics.jsonl``, TensorBoard scalars.
 Weights stay out of ``runs/`` so JSON + YAML can be committed without
-gitignore-ing the whole tree (``.pt`` files belong in ``models/`` in Step 5).
+gitignore-ing the whole tree (``.pt`` files belong in ``models/``).
 
 Layout::
 
     runs/<YYYY-MM-DD_HH-MM-SS>_<name>/
       config.yaml          # knobs (no resolved file list)
-      catalog.txt          # one data-relative NPZ path per line (Step 6+)
+      catalog.txt          # one data-relative NPZ path per line
       metrics.jsonl        # one JSON object per epoch
       events.out.tfevents* # TensorBoard (gitignored)
 
@@ -100,7 +100,7 @@ def occupancy_config_snapshot(
         "depth": int(cfg.depth),
         "seed": int(cfg.seed),
         "epochs": int(cfg.epochs),
-        # ``total`` is the planned epoch count; ``checkpoint`` is filled by Step 5
+        # ``total`` is the planned epoch count; ``checkpoint`` is filled
         # with the epoch index stored in ``best.pt`` (null until then).
         "total": int(cfg.epochs),
         "checkpoint": None,
@@ -112,7 +112,6 @@ def occupancy_config_snapshot(
         "max_files_per_shape": cfg.max_files_per_shape,
         "run_name": str(cfg.run_name),
         "checkpoint_metric": str(cfg.checkpoint_metric),
-        "smoke_epochs": int(cfg.smoke_epochs),
         "batch_size": int(cfg.batch_size),
         "optimizer": str(cfg.optimizer),
     }
@@ -172,7 +171,7 @@ class RunTracker:
         Snapshot knobs into ``config.yaml``.
 
         Always stamps ``run_id`` / ``run_dir`` so logs stay joinable to
-        ``models/<id>/`` in Step 5 without putting ``.pt`` here.
+        ``models/<id>/`` without putting ``.pt`` here.
         """
         payload = _jsonable(dict(config))
         payload.setdefault("run_id", self.run_id)
@@ -310,7 +309,7 @@ class RunTracker:
         """
         Merge keys into the existing snapshot and rewrite ``config.yaml``.
 
-        Used by Step 5 to stamp ``total`` (planned epochs) and ``checkpoint``
+        Used to stamp ``total`` (planned epochs) and ``checkpoint``
         (epoch index stored in ``best.pt``) without dropping knobs.
         """
         current: dict[str, Any] = {}

@@ -1,10 +1,13 @@
-"""Occupancy MLP: raw XYZ → inside/outside logit (v2 minimal Step 1)."""
+"""Occupancy MLP: raw XYZ → inside/outside logit."""
 
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
 from torch import Tensor
+
+# Checkpoint schema tag (not a YAML knob).
+CHECKPOINT_KIND = "occupancy_mlp"
 
 
 class OccupancyMLP(nn.Module):

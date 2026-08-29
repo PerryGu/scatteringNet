@@ -1,4 +1,4 @@
-"""Smoke tests for OccupancyMLP (v2 minimal Step 1). No NPZ, no training."""
+"""Smoke tests for OccupancyMLP. No NPZ, no training."""
 
 from __future__ import annotations
 

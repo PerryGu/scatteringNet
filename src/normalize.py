@@ -1,4 +1,4 @@
-"""AABB normalization for occupancy XYZ (Step 4).
+"""AABB normalization for occupancy XYZ.
 
 Maps a point cloud into a roughly ``[-1, 1]^3`` cube so the MLP sees
 comparable coordinates across differently sized meshes.

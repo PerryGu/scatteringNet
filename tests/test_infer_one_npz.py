@@ -1,4 +1,4 @@
-"""Tests for single-NPZ occupancy inference (Step 8)."""
+"""Tests for occupancy inference on one NPZ against a catalog checkpoint."""
 
 from __future__ import annotations
 
@@ -16,7 +16,8 @@ if str(_SRC) not in sys.path:
 
 from config import OccupancyConfig
 from infer_one_npz import infer_one_npz, load_occupancy_checkpoint
-from train_one_npz import CHECKPOINT_KIND, train_one_npz
+from occupancy_mlp import CHECKPOINT_KIND
+from train_multi_npz import train_multi_npz
 
 
 def _write_sphere_npz(path: Path, n: int = 256) -> None:
@@ -26,30 +27,41 @@ def _write_sphere_npz(path: Path, n: int = 256) -> None:
     np.savez(path, points=points, labels=labels)
 
 
-def _cpu_cfg(*, checkpoint_path: Path, epochs: int = 20) -> OccupancyConfig:
+def _cpu_cfg(root: Path, *, epochs: int = 20) -> OccupancyConfig:
     return OccupancyConfig(
-        data_dir=Path("."),
+        data_dir=root,
         device=torch.device("cpu"),
         hidden=32,
         depth=2,
         seed=1,
         epochs=epochs,
         lr=1e-2,
-        checkpoint_path=checkpoint_path,
+        checkpoint_path=root / "unused.pt",
         sample_npz=Path("sphere.npz"),
         val_fraction=0.15,
+        run_name="infer",
+        batch_size=64,
+        optimizer="adam",
     )
 
 
 class InferOneNpzTests(unittest.TestCase):
     def test_infer_matches_overfit_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            npz_path = Path(tmp) / "sphere.npz"
-            ckpt_path = Path(tmp) / "one_npz.pt"
+            root = Path(tmp)
+            npz_path = root / "sphere.npz"
             _write_sphere_npz(npz_path, n=256)
-            cfg = _cpu_cfg(checkpoint_path=ckpt_path)
-            train_one_npz(npz_path, cfg)
-            result = infer_one_npz(npz_path, cfg, write_pred=True)
+            cfg = _cpu_cfg(root, epochs=20)
+            trained = train_multi_npz(
+                cfg,
+                npz_paths=[npz_path],
+                epochs=20,
+                root=root,
+                run_name="infer",
+            )
+            result = infer_one_npz(
+                npz_path, cfg, ckpt_path=trained.best_path, write_pred=True
+            )
 
             self.assertEqual(result.n, 256)
             self.assertEqual(result.n_pred_inside + result.n_pred_outside, 256)
@@ -63,30 +75,45 @@ class InferOneNpzTests(unittest.TestCase):
 
     def test_rejects_missing_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            npz_path = Path(tmp) / "sphere.npz"
+            root = Path(tmp)
+            npz_path = root / "sphere.npz"
             _write_sphere_npz(npz_path, n=8)
-            cfg = _cpu_cfg(checkpoint_path=Path(tmp) / "missing.pt")
+            cfg = _cpu_cfg(root)
             with self.assertRaises(FileNotFoundError):
-                infer_one_npz(npz_path, cfg, write_pred=False)
+                infer_one_npz(
+                    npz_path,
+                    cfg,
+                    ckpt_path=root / "missing.pt",
+                    write_pred=False,
+                )
 
     def test_rejects_wrong_kind(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            npz_path = Path(tmp) / "sphere.npz"
-            ckpt_path = Path(tmp) / "bad.pt"
+            root = Path(tmp)
+            npz_path = root / "sphere.npz"
+            ckpt_path = root / "bad.pt"
             _write_sphere_npz(npz_path, n=8)
             torch.save({"kind": "not_occupancy_mlp", "state_dict": {}}, ckpt_path)
-            cfg = _cpu_cfg(checkpoint_path=ckpt_path)
+            cfg = _cpu_cfg(root)
             with self.assertRaises(ValueError):
-                infer_one_npz(npz_path, cfg, write_pred=False)
+                infer_one_npz(npz_path, cfg, ckpt_path=ckpt_path, write_pred=False)
 
     def test_load_checkpoint_reads_kind(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            npz_path = Path(tmp) / "sphere.npz"
-            ckpt_path = Path(tmp) / "one_npz.pt"
+            root = Path(tmp)
+            npz_path = root / "sphere.npz"
             _write_sphere_npz(npz_path, n=64)
-            cfg = _cpu_cfg(checkpoint_path=ckpt_path, epochs=2)
-            train_one_npz(npz_path, cfg)
-            payload = load_occupancy_checkpoint(ckpt_path, torch.device("cpu"))
+            cfg = _cpu_cfg(root, epochs=2)
+            trained = train_multi_npz(
+                cfg,
+                npz_paths=[npz_path],
+                epochs=2,
+                root=root,
+                run_name="infer",
+            )
+            payload = load_occupancy_checkpoint(
+                trained.best_path, torch.device("cpu")
+            )
             self.assertEqual(payload["kind"], CHECKPOINT_KIND)
 
 

@@ -1,4 +1,4 @@
-"""Step 3 multi-NPZ catalog and dataset. No occupancy training."""
+"""Multi-NPZ catalog and dataset. No occupancy training."""
 
 from __future__ import annotations
 

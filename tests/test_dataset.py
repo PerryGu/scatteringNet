@@ -1,4 +1,4 @@
-"""Tests for OccupancyPointDataset + DataLoader (Step 5)."""
+"""Tests for OccupancyPointDataset + DataLoader."""
 
 from __future__ import annotations
 

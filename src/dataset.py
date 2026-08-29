@@ -1,4 +1,4 @@
-"""PyTorch Dataset for one occupancy NPZ (Step 5).
+"""PyTorch Dataset for one occupancy NPZ.
 
 Loads ``points`` / ``labels`` via ``data_npz``, AABB-normalizes XYZ in
 ``__init__``, and stores ``center`` / ``scale`` for later checkpointing.
@@ -167,7 +167,7 @@ def make_dataloader(
     Train-style loader: shuffle on, default collate, no extra workers.
 
     Accepts ``OccupancyPointDataset``, :class:`OccupancyMultiNpzDataset`,
-    or a ``Subset`` of either (Phase 1 split).
+    or a ``Subset`` of either (train/val split).
 
     Parameters
     ----------

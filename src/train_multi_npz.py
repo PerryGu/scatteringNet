@@ -1,9 +1,9 @@
-"""Train OccupancyMLP on many occupancy NPZs (Phase 2 Step 6).
+"""Train OccupancyMLP on a catalog of occupancy NPZs.
 
-First occupancy train in this phase: xyz-only Phase 1 MLP, pooled queries
-from the Step 3 catalog, logs in ``runs/<id>/``, weights in
-``models/<id>/best.pt``. Val is a random **point** split
-of the pooled cloud (loop health, not shape holdout).
+xyz-only MLP, pooled queries from the catalog, logs in ``runs/<id>/``,
+weights in ``models/<id>/best.pt``. Val is a random **point** split of
+the pooled cloud (loop health, not shape holdout). YAML ``epochs`` is
+the train length.
 """
 
 from __future__ import annotations
@@ -17,15 +17,47 @@ from typing import Sequence
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Subset
+from torch.utils.data import DataLoader, Subset
 
 from checkpointing import Checkpointer
 from config import OccupancyConfig, as_data_relative, gpu_name, load_config
 from dataset import OccupancyMultiNpzDataset, make_dataloader, split_train_val_indices
 from metrics import occupancy_metrics
-from occupancy_mlp import OccupancyMLP
+from occupancy_mlp import CHECKPOINT_KIND, OccupancyMLP
 from run_tracking import occupancy_config_snapshot, start_run
-from train_one_npz import CHECKPOINT_KIND, _eval_loader, seed_everything
+
+
+def seed_everything(seed: int) -> None:
+    """Make the train run repeatable (CPU and CUDA RNGs)."""
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def _eval_loader(
+    model: OccupancyMLP,
+    loader: DataLoader,
+    device: torch.device,
+) -> tuple[float, float, float]:
+    """Mean occupancy metrics over ``loader`` (no grad)."""
+    model.eval()
+    running_acc = 0.0
+    running_prec = 0.0
+    running_rec = 0.0
+    n_batches = 0
+    with torch.no_grad():
+        for xyz, y in loader:
+            xyz = xyz.to(device, non_blocking=False)
+            y = y.to(device, non_blocking=False)
+            logits = model(xyz)
+            scores = occupancy_metrics(logits, y)
+            running_acc += scores.accuracy
+            running_prec += scores.inside_precision
+            running_rec += scores.inside_recall
+            n_batches += 1
+    denom = max(n_batches, 1)
+    return running_acc / denom, running_prec / denom, running_rec / denom
 
 
 def _make_optimizer(
@@ -94,7 +126,7 @@ def _selection_score(metric_name: str, *, val_acc: float) -> float:
         return float(val_acc)
     raise ValueError(
         f"unsupported checkpoint_metric {metric_name!r} "
-        "(Step 6 only logs val_acc)"
+        "(train_multi_npz only logs val_acc)"
     )
 
 
@@ -107,22 +139,22 @@ def train_multi_npz(
     run_name: str | None = None,
 ) -> TrainMultiResult:
     """
-    Train the Phase 1 MLP on a multi-NPZ catalog.
+    Train OccupancyMLP on the catalog.
 
     Parameters
     ----------
     cfg:
-        YAML knobs plus detected device.
+        YAML knobs plus detected device. ``epochs`` is the train length.
     npz_paths:
         Explicit files; default is ``resolve_npz_catalog`` from ``cfg``.
     epochs:
-        Override; default ``cfg.smoke_epochs`` (not Phase 1 ``epochs``).
+        Override; default ``cfg.epochs``.
     root:
         Repo root for ``runs/`` and ``models/`` (tests pass a temp dir).
     run_name:
         Folder suffix; default ``cfg.run_name``.
     """
-    n_epochs = int(epochs if epochs is not None else cfg.smoke_epochs)
+    n_epochs = int(epochs if epochs is not None else cfg.epochs)
     lr = float(cfg.lr)
     if n_epochs < 1:
         raise ValueError(f"epochs must be >= 1, got {n_epochs}")

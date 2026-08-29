@@ -1,4 +1,4 @@
-"""Step 4 run logs. Metrics only — no OccupancyMLP, no ``.pt``."""
+"""Run logs. Metrics only — no OccupancyMLP, no ``.pt``."""
 
 from __future__ import annotations
 

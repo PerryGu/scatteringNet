@@ -1,4 +1,4 @@
-"""Tests for load_points_labels (Step 3). Synthetic NPZ only — no training."""
+"""Tests for load_points_labels. Synthetic NPZ only — no training."""
 
 from __future__ import annotations
 

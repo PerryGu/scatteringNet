@@ -1,8 +1,8 @@
-"""Occupancy classification metrics from logits vs labels (Step 7).
+"""Occupancy classification metrics from logits vs labels.
 
 The model emits raw logits (no sigmoid in ``forward``). Metrics apply
 sigmoid only at decision time so they stay consistent with
-``BCEWithLogitsLoss`` and with Step 8 inference (threshold ``0.5``).
+``BCEWithLogitsLoss`` and with inference (threshold ``0.5``).
 
 Inside (label ``1``) is the product-relevant class: points that belong
 in the interior. Precision / recall are therefore reported for that

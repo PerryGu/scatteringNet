@@ -1,4 +1,4 @@
-"""Step 6 multi-NPZ occupancy train. Two tiny files, no OccupancyMLP edits."""
+"""Multi-NPZ occupancy train. Two tiny files, no OccupancyMLP edits."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from config import OccupancyConfig
+from occupancy_mlp import CHECKPOINT_KIND
 from train_multi_npz import train_multi_npz
-from train_one_npz import CHECKPOINT_KIND
 
 
 def _write_npz(path: Path, n: int, seed: int) -> None:
@@ -41,7 +41,6 @@ def _cpu_cfg(tmp: Path) -> OccupancyConfig:
         sample_npz=Path("unused.npz"),
         val_fraction=0.2,
         run_name="test",
-        smoke_epochs=2,
         checkpoint_metric="val_acc",
         batch_size=32,
         optimizer="adam",
@@ -104,8 +103,20 @@ class TrainMultiNpzTests(unittest.TestCase):
             row = json.loads(lines[-1])
             self.assertIn("val_acc", row)
             self.assertIn("best_epoch", row)
-            # Phase 1 one_npz.pt must not be created in the temp tree as the default out.
-            self.assertFalse((root / "one_npz.pt").is_file())
+            self.assertNotIn("smoke_epochs", snap)
+
+    def test_rejects_zero_epochs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            a = root / "box_a__occupancy.npz"
+            _write_npz(a, n=8, seed=1)
+            with self.assertRaises(ValueError):
+                train_multi_npz(
+                    _cpu_cfg(root),
+                    npz_paths=[a],
+                    epochs=0,
+                    root=root,
+                )
 
 
 if __name__ == "__main__":

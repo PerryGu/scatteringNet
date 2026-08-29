@@ -1,6 +1,6 @@
 """Checkpoints under ``models/<run_id>/best.pt``.
 
-Step 5 keeps weights out of ``runs/`` so logs stay commitable. The same
+Weights stay out of ``runs/`` so logs stay commitable. The same
 ``run_id`` joins the two trees. ``best.pt`` is the only weight file: written
 when the selection metric **strictly improves** (first epoch always qualifies).
 The last epoch is often worse; we do not keep a second copy of those weights.
@@ -25,7 +25,6 @@ from run_tracking import RunTracker
 
 # Repo root: src/checkpointing.py → parents[1].
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_PHASE1_CKPT = _REPO_ROOT / "models" / "one_npz.pt"
 
 
 @dataclass(frozen=True)
@@ -59,9 +58,6 @@ class Checkpointer:
         self._root = (root or _REPO_ROOT).resolve()
         self.dir = self._root / "models" / self.run_id
         self.best_path = self.dir / "best.pt"
-        # Never clobber the Phase 1 one-NPZ file.
-        if self.best_path.resolve() == _PHASE1_CKPT.resolve():
-            raise ValueError(f"refusing to overwrite Phase 1 checkpoint {_PHASE1_CKPT}")
         self.dir.mkdir(parents=True, exist_ok=True)
         self.best_metric: float | None = None
         self.best_epoch: int | None = None

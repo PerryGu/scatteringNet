@@ -1,4 +1,4 @@
-"""Step 5 checkpoints. Dummy weights — no OccupancyMLP, no occupancy train."""
+"""Checkpoints. Dummy weights — no OccupancyMLP, no occupancy train."""
 
 from __future__ import annotations
 

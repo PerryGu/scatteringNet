@@ -212,4 +212,4 @@ python -c "import numpy as np; d=np.load(r'E:/Work_stuff/scatteringNet/data/expo
 - **Watertight meshes** label cleanly. Open or inverted meshes can mis-count inside/outside.
 - **`--max-points`** will coarsen spacing on large solids so a single NPZ does not explode.
 - **`--skip` / `--limit`** are counted in mesh-file order, not by existing NPZs. Re-running the same `--out` overwrites matching names.
-- Training (`train_one_npz.py`) reads **`points`** and **`labels` only**. Extra keys are ignored on purpose.
+- Training (`train_multi_npz.py`) reads **`points`** and **`labels` only**. Extra keys are ignored on purpose.

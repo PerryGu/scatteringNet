@@ -1,4 +1,4 @@
-"""Step 2 occupancy NPZ generation. Does not train OccupancyMLP."""
+"""Occupancy NPZ generation. Does not train OccupancyMLP."""
 
 from __future__ import annotations
 

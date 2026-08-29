@@ -4,9 +4,13 @@ Completed work for the occupancy MLP MVP.
 
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
+## 2026-08-28 21:00 — Single-file train removed; one ``epochs`` knob
+
+Deleted ``src/train_one_npz.py`` and ``tests/test_train_one_npz.py``. Catalog train is the only train path (``train_multi_npz.py``). Removed ``smoke_epochs``; YAML ``epochs`` is the train length. Infer still exists (``infer_one_npz.py``) and reads ``models/<run_id>/best.pt`` AABB from ``parts``. OccupancyMLP unchanged.
+
 ## 2026-08-28 21:00 — YAML ``batch_size`` and ``optimizer``
 
-``config.yaml`` now owns mini-batch size (default 1024) and optimizer family (``adam`` / ``adamw`` / ``sgd``). ``train_multi_npz`` uses both; the run snapshot records them. Phase 1 ``train_one_npz.py`` is unchanged (still Adam, still 1024).
+``config.yaml`` now owns mini-batch size (default 1024) and optimizer family (``adam`` / ``adamw`` / ``sgd``). ``train_multi_npz`` uses both; the run snapshot records them.
 
 ## 2026-08-28 19:00 — Run snapshot records GPU name
 

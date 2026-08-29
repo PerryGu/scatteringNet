@@ -10,36 +10,32 @@ seed: 1           # Random seed for reproducibility (PyTorch, NumPy, Python rand
 data_dir: "E:/Work_stuff/scatteringNet/data"  # Base root directory where all NPZ dataset files are stored
 
 # --- Training Hyperparameters ---
-epochs: 30        # Total number of training epochs for the overfit run
-lr: 0.001         # Initial learning rate for the Adam optimizer
+epochs: 20        # Training epochs for train_multi_npz
+lr: 0.001         # Initial learning rate
 batch_size: 1024  # Points per optimizer step (GPU mini-batch)
-optimizer: adam   # adam | adamw | sgd  (used by train_multi_npz)
+optimizer: adam   # adam | adamw | sgd
 
 # --- Validation Settings ---
 val_fraction: 0.20  # Fraction of points held out randomly from the NPZ for validation (standard is 0.20 / 20%)
 
 # --- File Paths ---
-checkpoint_path: "models/one_npz.pt"               # Repo-relative path where the trained model checkpoint is saved/loaded
-sample_npz: "exports/dataset_test/sphere__raycast_z_raut_s0.15_inout.npz"  # Path relative to data_dir for the sample NPZ used in training/inference
+checkpoint_path: "models/one_npz.pt"               # Default weights for infer_one_npz (train writes models/<run_id>/best.pt)
+sample_npz: "exports/dataset_test/sphere__raycast_z_raut_s0.15_inout.npz"  # Default NPZ for infer_one_npz (relative to data_dir)
 
-# --- Multi-NPZ catalog (Step 3; not used by train_one_npz.py) ---
+# --- Catalog ---
 # Glob is relative to data_dir. If npz_paths is set (non-empty), it replaces the glob.
 npz_glob: "exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15*.npz"
 # npz_paths:   # optional explicit list; leave unset/empty to use npz_glob
 #   - exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15_inout.npz
 max_files_per_shape: 2
 
-# --- Run logs (Step 4; occupancy train is still Step 6) ---
+# --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
 run_name: run
 
-# --- Checkpoints (Step 5; occupancy train is still Step 6) ---
+# --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.
 # The run snapshot (runs/<id>/config.yaml) records:
-#   total      — planned epoch count (copied from smoke_epochs for multi-NPZ train)
+#   total      — planned epoch count (copied from epochs)
 #   checkpoint — epoch index stored in best.pt (runtime; not a project knob)
 checkpoint_metric: val_acc
-
-# --- Multi-NPZ train (Step 6) ---
-# First occupancy train on the catalog glob above. Phase 1 train_one_npz.py still uses epochs.
-smoke_epochs: 20
