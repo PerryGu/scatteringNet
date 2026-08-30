@@ -30,9 +30,7 @@ def _cpu_cfg() -> OccupancyConfig:
         seed=1,
         epochs=3,
         lr=1e-3,
-        checkpoint_path=Path("models/one_npz.pt"),
-        sample_npz=Path("exports/sample.npz"),
-        val_fraction=0.2,
+        test_fraction=0.2,
         run_name="dummy",
     )
 
@@ -79,8 +77,8 @@ class RunTrackingTests(unittest.TestCase):
             self.assertNotIn("npz_paths", dumped)
             self.assertEqual(dumped["catalog_file"], "catalog.txt")
             self.assertEqual(dumped["catalog_n"], 2)
-            self.assertEqual(dumped["checkpoint_path"], "models/one_npz.pt")
-            self.assertEqual(dumped["sample_npz"], "exports/sample.npz")
+            self.assertNotIn("checkpoint_path", dumped)
+            self.assertNotIn("sample_npz", dumped)
             self.assertIn("started_at", dumped)
             self.assertIn("finished_at", dumped)
             self.assertIn("wall", dumped)
@@ -121,7 +119,6 @@ class RunTrackingTests(unittest.TestCase):
             exports.mkdir(parents=True)
             abs_a = (exports / "sphere__occupancy.npz").resolve()
             abs_a.write_bytes(b"")
-            abs_ckpt = Path(tmp) / "repo" / "models" / "one_npz.pt"
             cfg = OccupancyConfig(
                 data_dir=data.resolve(),
                 device=torch.device("cpu"),
@@ -130,18 +127,15 @@ class RunTrackingTests(unittest.TestCase):
                 seed=1,
                 epochs=3,
                 lr=1e-3,
-                checkpoint_path=abs_ckpt,
-                sample_npz=Path("exports/dataset_test/sphere.npz"),
-                val_fraction=0.2,
+                test_fraction=0.2,
             )
             snap = occupancy_config_snapshot(cfg)
             self.assertNotIn("catalog_npz_paths", snap)
+            self.assertNotIn("checkpoint_path", snap)
+            self.assertNotIn("sample_npz", snap)
             self.assertIsNone(snap["gpu"])
-            self.assertEqual(snap["sample_npz"], "exports/dataset_test/sphere.npz")
-            # checkpoint_path is outside this repo → absolute POSIX fallback.
-            self.assertTrue(str(snap["checkpoint_path"]).replace("\\", "/").endswith(
-                "models/one_npz.pt"
-            ))
+            # data_dir outside this repo → absolute POSIX fallback.
+            self.assertTrue(str(snap["data_dir"]).replace("\\", "/").endswith("/data"))
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA not available")
     def test_snapshot_records_cuda_gpu_name(self) -> None:

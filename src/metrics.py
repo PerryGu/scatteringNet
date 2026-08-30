@@ -24,6 +24,8 @@ class OccupancyMetrics:
     accuracy: float
     inside_precision: float
     inside_recall: float
+    inside_iou: float
+    inside_f1: float
 
 
 def _safe_div(numerator: float, denominator: float) -> float:
@@ -84,11 +86,15 @@ def occupancy_metrics(
     tp = float((pred_f * true_f).sum().item())
     fp = float((pred_f * (1.0 - true_f)).sum().item())
     fn = float(((1.0 - pred_f) * true_f).sum().item())
+    precision = _safe_div(tp, tp + fp)
+    recall = _safe_div(tp, tp + fn)
 
     return OccupancyMetrics(
         accuracy=accuracy,
-        inside_precision=_safe_div(tp, tp + fp),
-        inside_recall=_safe_div(tp, tp + fn),
+        inside_precision=precision,
+        inside_recall=recall,
+        inside_iou=_safe_div(tp, tp + fp + fn),
+        inside_f1=_safe_div(2.0 * precision * recall, precision + recall),
     )
 
 
@@ -125,3 +131,5 @@ if __name__ == "__main__":
     print(f"accuracy={scores.accuracy:.4f}")
     print(f"inside_precision={scores.inside_precision:.4f}")
     print(f"inside_recall={scores.inside_recall:.4f}")
+    print(f"inside_iou={scores.inside_iou:.4f}")
+    print(f"inside_f1={scores.inside_f1:.4f}")

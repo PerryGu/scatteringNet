@@ -15,14 +15,16 @@ This is still **Phase 2**. There is no Phase 3 in this repo. The numbered items 
 ## How to read this plan
 
 Work proceeds **one step at a time**. After each step we stop for review. Anything that trains also gets a short smoke run (~20 epochs) so we have numbers, not just code. 
+Those numbers go in [`training_log.md`](training_log.md), not in `CHANGELOG.md`. 
 Steps 1–2 are generation. Steps 3–5 are training *infrastructure* (many NPZs, then `runs/` logs, then `models/` checkpoints) — they do not start occupancy training. Step 6 is the first occupancy train.
 
 Progress is visible in:
 
 - this file
-- `CHANGELOG.md` (what shipped, with date, time, and metrics)
-- `runs/` (thin logs from Step 4; first real occupancy logs when Step 6 trains)
-- `models/<run_id>/` (weights from Step 5; first real occupancy weights when Step 6 trains)
+- `CHANGELOG.md` (what shipped: code and knobs — not train scores)
+- [`training_log.md`](training_log.md) (each training: catalog, wall time, conclusions)
+- `runs/` (config snapshot + `metrics.jsonl` + TensorBoard)
+- `models/<run_id>/` (weights; `best.pt`)
 
 ---
 
@@ -138,6 +140,8 @@ The occupancy head still only sees xyz. This step is a join, not a new model. If
 
 **Done when:** every training example can name and load its OBJ. Occupancy is still xyz-only.
 
+**Status:** done. `load_points_labels_mesh` + `src/geometry/mesh_io.py` resolve `mesh_path` and load `vertices (V, 3)` / `faces (T, 3)`. The occupancy head is unchanged.
+
 ---
 
 ## Step 8 — Surface envelope points (the first geometry experiment)
@@ -151,6 +155,8 @@ This is an R&D measurement, not the final architecture. The prototype later pref
 Compare on the **same** few primitives we used in Step 6. This is not a holdout yet.
 
 **Done when:** envelope clouds are a real batched input, and we have a recorded comparison against xyz-only.
+
+**Status:** done. YAML `n_surface` sets how many shell points are sampled. `shape_encoder: surface` concatenates that cloud's latent with query xyz. OccupancyMLP remains the `shape_encoder: none` path.
 
 ---
 
@@ -206,8 +212,9 @@ torus holes, and stacked parts will remain hard even if holdout looks promising.
 |---|---|
 | The current step | this file |
 | What actually shipped | `CHANGELOG.md` |
-| Curves and JSON (from Step 6) | `runs/<id>/` |
-| Weights to load (from Step 6) | `models/<id>/best.pt` |
+| What a train meant | [`training_log.md`](training_log.md) |
+| Curves and JSON | `runs/<id>/` |
+| Weights to load | `models/<id>/best.pt` |
 | How to build NPZs | [`npz_dataset_generation.md`](npz_dataset_generation.md) |
 | Phase 1 | [`work_plan_phase1.md`](work_plan_phase1.md) |
 

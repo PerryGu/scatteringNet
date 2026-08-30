@@ -4,6 +4,31 @@ Completed work for the occupancy MLP MVP.
 
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
+
+## 2026-08-29 18:00 — Train/test 80/20 file split
+
+Catalog train holds out whole files as a **test** set (``test_fraction: 0.20``). Terminal and snapshot use ``test_acc`` / ``n_test_files``.
+
+## 2026-08-29 13:00 — Train/val split is by whole files
+
+Catalog train no longer concatenates every NPZ into one point cloud. Each file stays its own shape: mini-batches come from one file, and ``val_fraction`` holds out entire files. Snapshot stamps ``split: shape``, ``n_train_files``, and ``n_val_files``.
+
+## 2026-08-29 12:00 — Step 8: surface envelope occupancy
+
+Added ``n_surface`` and ``shape_encoder`` to ``config.yaml``. ``src/geometry/surface.py`` samples an area-weighted shell cloud; ``OccupancyEncoder`` encodes each ``shape_id`` once per batch and concatenates ``z_surf`` with query xyz. Metrics now include inside IoU / F1. OccupancyMLP is unchanged (``shape_encoder: none``).
+
+## 2026-08-29 12:00 — Step 7: NPZ ↔ OBJ mesh join
+
+Added ``load_points_labels_mesh`` (``load_points_labels`` unchanged) and ``src/geometry/mesh_io.py`` to resolve ``mesh_path`` against ``data_dir`` and load OBJ ``vertices (V, 3)`` / ``faces (T, 3)``. Dataset parts store ``mesh_path``, ``mesh_key``, and triangles. Catalog train prints the join and stamps ``n_meshes``. OccupancyMLP is still xyz-only.
+
+## 2026-08-29 11:00 — Run snapshot records file and point counts
+
+``runs/<id>/config.yaml`` now stamps ``n_files``, ``n_points``, ``n_train``, and ``n_val`` after the catalog is loaded. ``gpu`` (card name) was already in the snapshot next to ``device``.
+
+## 2026-08-29 09:00 — Single-file infer and leftover YAML knobs removed
+
+Deleted ``src/infer_one_npz.py`` and ``tests/test_infer_one_npz.py``. Removed ``checkpoint_path`` and ``sample_npz`` from ``config.yaml`` / ``OccupancyConfig`` / run snapshots. Catalog train writes ``models/<run_id>/best.pt``. ``OccupancyPointDataset`` stays as the per-file reader inside the catalog.
+
 ## 2026-08-28 21:00 — Single-file train removed; one ``epochs`` knob
 
 Deleted ``src/train_one_npz.py`` and ``tests/test_train_one_npz.py``. Catalog train is the only train path (``train_multi_npz.py``). Removed ``smoke_epochs``; YAML ``epochs`` is the train length. Infer still exists (``infer_one_npz.py``) and reads ``models/<run_id>/best.pt`` AABB from ``parts``. OccupancyMLP unchanged.

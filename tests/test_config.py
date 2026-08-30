@@ -22,7 +22,6 @@ from config import (
     gpu_name,
     load_config,
     load_yaml_knobs,
-    sample_npz_path,
 )
 
 
@@ -40,13 +39,15 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertEqual(knobs["data_dir"], str(disk["data_dir"]).strip())
         self.assertEqual(knobs["epochs"], int(disk["epochs"]))
         self.assertAlmostEqual(knobs["lr"], float(disk["lr"]))
-        self.assertEqual(knobs["checkpoint_path"], str(disk["checkpoint_path"]).strip())
-        self.assertEqual(knobs["sample_npz"], str(disk["sample_npz"]).strip())
-        self.assertAlmostEqual(knobs["val_fraction"], float(disk["val_fraction"]))
+        self.assertAlmostEqual(knobs["test_fraction"], float(disk["test_fraction"]))
         self.assertEqual(knobs["run_name"], str(disk["run_name"]).strip())
         self.assertEqual(knobs["checkpoint_metric"], str(disk["checkpoint_metric"]).strip())
         self.assertEqual(knobs["batch_size"], int(disk["batch_size"]))
         self.assertEqual(knobs["optimizer"], str(disk["optimizer"]).strip().lower())
+        self.assertEqual(knobs["n_surface"], int(disk["n_surface"]))
+        self.assertEqual(
+            knobs["shape_encoder"], str(disk["shape_encoder"]).strip().lower()
+        )
 
     def test_load_config_resolves_data_dir_and_device(self) -> None:
         cfg = load_config()
@@ -56,20 +57,20 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn(cfg.device.type, ("cuda", "cpu"))
         self.assertGreaterEqual(cfg.epochs, 1)
         self.assertGreater(cfg.lr, 0.0)
-        self.assertTrue(str(cfg.checkpoint_path))
-        self.assertEqual(sample_npz_path(cfg), cfg.data_dir / cfg.sample_npz)
         rendered = format_config(cfg)
         self.assertIn("data_dir=", rendered)
         self.assertIn("device=", rendered)
         self.assertIn("gpu=", rendered)
         self.assertIn("epochs=", rendered)
         self.assertIn("lr=", rendered)
-        self.assertIn("val_fraction=", rendered)
+        self.assertIn("test_fraction=", rendered)
         self.assertIn("npz_glob=", rendered)
         self.assertIn("run_name=", rendered)
         self.assertIn("checkpoint_metric=", rendered)
         self.assertIn("batch_size=", rendered)
         self.assertIn("optimizer=", rendered)
+        self.assertIn("n_surface=", rendered)
+        self.assertIn("shape_encoder=", rendered)
         self.assertIsNone(gpu_name(torch.device("cpu")))
         name = gpu_name(cfg.device)
         if cfg.device.type == "cuda":
@@ -94,9 +95,7 @@ class OccupancyConfigTests(unittest.TestCase):
                         f'data_dir: "{missing.as_posix()}"',
                         "epochs: 30",
                         "lr: 0.001",
-                        "checkpoint_path: models/one_npz.pt",
-                        "sample_npz: exports/dataset_test/sphere.npz",
-                        "val_fraction: 0.15",
+                        "test_fraction: 0.15",
                         "",
                     ]
                 ),
@@ -107,10 +106,10 @@ class OccupancyConfigTests(unittest.TestCase):
 
     def test_as_data_and_repo_relative(self) -> None:
         repo = Path(__file__).resolve().parents[1]
-        self.assertEqual(as_repo_relative("models/one_npz.pt"), "models/one_npz.pt")
+        self.assertEqual(as_repo_relative("models/best.pt"), "models/best.pt")
         self.assertEqual(
-            as_repo_relative(repo / "models" / "one_npz.pt"),
-            "models/one_npz.pt",
+            as_repo_relative(repo / "models" / "best.pt"),
+            "models/best.pt",
         )
         with tempfile.TemporaryDirectory() as tmp:
             data = Path(tmp) / "data"
@@ -138,9 +137,7 @@ class OccupancyConfigTests(unittest.TestCase):
                         f'data_dir: "{Path(tmp).as_posix()}"',
                         "epochs: 30",
                         "lr: 0.001",
-                        "checkpoint_path: models/one_npz.pt",
-                        "sample_npz: exports/x.npz",
-                        "val_fraction: 0.2",
+                        "test_fraction: 0.2",
                         "optimizer: human",
                         "",
                     ]

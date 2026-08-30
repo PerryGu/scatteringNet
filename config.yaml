@@ -4,7 +4,7 @@
 # --- Model Architecture ---
 hidden: 64        # Number of hidden units (channels) per layer in the OccupancyMLP
 depth: 4          # Number of hidden linear layers in the MLP network
-seed: 1           # Random seed for reproducibility (PyTorch, NumPy, Python random)
+seed: 1           # Same seed as the previous extrude_nr1 train
 
 # --- Path Configuration ---
 data_dir: "E:/Work_stuff/scatteringNet/data"  # Base root directory where all NPZ dataset files are stored
@@ -15,27 +15,30 @@ lr: 0.001         # Initial learning rate
 batch_size: 1024  # Points per optimizer step (GPU mini-batch)
 optimizer: adam   # adam | adamw | sgd
 
-# --- Validation Settings ---
-val_fraction: 0.20  # Fraction of points held out randomly from the NPZ for validation (standard is 0.20 / 20%)
+# --- Split ---
+# Whole files: 80% train / 20% test. Test is held-out shapes, not leftover points.
+test_fraction: 0.20
 
-# --- File Paths ---
-checkpoint_path: "models/one_npz.pt"               # Default weights for infer_one_npz (train writes models/<run_id>/best.pt)
-sample_npz: "exports/dataset_test/sphere__raycast_z_raut_s0.15_inout.npz"  # Default NPZ for infer_one_npz (relative to data_dir)
+# --- Geometry ---
+# none = xyz-only OccupancyMLP. surface = query + shell cloud (n_surface points).
+# Occupancy labels stay in the NPZ. Envelope points are sampled on the OBJ.
+shape_encoder: surface
+n_surface: 1024          # Envelope samples on the OBJ (shape vector)
 
 # --- Catalog ---
 # Glob is relative to data_dir. If npz_paths is set (non-empty), it replaces the glob.
-npz_glob: "exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15*.npz"
+npz_glob: "exports/dataset/extrude_*_nr1_*.npz"
 # npz_paths:   # optional explicit list; leave unset/empty to use npz_glob
 #   - exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15_inout.npz
 max_files_per_shape: 2
 
 # --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
-run_name: run
+run_name: extrude_nr1_surface
 
 # --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.
 # The run snapshot (runs/<id>/config.yaml) records:
 #   total      — planned epoch count (copied from epochs)
 #   checkpoint — epoch index stored in best.pt (runtime; not a project knob)
-checkpoint_metric: val_acc
+checkpoint_metric: test_acc

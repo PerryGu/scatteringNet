@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import trimesh
 
 _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
@@ -18,11 +19,19 @@ from data_npz import resolve_npz_catalog, shape_key
 from dataset import OccupancyMultiNpzDataset, make_dataloader
 
 
-def _write_npz(path: Path, n: int, seed: int) -> None:
+def _write_npz(
+    path: Path,
+    n: int,
+    seed: int,
+    mesh_rel: str | None = None,
+) -> None:
     rng = np.random.default_rng(seed)
     points = rng.uniform(-1.0, 1.0, size=(n, 3)).astype(np.float32)
     labels = (rng.random(n) > 0.5).astype(np.uint8)
-    np.savez(path, points=points, labels=labels)
+    payload: dict = {"points": points, "labels": labels}
+    if mesh_rel is not None:
+        payload["mesh_path"] = np.asarray(mesh_rel)
+    np.savez(path, **payload)
 
 
 class MultiNpzCatalogTests(unittest.TestCase):
@@ -40,11 +49,12 @@ class MultiNpzCatalogTests(unittest.TestCase):
             )
             self.assertEqual(len(paths), 2)
             ds = OccupancyMultiNpzDataset(paths)
-            self.assertEqual(len(ds), 25)
-            xyz, y = ds[0]
+            self.assertEqual(len(ds), 2)
+            self.assertEqual(ds.n_points, 25)
+            xyz, y = ds.parts[0][0]
             self.assertEqual(tuple(xyz.shape), (3,))
             self.assertEqual(tuple(y.shape), (1,))
-            loader = make_dataloader(ds, batch_size=8, shuffle=False)
+            loader = make_dataloader(ds.parts[0], batch_size=8, shuffle=False)
             batch_xyz, batch_y = next(iter(loader))
             self.assertEqual(tuple(batch_xyz.shape), (8, 3))
             self.assertEqual(tuple(batch_y.shape), (8, 1))
@@ -79,16 +89,21 @@ class MultiNpzCatalogTests(unittest.TestCase):
     def test_explicit_list_and_from_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            trimesh.creation.box(extents=[2.0, 2.0, 2.0]).export(root / "box.obj")
             a = root / "a.npz"
             b = root / "b.npz"
-            _write_npz(a, n=5, seed=1)
-            _write_npz(b, n=7, seed=2)
+            _write_npz(a, n=5, seed=1, mesh_rel="box.obj")
+            _write_npz(b, n=7, seed=2, mesh_rel="box.obj")
             ds = OccupancyMultiNpzDataset.from_catalog(
                 root,
                 npz_paths=["a.npz", "b.npz"],
                 max_files_per_shape=None,
             )
-            self.assertEqual(len(ds), 12)
+            self.assertEqual(len(ds), 2)
+            self.assertEqual(ds.n_points, 12)
+            self.assertEqual(ds.n_meshes, 1)
+            self.assertIsNotNone(ds.parts[0].mesh_path)
+            self.assertEqual(ds.parts[0].faces.shape[1], 3)
 
     def test_empty_catalog_raises(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

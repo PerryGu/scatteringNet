@@ -23,6 +23,8 @@ class OccupancyMetricsTests(unittest.TestCase):
         self.assertAlmostEqual(scores.accuracy, 1.0)
         self.assertAlmostEqual(scores.inside_precision, 1.0)
         self.assertAlmostEqual(scores.inside_recall, 1.0)
+        self.assertAlmostEqual(scores.inside_iou, 1.0)
+        self.assertAlmostEqual(scores.inside_f1, 1.0)
         self.assertAlmostEqual(accuracy_from_logits(logits, labels), 1.0)
 
     def test_known_confusion_counts(self) -> None:
@@ -33,6 +35,8 @@ class OccupancyMetricsTests(unittest.TestCase):
         self.assertAlmostEqual(scores.accuracy, 0.5)
         self.assertAlmostEqual(scores.inside_precision, 0.5)
         self.assertAlmostEqual(scores.inside_recall, 0.5)
+        self.assertAlmostEqual(scores.inside_iou, 1.0 / 3.0)
+        self.assertAlmostEqual(scores.inside_f1, 0.5)
 
     def test_accepts_1d_labels_matching_n(self) -> None:
         logits = torch.tensor([[5.0], [-5.0]])

@@ -3,8 +3,8 @@
 :func:`load_points_labels` reads **one** file. A catalog resolver lists
 many NPZs (glob or explicit paths) without training.
 
-Only ``points`` and ``labels`` are used for arrays. Other keys (``mesh_path``,
-``tags``, ``method``, …) are ignored on purpose so occupancy stays xyz + label.
+``load_points_labels`` still returns only ``points`` and ``labels``.
+``load_points_labels_mesh`` also resolves ``mesh_path`` against ``data_dir``.
 """
 
 from __future__ import annotations
@@ -74,6 +74,95 @@ def load_points_labels(path: Path) -> tuple[PointsArray, LabelsArray]:
             f"labels must be in {{0, 1}}, got unique={unique.tolist()} in {npz_path}"
         )
     return points_f32, labels_f32
+
+
+def read_npz_mesh_path(path: Path | str) -> str:
+    """
+    Read the stored ``mesh_path`` string from one occupancy NPZ.
+
+    Step 2 writes a ``data_dir``-relative POSIX path (for example
+    ``meshes/Primitives/Sphere/sphere_r0p5_sa16_sh16.obj``).
+
+    Parameters
+    ----------
+    path:
+        Occupancy ``.npz`` that contains ``mesh_path``.
+
+    Returns
+    -------
+    str
+        Stored path string (relative or absolute). Not resolved here.
+    """
+    npz_path = Path(path)
+    if not npz_path.is_file():
+        raise FileNotFoundError(f"NPZ not found: {npz_path}")
+    # allow_pickle=True: some exports store a 0-d string / object array.
+    with np.load(npz_path, allow_pickle=True) as raw:
+        if "mesh_path" not in raw.files:
+            raise KeyError(f"NPZ has no 'mesh_path' in {npz_path}")
+        stored = str(np.asarray(raw["mesh_path"]).item()).strip()
+    if not stored:
+        raise ValueError(f"mesh_path is empty in {npz_path}")
+    return stored
+
+
+def resolve_mesh_path(stored: str, data_dir: Path | str) -> Path:
+    """
+    Resolve a stored ``mesh_path`` against ``data_dir``.
+
+    Relative entries are joined to ``data_dir``. Absolute entries are
+    used as-is. Missing files raise ``FileNotFoundError``.
+
+    Parameters
+    ----------
+    stored:
+        Value from :func:`read_npz_mesh_path`.
+    data_dir:
+        Dataset root (``config.yaml`` ``data_dir``).
+
+    Returns
+    -------
+    Path
+        Existing resolved mesh file.
+    """
+    text = str(stored).strip()
+    if not text:
+        raise ValueError("mesh_path is empty")
+    item = Path(text)
+    root = Path(data_dir)
+    resolved = item if item.is_absolute() else (root / item)
+    resolved = resolved.resolve()
+    if not resolved.is_file():
+        raise FileNotFoundError(f"mesh not found: {resolved} (stored={text!r})")
+    return resolved
+
+
+def load_points_labels_mesh(
+    path: Path | str,
+    data_dir: Path | str,
+) -> tuple[PointsArray, LabelsArray, Path]:
+    """
+    Read occupancy arrays and resolve the source OBJ.
+
+    Keeps :func:`load_points_labels` unchanged (xyz + labels only).
+
+    Parameters
+    ----------
+    path:
+        Occupancy ``.npz`` with ``points``, ``labels``, and ``mesh_path``.
+    data_dir:
+        Root used to resolve a relative ``mesh_path``.
+
+    Returns
+    -------
+    points, labels, mesh_path:
+        Same arrays as :func:`load_points_labels`, plus the existing OBJ.
+    """
+    npz_path = Path(path)
+    points, labels = load_points_labels(npz_path)
+    stored = read_npz_mesh_path(npz_path)
+    mesh_path = resolve_mesh_path(stored, data_dir)
+    return points, labels, mesh_path
 
 
 def _is_combo_npz(path: Path) -> bool:
@@ -239,9 +328,9 @@ if __name__ == "__main__":
         from dataset import OccupancyMultiNpzDataset, make_dataloader
 
         ds = OccupancyMultiNpzDataset(paths)
-        loader = make_dataloader(ds, batch_size=8, shuffle=False)
+        loader = make_dataloader(ds.parts[0], batch_size=8, shuffle=False)
         xyz, y = next(iter(loader))
-        print(f"dataset_N={len(ds)} parts={len(ds.parts)}")
+        print(f"files={len(ds)} n_points={ds.n_points} parts={len(ds.parts)}")
         print(f"batch xyz={tuple(xyz.shape)} y={tuple(y.shape)}")
     else:
         sample = cfg.data_dir / _SAMPLE_RELATIVE

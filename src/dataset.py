@@ -17,9 +17,16 @@ from typing import Sequence
 
 import torch
 from torch import Tensor
-from torch.utils.data import ConcatDataset, DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset
 
-from data_npz import load_points_labels, resolve_npz_catalog
+from data_npz import (
+    load_points_labels,
+    load_points_labels_mesh,
+    resolve_npz_catalog,
+    shape_key,
+)
+from geometry.mesh_io import load_obj_triangles
+from geometry.surface import sample_surface_points
 from normalize import apply_normalization, compute_center_scale
 
 DEFAULT_BATCH_SIZE = 1024
@@ -33,16 +40,52 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
     ``y`` is ``float32 (1,)`` (collated ``(B, 1)``) to match OccupancyMLP logits.
     """
 
-    def __init__(self, npz_path: Path) -> None:
+    def __init__(
+        self,
+        npz_path: Path,
+        data_dir: Path | str | None = None,
+        *,
+        n_surface: int | None = None,
+        seed: int = 1,
+        shape_id: int = 0,
+    ) -> None:
         """
         Load points, compute AABB ``center`` / ``scale``, store CPU tensors.
+
+        When ``data_dir`` is set, also resolve ``mesh_path`` and load OBJ
+        triangles. When ``n_surface`` is set, sample an envelope and
+        ``__getitem__`` returns ``(xyz, y, envelope, shape_id)``.
+
+        Occupancy queries and labels always come from the NPZ. Envelope
+        points are sampled on the OBJ surface (no normal offset).
 
         Parameters
         ----------
         npz_path:
             Scatter NPZ with ``points (N, 3)`` and ``labels (N,)``.
+        data_dir:
+            Dataset root. ``None`` skips the OBJ join (unit tests that
+            write points-only NPZs).
+        n_surface:
+            Envelope sample count. ``None`` keeps the xyz-only item.
+        seed:
+            Envelope RNG.
+        shape_id:
+            Integer id for encode-once (one per NPZ part).
         """
-        points, labels = load_points_labels(Path(npz_path))
+        npz_path = Path(npz_path)
+        if data_dir is not None:
+            points, labels, mesh_path = load_points_labels_mesh(npz_path, data_dir)
+            vertices, faces = load_obj_triangles(mesh_path)
+            self.mesh_path = mesh_path
+            self.vertices = vertices
+            self.faces = faces
+        else:
+            points, labels = load_points_labels(npz_path)
+            self.mesh_path = None
+            self.vertices = None
+            self.faces = None
+        # Same AABB for NPZ queries and the on-surface envelope.
         center, scale = compute_center_scale(points)
         normed = apply_normalization(points, center, scale)
 
@@ -52,40 +95,112 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
         self.y = torch.from_numpy(labels).unsqueeze(1)  # (N, 1) float32
         self.center = center
         self.scale = scale
-        self.npz_path = Path(npz_path)
+        self.npz_path = npz_path
+        # Same grouping key as the catalog cap (stem before ``__``).
+        self.mesh_key = shape_key(npz_path)
+        self.shape_id = int(shape_id)
+        self.n_surface = n_surface
+        self.envelope: Tensor | None = None
+        if n_surface is not None:
+            if self.vertices is None or self.faces is None or self.mesh_path is None:
+                raise ValueError(
+                    "n_surface requires a mesh join (pass data_dir and mesh_path)"
+                )
+            cache_key = str(self.mesh_path.resolve())
+            world = sample_surface_points(
+                self.vertices,
+                self.faces,
+                int(n_surface),
+                seed=int(seed),
+                cache_key=cache_key,
+            )
+            # Same AABB as query XYZ so the encoder sees one coordinate frame.
+            env = apply_normalization(world, center, scale)
+            self.envelope = torch.from_numpy(env)
 
     def __len__(self) -> int:
         return int(self.xyz.shape[0])
 
-    def __getitem__(self, index: int) -> tuple[Tensor, Tensor]:
+    def __getitem__(
+        self, index: int
+    ) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
+        if self.envelope is not None:
+            return (
+                self.xyz[index],
+                self.y[index],
+                self.envelope,
+                torch.tensor(self.shape_id, dtype=torch.long),
+            )
         return self.xyz[index], self.y[index]
 
 
-class OccupancyMultiNpzDataset(ConcatDataset[tuple[Tensor, Tensor]]):
+class OccupancyMultiNpzDataset:
     """
-    Several occupancy NPZs, each AABB-normalized on its own mesh.
+    Catalog of per-file occupancy datasets.
 
-    Item convention matches :class:`OccupancyPointDataset`: ``xyz (3,)``,
-    ``y (1,)``. Per-file ``center`` / ``scale`` stay on ``.parts[i]``.
+    Each NPZ stays its own :class:`OccupancyPointDataset`. Files are **not**
+    concatenated into one point cloud. ``len`` is the file count.
     """
 
-    def __init__(self, npz_paths: Sequence[Path | str]) -> None:
+    def __init__(
+        self,
+        npz_paths: Sequence[Path | str],
+        data_dir: Path | str | None = None,
+        *,
+        n_surface: int | None = None,
+        seed: int = 1,
+    ) -> None:
         """
-        Load each NPZ as :class:`OccupancyPointDataset` and concatenate.
+        Load each NPZ as :class:`OccupancyPointDataset` (no point pooling).
 
         Parameters
         ----------
         npz_paths:
             Existing occupancy files. Empty list is rejected.
+        data_dir:
+            Forwarded to each part so the OBJ join runs. ``None`` skips it.
+        n_surface:
+            Envelope count; ``None`` keeps xyz-only items.
+        seed:
+            Sample seed (forwarded to each part).
         """
         paths = [Path(p) for p in npz_paths]
         if not paths:
             raise ValueError("OccupancyMultiNpzDataset needs at least one NPZ")
-        # One AABB per file so later mesh join can reuse the same map.
-        parts = [OccupancyPointDataset(path) for path in paths]
-        super().__init__(parts)
+        # One AABB and one reader per file; no ConcatDataset of points.
+        parts = [
+            OccupancyPointDataset(
+                path,
+                data_dir=data_dir,
+                n_surface=n_surface,
+                seed=seed,
+                shape_id=i,
+            )
+            for i, path in enumerate(paths)
+        ]
         self.parts = parts
         self.npz_paths = [part.npz_path for part in parts]
+        self.data_dir = Path(data_dir) if data_dir is not None else None
+        self.n_surface = n_surface
+
+    def __len__(self) -> int:
+        """Number of files (shapes), not pooled points."""
+        return len(self.parts)
+
+    @property
+    def n_points(self) -> int:
+        """Sum of query counts across files (for logs only)."""
+        return sum(len(part) for part in self.parts)
+
+    @property
+    def n_meshes(self) -> int:
+        """Unique resolved OBJs among parts that completed the join."""
+        keys = {
+            str(part.mesh_path.resolve())
+            for part in self.parts
+            if part.mesh_path is not None
+        }
+        return len(keys)
 
     @classmethod
     def from_catalog(
@@ -95,6 +210,8 @@ class OccupancyMultiNpzDataset(ConcatDataset[tuple[Tensor, Tensor]]):
         npz_glob: str = "exports/dataset/*.npz",
         npz_paths: Sequence[str | Path] | None = None,
         max_files_per_shape: int | None = 2,
+        n_surface: int | None = None,
+        seed: int = 1,
     ) -> OccupancyMultiNpzDataset:
         """
         Build from :func:`resolve_npz_catalog`.
@@ -103,11 +220,13 @@ class OccupancyMultiNpzDataset(ConcatDataset[tuple[Tensor, Tensor]]):
         ----------
         data_dir, npz_glob, npz_paths, max_files_per_shape:
             Forwarded to :func:`resolve_npz_catalog`.
+        n_surface, seed:
+            Envelope sampling; ``None`` keeps xyz-only items.
 
         Returns
         -------
         OccupancyMultiNpzDataset
-            Pooled queries; ``len`` is the sum of file lengths.
+            One part per file; ``len`` is the file count.
         """
         catalog = resolve_npz_catalog(
             data_dir,
@@ -115,7 +234,34 @@ class OccupancyMultiNpzDataset(ConcatDataset[tuple[Tensor, Tensor]]):
             npz_paths=npz_paths,
             max_files_per_shape=max_files_per_shape,
         )
-        return cls(catalog)
+        return cls(
+            catalog,
+            data_dir=data_dir,
+            n_surface=n_surface,
+            seed=seed,
+        )
+
+
+def split_train_test_files(
+    n_files: int,
+    test_fraction: float,
+    seed: int,
+) -> tuple[Tensor, Tensor]:
+    """
+    Hold out whole files for the test set.
+
+    Same math as :func:`split_train_val_indices`. Requires ``n_files >= 2``.
+    """
+    return split_train_val_indices(n_files, test_fraction, seed)
+
+
+def split_train_val_files(
+    n_files: int,
+    val_fraction: float,
+    seed: int,
+) -> tuple[Tensor, Tensor]:
+    """Deprecated name for :func:`split_train_test_files`."""
+    return split_train_test_files(n_files, val_fraction, seed)
 
 
 def split_train_val_indices(
@@ -166,8 +312,8 @@ def make_dataloader(
     """
     Train-style loader: shuffle on, default collate, no extra workers.
 
-    Accepts ``OccupancyPointDataset``, :class:`OccupancyMultiNpzDataset`,
-    or a ``Subset`` of either (train/val split).
+    Pass **one** :class:`OccupancyPointDataset` (one file). Do not pass
+    the catalog — that would mix shapes.
 
     Parameters
     ----------

@@ -1,0 +1,37 @@
+batch_size: 1024
+best_epoch: 18
+best_metric: 0.969705480962992
+catalog_file: catalog.txt
+catalog_n: 5000
+checkpoint: 18
+checkpoint_metric: test_acc
+data_dir: E:/Work_stuff/scatteringNet/data
+depth: 4
+device: cuda
+epochs: 20
+finished_at: '2026-08-29T21:40:39'
+gpu: NVIDIA GeForce GTX 1080
+hidden: 64
+lr: 0.001
+max_files_per_shape: 2
+n_files: 5000
+n_meshes: 2500
+n_points: 11522442
+n_surface: 1024
+n_test: 2311386
+n_test_files: 1000
+n_train: 9211056
+n_train_files: 4000
+npz_glob: exports/dataset/extrude_*_nr1_*.npz
+optimizer: adam
+run_dir: runs/2026-08-29_19-43-15_extrude_nr1_surface
+run_id: 2026-08-29_19-43-15_extrude_nr1_surface
+run_name: extrude_nr1_surface
+seed: 1
+shape_encoder: surface
+split: shape
+started_at: '2026-08-29T19:41:07'
+test_fraction: 0.2
+total: 20
+wall: 1h 59m 31.40s
+wall_seconds: 7171.396

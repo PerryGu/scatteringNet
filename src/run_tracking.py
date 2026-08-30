@@ -105,15 +105,15 @@ def occupancy_config_snapshot(
         "total": int(cfg.epochs),
         "checkpoint": None,
         "lr": float(cfg.lr),
-        "checkpoint_path": as_repo_relative(cfg.checkpoint_path),
-        "sample_npz": as_data_relative(cfg.sample_npz, cfg.data_dir),
-        "val_fraction": float(cfg.val_fraction),
+        "test_fraction": float(cfg.test_fraction),
         "npz_glob": Path(str(cfg.npz_glob)).as_posix(),
         "max_files_per_shape": cfg.max_files_per_shape,
         "run_name": str(cfg.run_name),
         "checkpoint_metric": str(cfg.checkpoint_metric),
         "batch_size": int(cfg.batch_size),
         "optimizer": str(cfg.optimizer),
+        "n_surface": int(cfg.n_surface),
+        "shape_encoder": str(cfg.shape_encoder),
     }
     # Explicit list knob: only snapshot it when it actually replaced the glob.
     explicit = [as_data_relative(p, cfg.data_dir) for p in cfg.npz_paths]

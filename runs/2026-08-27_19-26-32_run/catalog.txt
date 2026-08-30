@@ -1,2 +1,0 @@
-E:\Work_stuff\scatteringNet\data\exports\dataset\sphere_r0p5_sa16_sh16__occupancy_s0.15_inout.npz
-E:\Work_stuff\scatteringNet\data\exports\dataset\sphere_r0p5_sa16_sh16__occupancy_s0.15_j0.04_inout.npz

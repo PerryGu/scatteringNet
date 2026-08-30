@@ -28,9 +28,7 @@ _REQUIRED_YAML_KEYS = (
     "data_dir",
     "epochs",
     "lr",
-    "checkpoint_path",
-    "sample_npz",
-    "val_fraction",
+    "test_fraction",
 )
 
 
@@ -43,9 +41,7 @@ class YamlKnobs(TypedDict):
     data_dir: str
     epochs: int
     lr: float
-    checkpoint_path: str
-    sample_npz: str
-    val_fraction: float
+    test_fraction: float
     npz_glob: str
     npz_paths: tuple[str, ...]
     max_files_per_shape: int | None
@@ -53,6 +49,8 @@ class YamlKnobs(TypedDict):
     checkpoint_metric: str
     batch_size: int
     optimizer: str
+    n_surface: int
+    shape_encoder: str
 
 
 def get_device() -> torch.device:
@@ -156,6 +154,8 @@ def _as_checkpoint_metric(value: Any) -> str:
 
 # Names accepted in config.yaml ``optimizer``. Used by train_multi_npz.
 _ALLOWED_OPTIMIZERS = ("adam", "adamw", "sgd")
+# ``none`` = OccupancyMLP (xyz only). ``surface`` = envelope encoder.
+_ALLOWED_SHAPE_ENCODERS = ("none", "surface")
 
 
 def _as_optimizer(value: Any) -> str:
@@ -166,6 +166,17 @@ def _as_optimizer(value: Any) -> str:
     if name not in _ALLOWED_OPTIMIZERS:
         allowed = ", ".join(_ALLOWED_OPTIMIZERS)
         raise ValueError(f"optimizer must be one of {allowed}, got {value!r}")
+    return name
+
+
+def _as_shape_encoder(value: Any) -> str:
+    """Occupancy head family; default xyz-only so older YAML still loads."""
+    if value is None or (isinstance(value, str) and not str(value).strip()):
+        return "none"
+    name = str(value).strip().lower()
+    if name not in _ALLOWED_SHAPE_ENCODERS:
+        allowed = ", ".join(_ALLOWED_SHAPE_ENCODERS)
+        raise ValueError(f"shape_encoder must be one of {allowed}, got {value!r}")
     return name
 
 
@@ -183,14 +194,6 @@ def _as_npz_paths(value: Any) -> tuple[str, ...]:
         text = _as_nonempty_path_string(f"npz_paths[{i}]", raw)
         out.append(text)
     return tuple(out)
-
-
-def _resolve_repo_path(value: str) -> Path:
-    """Absolute paths stay as-is; relative paths are rooted at the repo."""
-    path = Path(value)
-    if path.is_absolute():
-        return path
-    return _REPO_ROOT / path
 
 
 def as_repo_relative(path: Path | str, *, root: Path | None = None) -> str:
@@ -263,11 +266,7 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
         "data_dir": _as_data_dir_string(raw["data_dir"]),
         "epochs": _as_positive_int("epochs", raw["epochs"]),
         "lr": _as_positive_float("lr", raw["lr"]),
-        "checkpoint_path": _as_nonempty_path_string(
-            "checkpoint_path", raw["checkpoint_path"]
-        ),
-        "sample_npz": _as_nonempty_path_string("sample_npz", raw["sample_npz"]),
-        "val_fraction": _as_open_unit_interval("val_fraction", raw["val_fraction"]),
+        "test_fraction": _as_open_unit_interval("test_fraction", raw["test_fraction"]),
         "npz_glob": (
             _as_nonempty_path_string("npz_glob", raw["npz_glob"])
             if "npz_glob" in raw
@@ -285,7 +284,7 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
         "checkpoint_metric": (
             _as_checkpoint_metric(raw["checkpoint_metric"])
             if "checkpoint_metric" in raw
-            else "val_acc"
+            else "test_acc"
         ),
         "batch_size": (
             _as_positive_int("batch_size", raw["batch_size"])
@@ -294,6 +293,16 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
         ),
         "optimizer": (
             _as_optimizer(raw["optimizer"]) if "optimizer" in raw else "adam"
+        ),
+        "n_surface": (
+            _as_positive_int("n_surface", raw["n_surface"])
+            if "n_surface" in raw
+            else 1024
+        ),
+        "shape_encoder": (
+            _as_shape_encoder(raw["shape_encoder"])
+            if "shape_encoder" in raw
+            else "none"
         ),
     }
 
@@ -333,9 +342,8 @@ class OccupancyConfig:
     seed: int
     epochs: int
     lr: float
-    checkpoint_path: Path
-    sample_npz: Path
-    val_fraction: float
+    # Fraction of catalog **files** held out as the test set (not points).
+    test_fraction: float
     # Catalog knobs (optional in YAML; omitted keys keep these defaults).
     npz_glob: str = "exports/dataset/*.npz"
     npz_paths: tuple[str, ...] = ()
@@ -343,27 +351,14 @@ class OccupancyConfig:
     # Suffix for runs/<timestamp>_<name>/ (device stays runtime-only).
     run_name: str = "run"
     # Which logged scalar selects best.pt (strict improve).
-    checkpoint_metric: str = "val_acc"
+    checkpoint_metric: str = "test_acc"
     # Mini-batch size and optimizer family (train_multi_npz).
     batch_size: int = 1024
     optimizer: str = "adam"
-
-
-def sample_npz_path(cfg: OccupancyConfig) -> Path:
-    """
-    Compose the default infer NPZ path: ``data_dir / sample_npz``.
-
-    Parameters
-    ----------
-    cfg:
-        Resolved config.
-
-    Returns
-    -------
-    Path
-        Absolute or joined sample NPZ path.
-    """
-    return cfg.data_dir / cfg.sample_npz
+    # Envelope sample count (YAML). Used when ``shape_encoder`` is ``surface``.
+    n_surface: int = 1024
+    # ``none`` keeps OccupancyMLP; ``surface`` uses OccupancyEncoder.
+    shape_encoder: str = "none"
 
 
 def load_config(
@@ -403,9 +398,7 @@ def load_config(
         seed=knobs["seed"],
         epochs=knobs["epochs"],
         lr=knobs["lr"],
-        checkpoint_path=_resolve_repo_path(knobs["checkpoint_path"]),
-        sample_npz=Path(knobs["sample_npz"]),
-        val_fraction=knobs["val_fraction"],
+        test_fraction=knobs["test_fraction"],
         npz_glob=knobs["npz_glob"],
         npz_paths=knobs["npz_paths"],
         max_files_per_shape=knobs["max_files_per_shape"],
@@ -413,6 +406,8 @@ def load_config(
         checkpoint_metric=knobs["checkpoint_metric"],
         batch_size=knobs["batch_size"],
         optimizer=knobs["optimizer"],
+        n_surface=knobs["n_surface"],
+        shape_encoder=knobs["shape_encoder"],
     )
 
 
@@ -440,9 +435,7 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  seed={cfg.seed}\n"
         f"  epochs={cfg.epochs}\n"
         f"  lr={cfg.lr}\n"
-        f"  checkpoint_path={cfg.checkpoint_path}\n"
-        f"  sample_npz={cfg.sample_npz}\n"
-        f"  val_fraction={cfg.val_fraction}\n"
+        f"  test_fraction={cfg.test_fraction}\n"
         f"  npz_glob={cfg.npz_glob}\n"
         f"  npz_paths={list(cfg.npz_paths)}\n"
         f"  max_files_per_shape={cfg.max_files_per_shape}\n"
@@ -450,6 +443,8 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  checkpoint_metric={cfg.checkpoint_metric}\n"
         f"  batch_size={cfg.batch_size}\n"
         f"  optimizer={cfg.optimizer}\n"
+        f"  n_surface={cfg.n_surface}\n"
+        f"  shape_encoder={cfg.shape_encoder}\n"
         f")"
     )
 
