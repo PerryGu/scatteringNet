@@ -74,23 +74,44 @@ def occupancy_metrics(
     OccupancyMetrics
         Scalar floats on CPU (safe to print or average across batches).
     """
-    logits_flat, labels_flat = _flatten_pair(logits, labels)
     # Sigmoid here only: training still uses BCE-with-logits on raw logits.
+    tp, fp, fn, correct, n = occupancy_counts(logits, labels, threshold=threshold)
+    return occupancy_metrics_from_counts(tp=tp, fp=fp, fn=fn, correct=correct, n=n)
+
+
+def occupancy_counts(
+    logits: Tensor,
+    labels: Tensor,
+    *,
+    threshold: float = 0.5,
+) -> tuple[float, float, float, float, float]:
+    """Return ``(tp, fp, fn, correct, n)`` for a micro-average over points."""
+    logits_flat, labels_flat = _flatten_pair(logits, labels)
     pred_inside = logits_flat.sigmoid() >= threshold
     true_inside = labels_flat > 0.5
-
     pred_f = pred_inside.to(dtype=torch.float32)
     true_f = true_inside.to(dtype=torch.float32)
-    accuracy = float((pred_inside == true_inside).to(dtype=torch.float32).mean().item())
-
     tp = float((pred_f * true_f).sum().item())
     fp = float((pred_f * (1.0 - true_f)).sum().item())
     fn = float(((1.0 - pred_f) * true_f).sum().item())
+    correct = float((pred_inside == true_inside).to(dtype=torch.float32).sum().item())
+    n = float(pred_inside.numel())
+    return tp, fp, fn, correct, n
+
+
+def occupancy_metrics_from_counts(
+    *,
+    tp: float,
+    fp: float,
+    fn: float,
+    correct: float,
+    n: float,
+) -> OccupancyMetrics:
+    """Build metrics from accumulated confusion counts (point micro-average)."""
     precision = _safe_div(tp, tp + fp)
     recall = _safe_div(tp, tp + fn)
-
     return OccupancyMetrics(
-        accuracy=accuracy,
+        accuracy=_safe_div(correct, n),
         inside_precision=precision,
         inside_recall=recall,
         inside_iou=_safe_div(tp, tp + fp + fn),

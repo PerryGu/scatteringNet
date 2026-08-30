@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
+import numpy as np
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
@@ -26,10 +27,12 @@ from data_npz import (
     shape_key,
 )
 from geometry.mesh_io import load_obj_triangles
-from geometry.surface import sample_surface_points
 from normalize import apply_normalization, compute_center_scale
 
 DEFAULT_BATCH_SIZE = 1024
+
+OccupancyItem = tuple[Tensor, Tensor]
+OccupancyEncoderItem = tuple[Tensor, Tensor, Tensor, Tensor]
 
 
 class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
@@ -45,19 +48,13 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
         npz_path: Path,
         data_dir: Path | str | None = None,
         *,
-        n_surface: int | None = None,
-        seed: int = 1,
         shape_id: int = 0,
     ) -> None:
         """
         Load points, compute AABB ``center`` / ``scale``, store CPU tensors.
 
         When ``data_dir`` is set, also resolve ``mesh_path`` and load OBJ
-        triangles. When ``n_surface`` is set, sample an envelope and
-        ``__getitem__`` returns ``(xyz, y, envelope, shape_id)``.
-
-        Occupancy queries and labels always come from the NPZ. Envelope
-        points are sampled on the OBJ surface (no normal offset).
+        triangles. Envelope sampling lives on ``OccupancyEncoderDataset``.
 
         Parameters
         ----------
@@ -66,12 +63,9 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
         data_dir:
             Dataset root. ``None`` skips the OBJ join (unit tests that
             write points-only NPZs).
-        n_surface:
-            Envelope sample count. ``None`` keeps the xyz-only item.
-        seed:
-            Envelope RNG.
         shape_id:
-            Integer id for encode-once (one per NPZ part).
+            Integer id for encode-once. The catalog overwrites this with a
+            stable id per mesh identity (not per file).
         """
         npz_path = Path(npz_path)
         if data_dir is not None:
@@ -85,7 +79,8 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
             self.mesh_path = None
             self.vertices = None
             self.faces = None
-        # Same AABB for NPZ queries and the on-surface envelope.
+        # Per-file query AABB first. The catalog replaces this with one
+        # mesh-level map so lattice and jitter share a frame.
         center, scale = compute_center_scale(points)
         normed = apply_normalization(points, center, scale)
 
@@ -99,38 +94,13 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
         # Same grouping key as the catalog cap (stem before ``__``).
         self.mesh_key = shape_key(npz_path)
         self.shape_id = int(shape_id)
-        self.n_surface = n_surface
+        self.n_surface: int | None = None
         self.envelope: Tensor | None = None
-        if n_surface is not None:
-            if self.vertices is None or self.faces is None or self.mesh_path is None:
-                raise ValueError(
-                    "n_surface requires a mesh join (pass data_dir and mesh_path)"
-                )
-            cache_key = str(self.mesh_path.resolve())
-            world = sample_surface_points(
-                self.vertices,
-                self.faces,
-                int(n_surface),
-                seed=int(seed),
-                cache_key=cache_key,
-            )
-            # Same AABB as query XYZ so the encoder sees one coordinate frame.
-            env = apply_normalization(world, center, scale)
-            self.envelope = torch.from_numpy(env)
 
     def __len__(self) -> int:
         return int(self.xyz.shape[0])
 
-    def __getitem__(
-        self, index: int
-    ) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
-        if self.envelope is not None:
-            return (
-                self.xyz[index],
-                self.y[index],
-                self.envelope,
-                torch.tensor(self.shape_id, dtype=torch.long),
-            )
+    def __getitem__(self, index: int) -> OccupancyItem:
         return self.xyz[index], self.y[index]
 
 
@@ -140,6 +110,7 @@ class OccupancyMultiNpzDataset:
 
     Each NPZ stays its own :class:`OccupancyPointDataset`. Files are **not**
     concatenated into one point cloud. ``len`` is the file count.
+    After load, parts that share a mesh share ``shape_id`` and AABB.
     """
 
     def __init__(
@@ -168,16 +139,29 @@ class OccupancyMultiNpzDataset:
         if not paths:
             raise ValueError("OccupancyMultiNpzDataset needs at least one NPZ")
         # One AABB and one reader per file; no ConcatDataset of points.
-        parts = [
-            OccupancyPointDataset(
-                path,
-                data_dir=data_dir,
-                n_surface=n_surface,
-                seed=seed,
-                shape_id=i,
-            )
-            for i, path in enumerate(paths)
-        ]
+        # shape_id is assigned after load: mesh_split_key needs mesh_path.
+        if n_surface is not None:
+            from encoder_dataset import OccupancyEncoderDataset
+
+            parts = [
+                OccupancyEncoderDataset(
+                    path,
+                    data_dir=data_dir,
+                    n_surface=n_surface,
+                    seed=seed,
+                )
+                for path in paths
+            ]
+        else:
+            parts = [
+                OccupancyPointDataset(path, data_dir=data_dir)
+                for path in paths
+            ]
+        ids = mesh_shape_ids([mesh_split_key(part) for part in parts])
+        for part, sid in zip(parts, ids):
+            part.shape_id = sid
+        # One AABB per mesh: vertices when joined, else union of that key's queries.
+        apply_shared_mesh_aabb(parts)
         self.parts = parts
         self.npz_paths = [part.npz_path for part in parts]
         self.data_dir = Path(data_dir) if data_dir is not None else None
@@ -242,26 +226,148 @@ class OccupancyMultiNpzDataset:
         )
 
 
-def split_train_test_files(
-    n_files: int,
+def mesh_split_key(part: OccupancyPointDataset) -> str:
+    """
+    Identity used to keep every NPZ of one OBJ on the same split side.
+
+    Prefer the resolved OBJ path when the mesh join ran. Fall back to
+    ``mesh_key`` (filename stem before ``__``) for points-only parts.
+    File-level splits leak: lattice and jitter of the same mesh can sit
+    in both train and test.
+    """
+    if part.mesh_path is not None:
+        return str(part.mesh_path.resolve())
+    return str(part.mesh_key)
+
+
+def mesh_shape_ids(keys: Sequence[str]) -> list[int]:
+    """
+    Stable integer per mesh identity (sorted unique keys → ``0 .. K-1``).
+
+    Two files that share a key get the same id so ``encode_unique`` runs
+    once per OBJ, not once per NPZ.
+    """
+    cleaned = [str(key).strip() for key in keys]
+    if any(not text for text in cleaned):
+        raise ValueError("mesh shape id key is empty")
+    index = {key: i for i, key in enumerate(sorted(set(cleaned)))}
+    return [index[text] for text in cleaned]
+
+
+def _world_xyz(part: OccupancyPointDataset) -> np.ndarray:
+    """Undo the part's current AABB map (queries already live as tensors)."""
+    xyz = np.asarray(part.xyz.numpy(), dtype=np.float32)
+    center = np.asarray(part.center, dtype=np.float32).reshape(3)
+    return xyz * np.float32(part.scale) + center
+
+
+def _aabb_for_mesh_group(
+    group: Sequence[OccupancyPointDataset],
+) -> tuple[np.ndarray, float]:
+    """Mesh vertices when any part joined an OBJ; else union of query clouds."""
+    for part in group:
+        if part.vertices is not None:
+            return compute_center_scale(part.vertices)
+    stacked = np.concatenate([_world_xyz(part) for part in group], axis=0)
+    return compute_center_scale(stacked)
+
+
+def apply_shared_mesh_aabb(parts: Sequence[OccupancyPointDataset]) -> None:
+    """
+    Give every NPZ of one mesh the same ``center`` / ``scale``.
+
+    Lattice and jitter query AABBs differ. The encoder and the occupancy
+    head must see one frame per OBJ. Envelope clouds are remapped too.
+    """
+    groups: dict[str, list[OccupancyPointDataset]] = {}
+    for part in parts:
+        groups.setdefault(mesh_split_key(part), []).append(part)
+    for group in groups.values():
+        center, scale = _aabb_for_mesh_group(group)
+        for part in group:
+            world_xyz = _world_xyz(part)
+            world_env = None
+            if part.envelope is not None:
+                env = np.asarray(part.envelope.numpy(), dtype=np.float32)
+                old_c = np.asarray(part.center, dtype=np.float32).reshape(3)
+                world_env = env * np.float32(part.scale) + old_c
+            part.xyz = torch.from_numpy(apply_normalization(world_xyz, center, scale))
+            if world_env is not None:
+                part.envelope = torch.from_numpy(
+                    apply_normalization(world_env, center, scale)
+                )
+            part.center = center
+            part.scale = scale
+
+
+def split_train_test_by_mesh(
+    keys: Sequence[str],
     test_fraction: float,
     seed: int,
 ) -> tuple[Tensor, Tensor]:
     """
-    Hold out whole files for the test set.
+    Hold out whole mesh identities, not individual NPZ files.
 
-    Same math as :func:`split_train_val_indices`. Requires ``n_files >= 2``.
+    ``keys[i]`` is the mesh identity of catalog file ``i``. Every file that
+    shares a key goes to train or to test together. ``test_fraction`` applies
+    to unique keys (sorted), not to the file count.
+
+    Parameters
+    ----------
+    keys:
+        One identity string per catalog file. Empty strings are rejected.
+    test_fraction:
+        Hold-out fraction of **unique meshes** in ``(0, 1)``.
+    seed:
+        RNG seed for the key permutation.
+
+    Returns
+    -------
+    train_idx, test_idx:
+        1-D long tensors of file indices that partition ``0 .. len(keys)-1``.
     """
-    return split_train_val_indices(n_files, test_fraction, seed)
+    if not keys:
+        raise ValueError("need at least one file key to split")
+    groups: dict[str, list[int]] = {}
+    for index, raw in enumerate(keys):
+        text = str(raw).strip()
+        if not text:
+            raise ValueError(f"mesh split key at file {index} is empty")
+        groups.setdefault(text, []).append(index)
+    unique = sorted(groups)
+    n_keys = len(unique)
+    if n_keys < 2:
+        raise ValueError(
+            f"need at least 2 distinct meshes to hold out a mesh, got {n_keys}"
+        )
+    key_train, key_test = split_train_val_indices(n_keys, test_fraction, seed)
+    train_files: list[int] = []
+    test_files: list[int] = []
+    for ki in key_train.tolist():
+        train_files.extend(groups[unique[int(ki)]])
+    for ki in key_test.tolist():
+        test_files.extend(groups[unique[int(ki)]])
+    # Stable file order on each side; train still shuffles files each epoch.
+    train_files.sort()
+    test_files.sort()
+    return (
+        torch.tensor(train_files, dtype=torch.long),
+        torch.tensor(test_files, dtype=torch.long),
+    )
 
 
-def split_train_val_files(
+def split_train_test_files(
     n_files: int,
     val_fraction: float,
     seed: int,
 ) -> tuple[Tensor, Tensor]:
-    """Deprecated name for :func:`split_train_test_files`."""
-    return split_train_test_files(n_files, val_fraction, seed)
+    """
+    Hold out whole files. Same math as :func:`split_train_val_indices``.
+
+    Catalog train uses :func:`split_train_test_by_mesh` instead so two NPZs
+    of one OBJ cannot straddle the split.
+    """
+    return split_train_val_indices(n_files, val_fraction, seed)
 
 
 def split_train_val_indices(
@@ -303,31 +409,62 @@ def split_train_val_indices(
     return train_idx, val_idx
 
 
+def occupancy_collate(
+    batch: list[OccupancyItem | OccupancyEncoderItem],
+) -> OccupancyItem | OccupancyEncoderItem:
+    """
+    Collate xyz/y, and envelopes without stacking B independent copies.
+
+    One-file loaders share a shape_id: expand one ``(N, 3)`` cloud to
+    ``(B, N, 3)`` as a view. Mixed ids gather from the unique clouds.
+    """
+    first = batch[0]
+    xyz = torch.stack([item[0] for item in batch], dim=0)
+    y = torch.stack([item[1] for item in batch], dim=0)
+    if len(first) == 2:
+        return xyz, y
+    shape_id = torch.stack(
+        [
+            item[3].reshape(()) if item[3].ndim > 0 else item[3]
+            for item in batch
+        ],
+        dim=0,
+    )
+    if int(shape_id.min()) == int(shape_id.max()):
+        envelope = first[2].unsqueeze(0).expand(len(batch), -1, -1)
+        return xyz, y, envelope, shape_id
+    env_by_id: dict[int, Tensor] = {}
+    for item in batch:
+        sid = int(item[3].reshape(()).item())
+        if sid not in env_by_id:
+            env_by_id[sid] = item[2]
+    unique_ids, inverse = torch.unique(shape_id, sorted=True, return_inverse=True)
+    unique_env = torch.stack([env_by_id[int(u)] for u in unique_ids.tolist()], dim=0)
+    return xyz, y, unique_env[inverse], shape_id
+
+
 def make_dataloader(
-    dataset: Dataset[tuple[Tensor, Tensor]],
+    dataset: Dataset[OccupancyItem] | Dataset[OccupancyEncoderItem],
     *,
     batch_size: int = DEFAULT_BATCH_SIZE,
     shuffle: bool = True,
+    pin_memory: bool = False,
 ) -> DataLoader:
     """
-    Train-style loader: shuffle on, default collate, no extra workers.
+    Train-style loader: custom occupancy collate, no extra workers.
 
-    Pass **one** :class:`OccupancyPointDataset` (one file). Do not pass
-    the catalog — that would mix shapes.
+    Pass **one** file dataset. Do not pass the catalog — that would mix shapes.
 
     Parameters
     ----------
     dataset:
-        Point dataset or a ``Subset``.
+        Point dataset, encoder dataset, or a ``Subset``.
     batch_size:
         Must be ``>= 1``. Default :data:`DEFAULT_BATCH_SIZE`.
     shuffle:
         Shuffle each epoch (True for train, False for val).
-
-    Returns
-    -------
-    DataLoader
-        ``num_workers=0``.
+    pin_memory:
+        Set True on CUDA so host tensors pin for the H2D copy.
     """
     if batch_size < 1:
         raise ValueError(f"batch_size must be >= 1, got {batch_size}")
@@ -336,6 +473,8 @@ def make_dataloader(
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=0,
+        pin_memory=bool(pin_memory),
+        collate_fn=occupancy_collate,
     )
 
 

@@ -10,12 +10,13 @@ one step at a time, without geometry encoders, Maya, or multi-file training. Tho
 
 ## How to read this plan
 
-Work proceeded **one step at a time**. After each step we stopped for review. Training steps left numbers in `CHANGELOG.md` (loss, accuracy), not just code.
+Work proceeded **one step at a time**. After each step we stopped for review. What shipped went in [`CHANGELOG.md`](../CHANGELOG.md). Early MVP smokes also left loss/accuracy in that changelog; the **current** rule is: train write-ups go in [`training_log.md`](training_log.md). Changelog is code and knobs only.
 
 Progress is visible in:
 
-- this file
-- [`CHANGELOG.md`](../CHANGELOG.md) (what shipped, with date, time, and metrics)
+- this file (closed history)
+- [`CHANGELOG.md`](../CHANGELOG.md) (what shipped)
+- [`training_log.md`](training_log.md) (catalog trains)
 - [`work_plan_phase2.md`](work_plan_phase2.md) (what comes next)
 
 ---

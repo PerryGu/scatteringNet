@@ -13,7 +13,7 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from geometry.surface import sample_surface_points
+from geometry.surface import _ENVELOPE_CACHE, clear_envelope_cache, sample_surface_points
 
 
 class SurfaceSampleTests(unittest.TestCase):
@@ -44,6 +44,21 @@ class SurfaceSampleTests(unittest.TestCase):
         b = sample_surface_points(mesh.vertices, mesh.faces, 64, seed=1)
         self.assertEqual(a.shape[0], 32)
         self.assertEqual(b.shape[0], 64)
+
+    def test_envelope_cache_hit_then_clear(self) -> None:
+        mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
+        clear_envelope_cache()
+        a = sample_surface_points(
+            mesh.vertices, mesh.faces, 16, seed=3, cache_key="box-cache"
+        )
+        b = sample_surface_points(
+            mesh.vertices, mesh.faces, 16, seed=3, cache_key="box-cache"
+        )
+        key = ("box-cache", 16, 3)
+        self.assertIn(key, _ENVELOPE_CACHE)
+        self.assertIs(a, b)
+        clear_envelope_cache()
+        self.assertNotIn(key, _ENVELOPE_CACHE)
 
     def test_rejects_zero_count(self) -> None:
         mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])

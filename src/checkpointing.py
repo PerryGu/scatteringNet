@@ -21,10 +21,10 @@ from typing import Any, Mapping
 
 import torch
 
+from config import repo_root
 from run_tracking import RunTracker
 
-# Repo root: src/checkpointing.py → parents[1].
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = repo_root()
 
 
 @dataclass(frozen=True)
@@ -171,4 +171,4 @@ if __name__ == "__main__":
         print(f"snapshot_total={snap['total']} snapshot_checkpoint={snap['checkpoint']}")
         print(f"has_last_pt={(saver.dir / 'last.pt').exists()}")
         print(f"runs_has_pt={any(run.dir.rglob('*.pt'))}")
-        print(f"phase1_untouched={_PHASE1_CKPT}")
+        print(f"has_best_pt={saver.best_path.is_file()}")

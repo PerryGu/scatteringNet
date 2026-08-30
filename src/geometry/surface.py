@@ -18,6 +18,11 @@ PointsArray = NDArray[np.float32]
 _ENVELOPE_CACHE: dict[tuple[str, int, int], PointsArray] = {}
 
 
+def clear_envelope_cache() -> None:
+    """Drop cached world-space envelopes (tests / long-lived notebooks)."""
+    _ENVELOPE_CACHE.clear()
+
+
 def sample_surface_points(
     vertices: np.ndarray,
     faces: np.ndarray,

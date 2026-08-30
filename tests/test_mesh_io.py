@@ -14,7 +14,8 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from geometry.mesh_io import load_obj_triangles
+from geometry.mesh_io import _TRIANGLE_CACHE, clear_triangle_cache, load_obj_triangles
+from geometry import clear_geometry_caches
 
 
 def _write_box_obj(folder: Path) -> Path:
@@ -39,6 +40,19 @@ class MeshIoTests(unittest.TestCase):
     def test_missing_obj_raises(self) -> None:
         with self.assertRaises(FileNotFoundError):
             load_obj_triangles(Path("this_mesh_does_not_exist.obj"), cache=False)
+
+    def test_cache_hit_then_clear(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            obj = _write_box_obj(Path(tmp))
+            clear_triangle_cache()
+            first_v, first_f = load_obj_triangles(obj, cache=True)
+            second_v, second_f = load_obj_triangles(obj, cache=True)
+            key = str(obj.resolve())
+            self.assertIn(key, _TRIANGLE_CACHE)
+            self.assertIs(first_v, second_v)
+            self.assertIs(first_f, second_f)
+            clear_geometry_caches()
+            self.assertNotIn(key, _TRIANGLE_CACHE)
 
     def test_rejects_non_obj_suffix(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

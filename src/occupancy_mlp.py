@@ -10,6 +10,24 @@ from torch import Tensor
 CHECKPOINT_KIND = "occupancy_mlp"
 
 
+def build_mlp(in_dim: int, hidden: int, depth: int) -> nn.Sequential:
+    """Linear→ReLU × ``depth`` then a 1-logit head. Shared by OccupancyMLP."""
+    if in_dim < 1:
+        raise ValueError(f"in_dim must be >= 1, got {in_dim}")
+    if hidden < 1:
+        raise ValueError(f"hidden must be >= 1, got {hidden}")
+    if depth < 1:
+        raise ValueError(f"depth must be >= 1, got {depth}")
+    layers: list[nn.Module] = []
+    dim = in_dim
+    for _ in range(depth):
+        layers.append(nn.Linear(dim, hidden))
+        layers.append(nn.ReLU(inplace=True))
+        dim = hidden
+    layers.append(nn.Linear(dim, 1))
+    return nn.Sequential(*layers)
+
+
 class OccupancyMLP(nn.Module):
     """
     Tiny fully-connected occupancy field.
@@ -42,24 +60,10 @@ class OccupancyMLP(nn.Module):
             Number of hidden Linear+ReLU blocks (must be ``>= 1``).
         """
         super().__init__()
-        if hidden < 1:
-            raise ValueError(f"hidden must be >= 1, got {hidden}")
-        if depth < 1:
-            raise ValueError(f"depth must be >= 1, got {depth}")
-
         self.hidden = hidden
         self.depth = depth
-
-        # ``depth`` hidden blocks: Linear → ReLU, then a linear head to 1 logit.
         # First Linear is 3 → H; remaining blocks are H → H.
-        layers: list[nn.Module] = []
-        in_dim = 3
-        for _ in range(depth):
-            layers.append(nn.Linear(in_dim, hidden))
-            layers.append(nn.ReLU(inplace=True))
-            in_dim = hidden
-        layers.append(nn.Linear(in_dim, 1))
-        self.net = nn.Sequential(*layers)
+        self.net = build_mlp(3, hidden, depth)
 
     def forward(self, xyz: Tensor) -> Tensor:
         """

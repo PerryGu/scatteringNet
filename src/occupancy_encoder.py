@@ -10,6 +10,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from occupancy_mlp import build_mlp
+
 # Distinct from OccupancyMLP so infer can tell the checkpoint apart.
 CHECKPOINT_KIND = "occupancy_encoder"
 
@@ -81,14 +83,7 @@ class OccupancyEncoder(nn.Module):
         self.latent_dim = latent_dim
         self.surface = SurfaceEncoder(latent_dim=latent_dim, hidden=hidden)
         # OccupancyMLP is 3 → H; here the first Linear is (3 + D) → H.
-        layers: list[nn.Module] = []
-        in_dim = 3 + latent_dim
-        for _ in range(depth):
-            layers.append(nn.Linear(in_dim, hidden))
-            layers.append(nn.ReLU(inplace=True))
-            in_dim = hidden
-        layers.append(nn.Linear(in_dim, 1))
-        self.head = nn.Sequential(*layers)
+        self.head = build_mlp(3 + latent_dim, hidden, depth)
 
     def encode_unique(self, envelope: Tensor, shape_id: Tensor) -> Tensor:
         """

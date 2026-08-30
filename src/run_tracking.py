@@ -27,10 +27,10 @@ from typing import Any, Mapping, Sequence
 import yaml
 from torch.utils.tensorboard import SummaryWriter
 
-from config import OccupancyConfig, as_data_relative, as_repo_relative, gpu_name
+from config import OccupancyConfig, as_data_relative, as_repo_relative, gpu_name, repo_root
 
 # Repo root: src/run_tracking.py → parents[1].
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = repo_root()
 _SAFE_NAME = re.compile(r"[^a-zA-Z0-9._-]+")
 _CATALOG_FILENAME = "catalog.txt"
 _DEFAULT_RUN_NAME = "run"
@@ -105,7 +105,8 @@ def occupancy_config_snapshot(
         "total": int(cfg.epochs),
         "checkpoint": None,
         "lr": float(cfg.lr),
-        "test_fraction": float(cfg.test_fraction),
+        "val_fraction": float(cfg.val_fraction),
+        "latent_dim": cfg.latent_dim,
         "npz_glob": Path(str(cfg.npz_glob)).as_posix(),
         "max_files_per_shape": cfg.max_files_per_shape,
         "run_name": str(cfg.run_name),

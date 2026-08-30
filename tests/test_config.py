@@ -39,7 +39,8 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertEqual(knobs["data_dir"], str(disk["data_dir"]).strip())
         self.assertEqual(knobs["epochs"], int(disk["epochs"]))
         self.assertAlmostEqual(knobs["lr"], float(disk["lr"]))
-        self.assertAlmostEqual(knobs["test_fraction"], float(disk["test_fraction"]))
+        self.assertAlmostEqual(knobs["val_fraction"], float(disk["val_fraction"]))
+        self.assertIsNone(knobs["latent_dim"])
         self.assertEqual(knobs["run_name"], str(disk["run_name"]).strip())
         self.assertEqual(knobs["checkpoint_metric"], str(disk["checkpoint_metric"]).strip())
         self.assertEqual(knobs["batch_size"], int(disk["batch_size"]))
@@ -63,7 +64,8 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn("gpu=", rendered)
         self.assertIn("epochs=", rendered)
         self.assertIn("lr=", rendered)
-        self.assertIn("test_fraction=", rendered)
+        self.assertIn("val_fraction=", rendered)
+        self.assertIn("latent_dim=", rendered)
         self.assertIn("npz_glob=", rendered)
         self.assertIn("run_name=", rendered)
         self.assertIn("checkpoint_metric=", rendered)
@@ -146,6 +148,31 @@ class OccupancyConfigTests(unittest.TestCase):
             )
             with self.assertRaises(ValueError):
                 load_yaml_knobs(yaml_path)
+
+    def test_legacy_test_fraction_and_latent_dim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            yaml_path = Path(tmp) / "config.yaml"
+            yaml_path.write_text(
+                "\n".join(
+                    [
+                        "hidden: 32",
+                        "depth: 2",
+                        "seed: 1",
+                        f'data_dir: "{Path(tmp).as_posix()}"',
+                        "epochs: 2",
+                        "lr: 0.001",
+                        "test_fraction: 0.25",
+                        "checkpoint_metric: test_acc",
+                        "latent_dim: 16",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            knobs = load_yaml_knobs(yaml_path)
+            self.assertAlmostEqual(knobs["val_fraction"], 0.25)
+            self.assertEqual(knobs["checkpoint_metric"], "val_acc")
+            self.assertEqual(knobs["latent_dim"], 16)
 
 
 if __name__ == "__main__":

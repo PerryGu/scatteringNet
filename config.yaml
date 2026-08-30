@@ -16,14 +16,16 @@ batch_size: 1024  # Points per optimizer step (GPU mini-batch)
 optimizer: adam   # adam | adamw | sgd
 
 # --- Split ---
-# Whole files: 80% train / 20% test. Test is held-out shapes, not leftover points.
-test_fraction: 0.20
+# Whole meshes: 80% train / 20% val of unique OBJs. All NPZs of one OBJ stay on one side.
+# This split selects best.pt (not a locked holdout). Phase 2 Step 11 adds that.
+val_fraction: 0.20
 
 # --- Geometry ---
 # none = xyz-only OccupancyMLP. surface = query + shell cloud (n_surface points).
 # Occupancy labels stay in the NPZ. Envelope points are sampled on the OBJ.
 shape_encoder: surface
 n_surface: 1024          # Envelope samples on the OBJ (shape vector)
+# latent_dim: 64         # OccupancyEncoder z width; omit to use hidden
 
 # --- Catalog ---
 # Glob is relative to data_dir. If npz_paths is set (non-empty), it replaces the glob.
@@ -41,4 +43,4 @@ run_name: extrude_nr1_surface
 # The run snapshot (runs/<id>/config.yaml) records:
 #   total      — planned epoch count (copied from epochs)
 #   checkpoint — epoch index stored in best.pt (runtime; not a project knob)
-checkpoint_metric: test_acc
+checkpoint_metric: val_acc

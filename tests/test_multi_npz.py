@@ -16,7 +16,8 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from data_npz import resolve_npz_catalog, shape_key
-from dataset import OccupancyMultiNpzDataset, make_dataloader
+from dataset import OccupancyMultiNpzDataset, OccupancyPointDataset, make_dataloader
+from normalize import compute_center_scale
 
 
 def _write_npz(
@@ -29,6 +30,19 @@ def _write_npz(
     points = rng.uniform(-1.0, 1.0, size=(n, 3)).astype(np.float32)
     labels = (rng.random(n) > 0.5).astype(np.uint8)
     payload: dict = {"points": points, "labels": labels}
+    if mesh_rel is not None:
+        payload["mesh_path"] = np.asarray(mesh_rel)
+    np.savez(path, **payload)
+
+
+def _write_points_npz(
+    path: Path,
+    points: np.ndarray,
+    *,
+    mesh_rel: str | None = None,
+) -> None:
+    labels = np.zeros((int(points.shape[0]),), dtype=np.uint8)
+    payload: dict = {"points": np.asarray(points, dtype=np.float32), "labels": labels}
     if mesh_rel is not None:
         payload["mesh_path"] = np.asarray(mesh_rel)
     np.savez(path, **payload)
@@ -104,6 +118,76 @@ class MultiNpzCatalogTests(unittest.TestCase):
             self.assertEqual(ds.n_meshes, 1)
             self.assertIsNotNone(ds.parts[0].mesh_path)
             self.assertEqual(ds.parts[0].faces.shape[1], 3)
+            self.assertEqual(ds.parts[0].shape_id, ds.parts[1].shape_id)
+
+    def test_shape_id_is_per_mesh_not_per_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trimesh.creation.box(extents=[2.0, 2.0, 2.0]).export(root / "box_a.obj")
+            trimesh.creation.box(extents=[2.0, 2.0, 2.0]).export(root / "box_b.obj")
+            a0 = root / "box_a__s0.npz"
+            a1 = root / "box_a__j.npz"
+            b0 = root / "box_b__s0.npz"
+            _write_npz(a0, n=5, seed=1, mesh_rel="box_a.obj")
+            _write_npz(a1, n=6, seed=2, mesh_rel="box_a.obj")
+            _write_npz(b0, n=7, seed=3, mesh_rel="box_b.obj")
+            ds = OccupancyMultiNpzDataset(
+                [a0, a1, b0],
+                data_dir=root,
+            )
+            self.assertEqual(ds.parts[0].shape_id, ds.parts[1].shape_id)
+            self.assertNotEqual(ds.parts[0].shape_id, ds.parts[2].shape_id)
+            self.assertEqual({part.shape_id for part in ds.parts}, {0, 1})
+
+    def test_shared_aabb_from_mesh_vertices(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trimesh.creation.box(extents=[2.0, 2.0, 2.0]).export(root / "box.obj")
+            tight = np.array(
+                [[0.1, 0.0, 0.0], [-0.1, 0.0, 0.0], [0.0, 0.1, 0.0], [0.0, -0.1, 0.0]],
+                dtype=np.float32,
+            )
+            wide = np.array(
+                [[0.8, 0.0, 0.0], [-0.8, 0.0, 0.0], [0.0, 0.8, 0.0], [0.0, -0.8, 0.0]],
+                dtype=np.float32,
+            )
+            a = root / "box__tight.npz"
+            b = root / "box__wide.npz"
+            _write_points_npz(a, tight, mesh_rel="box.obj")
+            _write_points_npz(b, wide, mesh_rel="box.obj")
+            alone_a = OccupancyPointDataset(a, data_dir=root)
+            alone_b = OccupancyPointDataset(b, data_dir=root)
+            self.assertNotAlmostEqual(float(alone_a.scale), float(alone_b.scale))
+            ds = OccupancyMultiNpzDataset([a, b], data_dir=root, n_surface=16)
+            expect_c, expect_s = compute_center_scale(ds.parts[0].vertices)
+            self.assertTrue(np.allclose(ds.parts[0].center, ds.parts[1].center))
+            self.assertAlmostEqual(float(ds.parts[0].scale), float(ds.parts[1].scale))
+            self.assertTrue(np.allclose(ds.parts[0].center, expect_c))
+            self.assertAlmostEqual(float(ds.parts[0].scale), float(expect_s))
+            self.assertIsNotNone(ds.parts[0].envelope)
+            self.assertIsNotNone(ds.parts[1].envelope)
+
+    def test_shared_aabb_union_without_mesh(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tight = np.array(
+                [[0.1, 0.0, 0.0], [-0.1, 0.0, 0.0], [0.0, 0.1, 0.0], [0.0, -0.1, 0.0]],
+                dtype=np.float32,
+            )
+            wide = np.array(
+                [[0.8, 0.0, 0.0], [-0.8, 0.0, 0.0], [0.0, 0.8, 0.0], [0.0, -0.8, 0.0]],
+                dtype=np.float32,
+            )
+            a = root / "sphere__tight.npz"
+            b = root / "sphere__wide.npz"
+            _write_points_npz(a, tight)
+            _write_points_npz(b, wide)
+            ds = OccupancyMultiNpzDataset([a, b])
+            expect_c, expect_s = compute_center_scale(np.concatenate([tight, wide], axis=0))
+            self.assertTrue(np.allclose(ds.parts[0].center, ds.parts[1].center))
+            self.assertAlmostEqual(float(ds.parts[0].scale), float(ds.parts[1].scale))
+            self.assertTrue(np.allclose(ds.parts[0].center, expect_c))
+            self.assertAlmostEqual(float(ds.parts[0].scale), float(expect_s))
 
     def test_empty_catalog_raises(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

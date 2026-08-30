@@ -10,6 +10,8 @@ We might get good enough results without moving on. Some layers may not help at 
 
 This is still **Phase 2**. There is no Phase 3 in this repo. The numbered items below are *steps inside Phase 2*.
 
+**Current rung (2026-08-30):** Steps **1–8 are done**. Next planned rung is **Step 9** (face tokens), or stop if the envelope result is enough. Hygiene already holds out whole meshes as **val** (selection split for `best.pt`). That is not Step 11. Step 11 is still a locked / new-family test. Infer is `src/infer_multi_npz.py` (do not restore `infer_one_npz.py`).
+
 ---
 
 ## How to read this plan
@@ -30,19 +32,19 @@ Progress is visible in:
 
 ## The eleven steps at a glance
 
-| Step | Theme | What we learn |
-|---|---|---|
-| 1 | Maya scatter scripts live in *this* repo | We can generate source OBJs without depending on the prototype tree |
-| 2 | NPZ inside/outside sampling | We can turn those OBJs into occupancy files (points, labels, mesh path) at a density we choose, then optionally nudge each point by a random range (0 / low / high) **before** labeling |
-| 3 | Read many NPZs | The dataset can load a whole set of occupancy files, not only one |
-| 4 | Experiment *logs* | A `runs/` folder holds config + JSON (+ TensorBoard). No `.pt` files here |
-| 5 | Checkpoints | **`best.pt`** lives under `models/<run_id>/`, linked by the same run id |
-| 6 | First occupancy train (Phase 1 MLP, many NPZs) | Multi-file xyz training uses the reader, the logs, and the checkpoint saver |
-| 7 | Join NPZ to OBJ | Each occupancy file can load the mesh it came from |
-| 8 | Sample the surface envelope | Do dense points on the shell help occupancy *before* we use faces? |
-| 9 | Describe the mesh as triangles | Vertices + normals become a geometry language the net can consume later |
-| 10 | Encode faces and fuse with xyz | The occupancy head finally looks at mesh structure |
-| 11 | Hold out entire shapes | The real test: a mesh the model has never trained as an identity |
+| Step | Theme | Status | What we learn |
+|---|---|---|---|
+| 1 | Maya scatter scripts live in *this* repo | done | We can generate source OBJs without depending on the prototype tree |
+| 2 | NPZ inside/outside sampling | done | We can turn those OBJs into occupancy files (points, labels, mesh path) at a density we choose, then optionally nudge each point by a random range (0 / low / high) **before** labeling |
+| 3 | Read many NPZs | done | The dataset can load a whole set of occupancy files, not only one |
+| 4 | Experiment *logs* | done | A `runs/` folder holds config + JSON (+ TensorBoard). No `.pt` files here |
+| 5 | Checkpoints | done | **`best.pt`** lives under `models/<run_id>/`, linked by the same run id |
+| 6 | First occupancy train (Phase 1 MLP, many NPZs) | done | Multi-file xyz training uses the reader, the logs, and the checkpoint saver |
+| 7 | Join NPZ to OBJ | done | Each occupancy file can load the mesh it came from |
+| 8 | Sample the surface envelope | done | Do dense points on the shell help occupancy *before* we use faces? |
+| 9 | Describe the mesh as triangles | next | Vertices + normals become a geometry language the net can consume later |
+| 10 | Encode faces and fuse with xyz | pending | The occupancy head finally looks at mesh structure |
+| 11 | Hold out entire shapes | pending | Locked / new-family test: a mesh that was never a training identity (not the hygiene val split) |
 
 The path in one line:
 
@@ -185,6 +187,10 @@ We still are not claiming “unseen OBJ.” We are claiming: xyz + mesh faces tr
 
 ## Step 11 — Hold out whole shapes
 
+Catalog train already holds out **unique OBJs** as val (hygiene, 2026-08-30). That split is scored every epoch to pick `best.pt`. Do not redo “add a mesh split” here.
+
+This step is the **locked** test: a mesh (or a new family) that was **never** a training identity, not used to select the checkpoint every epoch.
+
 Randomly hiding some *points* from a cone you already trained on can look like 99% accuracy and prove nothing. The model already knows that occupancy field.
 
 The real test: train on some meshes, evaluate on a mesh that was **never** a training identity (for example train sphere and cube, hold out cone). Report accuracy,
@@ -222,4 +228,4 @@ torus holes, and stacked parts will remain hard even if holdout looks promising.
 
 ## Next action
 
-**Steps 1–2 are done.** Approve or edit **Step 3** (multi-NPZ reader, no training) before any occupancy train loop is written.
+**Steps 1–8 are done.** Approve or edit **Step 9** (face tokens), or stop here if the envelope result is enough. The Step 8 catalog write-up is in [`training_log.md`](training_log.md) (`extrude_nr1_surface`).

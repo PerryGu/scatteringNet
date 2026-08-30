@@ -2,12 +2,14 @@
 
 Each file keeps its own NPZ occupancy queries. Envelope points are
 sampled on the OBJ when ``shape_encoder`` is ``surface``. Mini-batches
-never mix two files. ``test_fraction`` of files is the test set.
+never mix two files. ``val_fraction`` of **meshes** is the val set
+(all NPZs of one OBJ stay on one side; used to select ``best.pt``).
 Logs in ``runs/<id>/``, weights in ``models/<id>/best.pt``.
 """
 
 from __future__ import annotations
 
+import random
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,17 +19,22 @@ from typing import Sequence
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-
 from checkpointing import Checkpointer
-from config import OccupancyConfig, as_data_relative, gpu_name, load_config
+from config import (
+    OccupancyConfig,
+    as_data_relative,
+    encoder_latent_dim,
+    gpu_name,
+    load_config,
+)
 from dataset import (
     OccupancyMultiNpzDataset,
     OccupancyPointDataset,
     make_dataloader,
-    split_train_test_files,
+    mesh_split_key,
+    split_train_test_by_mesh,
 )
-from metrics import occupancy_metrics
+from metrics import occupancy_counts, occupancy_metrics_from_counts
 from occupancy_encoder import OccupancyEncoder
 from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND
 from occupancy_mlp import OccupancyMLP
@@ -38,7 +45,8 @@ OccupancyModel = OccupancyMLP | OccupancyEncoder
 
 
 def seed_everything(seed: int) -> None:
-    """Make the train run repeatable (CPU and CUDA RNGs)."""
+    """Make the train run repeatable (Python, NumPy, CPU and CUDA RNGs)."""
+    random.seed(seed)
     torch.manual_seed(seed)
     np.random.seed(seed)
     if torch.cuda.is_available():
@@ -71,55 +79,34 @@ def _eval_parts(
     device: torch.device,
     batch_size: int,
 ) -> tuple[float, float, float, float, float]:
-    """Mean metrics over **files** (each shape scored on its own points)."""
+    """Point micro-average over every query in ``parts`` (no grad)."""
     if not parts:
-        raise ValueError("test split is empty")
-    totals = [0.0, 0.0, 0.0, 0.0, 0.0]
-    for part in parts:
-        loader = make_dataloader(part, batch_size=batch_size, shuffle=False)
-        scores = _eval_loader(model, loader, device)
-        for i, value in enumerate(scores):
-            totals[i] += value
-    n = float(len(parts))
-    return (
-        totals[0] / n,
-        totals[1] / n,
-        totals[2] / n,
-        totals[3] / n,
-        totals[4] / n,
-    )
-
-
-def _eval_loader(
-    model: OccupancyModel,
-    loader: DataLoader,
-    device: torch.device,
-) -> tuple[float, float, float, float, float]:
-    """Mean occupancy metrics over ``loader`` (no grad)."""
+        raise ValueError("val split is empty")
+    pin = device.type == "cuda"
+    tp = fp = fn = correct = n = 0.0
     model.eval()
-    running_acc = 0.0
-    running_prec = 0.0
-    running_rec = 0.0
-    running_iou = 0.0
-    running_f1 = 0.0
-    n_batches = 0
     with torch.no_grad():
-        for batch in loader:
-            logits, y = _forward_batch(model, batch, device)
-            scores = occupancy_metrics(logits, y)
-            running_acc += scores.accuracy
-            running_prec += scores.inside_precision
-            running_rec += scores.inside_recall
-            running_iou += scores.inside_iou
-            running_f1 += scores.inside_f1
-            n_batches += 1
-    denom = max(n_batches, 1)
+        for part in parts:
+            loader = make_dataloader(
+                part, batch_size=batch_size, shuffle=False, pin_memory=pin
+            )
+            for batch in loader:
+                logits, y = _forward_batch(model, batch, device)
+                c_tp, c_fp, c_fn, c_ok, c_n = occupancy_counts(logits, y)
+                tp += c_tp
+                fp += c_fp
+                fn += c_fn
+                correct += c_ok
+                n += c_n
+    scores = occupancy_metrics_from_counts(
+        tp=tp, fp=fp, fn=fn, correct=correct, n=n
+    )
     return (
-        running_acc / denom,
-        running_prec / denom,
-        running_rec / denom,
-        running_iou / denom,
-        running_f1 / denom,
+        scores.accuracy,
+        scores.inside_precision,
+        scores.inside_recall,
+        scores.inside_iou,
+        scores.inside_f1,
     )
 
 
@@ -174,10 +161,10 @@ class TrainMultiResult:
     best_path: Path
     n_files: int
     n_train: int
-    n_test: int
+    n_val: int
     losses: list[float]
     accuracies: list[float]
-    test_accuracies: list[float]
+    val_accuracies: list[float]
     best_epoch: int
     best_metric: float
 
@@ -210,6 +197,7 @@ def _checkpoint_payload(
         "depth": int(cfg.depth),
         "shape_encoder": str(cfg.shape_encoder),
         "n_surface": int(cfg.n_surface),
+        "latent_dim": encoder_latent_dim(cfg),
         "npz_paths": [as_data_relative(p, cfg.data_dir) for p in dataset.npz_paths],
         "parts": parts,
     }
@@ -218,18 +206,18 @@ def _checkpoint_payload(
 def _selection_score(
     metric_name: str,
     *,
-    test_acc: float,
-    test_iou: float,
+    val_acc: float,
+    val_iou: float,
 ) -> float:
     """Map YAML ``checkpoint_metric`` to the scalar Checkpointer compares."""
     name = metric_name.strip()
-    if name in ("test_acc", "val_acc"):
-        return float(test_acc)
-    if name in ("test_iou", "val_iou"):
-        return float(test_iou)
+    if name in ("val_acc", "test_acc"):
+        return float(val_acc)
+    if name in ("val_iou", "test_iou"):
+        return float(val_iou)
     raise ValueError(
         f"unsupported checkpoint_metric {metric_name!r} "
-        "(train_multi_npz logs test_acc and test_iou)"
+        "(train_multi_npz logs val_acc and val_iou)"
     )
 
 
@@ -288,21 +276,25 @@ def train_multi_npz(
             seed=cfg.seed,
         )
 
-    if len(dataset.parts) < 2:
+    # File-level randperm leaks: lattice + jitter of one OBJ can sit on both sides.
+    split_keys = [mesh_split_key(part) for part in dataset.parts]
+    n_split_meshes = len(set(split_keys))
+    if n_split_meshes < 2:
         raise ValueError(
-            f"need at least 2 files to hold out whole shapes, got {len(dataset.parts)}"
+            f"need at least 2 distinct meshes to hold out a mesh, got {n_split_meshes}"
         )
-    train_idx, test_idx = split_train_test_files(
-        len(dataset.parts), cfg.test_fraction, cfg.seed
+    train_idx, val_idx = split_train_test_by_mesh(
+        split_keys, cfg.val_fraction, cfg.seed
     )
     train_parts = [dataset.parts[int(i)] for i in train_idx.tolist()]
-    test_parts = [dataset.parts[int(i)] for i in test_idx.tolist()]
+    val_parts = [dataset.parts[int(i)] for i in val_idx.tolist()]
+    pin_memory = cfg.device.type == "cuda"
 
     if _uses_surface(cfg):
         model: OccupancyModel = OccupancyEncoder(
             hidden=cfg.hidden,
             depth=cfg.depth,
-            latent_dim=cfg.hidden,
+            latent_dim=encoder_latent_dim(cfg),
         ).to(cfg.device)
     else:
         model = OccupancyMLP(hidden=cfg.hidden, depth=cfg.depth).to(cfg.device)
@@ -310,25 +302,29 @@ def train_multi_npz(
     optimizer = _make_optimizer(cfg.optimizer, model, lr)
 
     n_train_files = len(train_parts)
-    n_test_files = len(test_parts)
+    n_val_files = len(val_parts)
+    n_train_meshes = len({mesh_split_key(part) for part in train_parts})
+    n_val_meshes = len({mesh_split_key(part) for part in val_parts})
     n_train = sum(len(part) for part in train_parts)
-    n_test = sum(len(part) for part in test_parts)
+    n_val = sum(len(part) for part in val_parts)
     print(f"files={len(dataset.parts)} meshes={dataset.n_meshes}")
     _print_mesh_join(dataset, cfg.data_dir)
     print(
-        f"split=shape train_files={n_train_files} test_files={n_test_files} "
-        f"N={dataset.n_points} n_train={n_train} n_test={n_test} "
-        f"test_fraction={cfg.test_fraction} device={cfg.device} "
+        f"split=mesh train_files={n_train_files} val_files={n_val_files} "
+        f"train_meshes={n_train_meshes} val_meshes={n_val_meshes} "
+        f"N={dataset.n_points} n_train={n_train} n_val={n_val} "
+        f"val_fraction={cfg.val_fraction} device={cfg.device} "
         f"gpu={gpu_name(cfg.device)} "
         f"hidden={cfg.hidden} depth={cfg.depth} "
-        f"shape_encoder={cfg.shape_encoder} n_surface={cfg.n_surface}"
+        f"shape_encoder={cfg.shape_encoder} n_surface={cfg.n_surface} "
+        f"latent_dim={encoder_latent_dim(cfg)}"
     )
     print(
         f"epochs={n_epochs} batch_size={cfg.batch_size} "
         f"optimizer={cfg.optimizer} lr={lr}"
     )
-    for part in test_parts:
-        print(f"  test_file={part.npz_path.name} N={len(part)}")
+    for part in val_parts:
+        print(f"  val_file={part.npz_path.name} N={len(part)}")
 
     name = run_name if run_name is not None else cfg.run_name
     with start_run(name, root=root, t0=t0, clock_start=clock_start) as run:
@@ -342,10 +338,15 @@ def train_multi_npz(
                 "n_meshes": dataset.n_meshes,
                 "n_points": dataset.n_points,
                 "n_train_files": n_train_files,
-                "n_test_files": n_test_files,
+                "n_val_files": n_val_files,
+                "n_test_files": n_val_files,
+                "n_train_meshes": n_train_meshes,
+                "n_val_meshes": n_val_meshes,
+                "n_test_meshes": n_val_meshes,
                 "n_train": n_train,
-                "n_test": n_test,
-                "split": "shape",
+                "n_val": n_val,
+                "n_test": n_val,
+                "split": "mesh",
             }
         )
         saver = Checkpointer(
@@ -356,20 +357,24 @@ def train_multi_npz(
         )
         losses: list[float] = []
         accuracies: list[float] = []
-        test_accuracies: list[float] = []
+        val_accuracies: list[float] = []
         last_result = None
         for epoch in range(1, n_epochs + 1):
             t0 = time.perf_counter()
             model.train()
             running_loss = 0.0
-            running_acc = 0.0
+            train_correct = 0.0
+            train_n = 0.0
             n_batches = 0
             # Shuffle file order each epoch; points stay inside their file.
             order = torch.randperm(len(train_parts)).tolist()
             for part_i in order:
                 part = train_parts[part_i]
                 loader = make_dataloader(
-                    part, batch_size=cfg.batch_size, shuffle=True
+                    part,
+                    batch_size=cfg.batch_size,
+                    shuffle=True,
+                    pin_memory=pin_memory,
                 )
                 for batch in loader:
                     logits, y = _forward_batch(model, batch, cfg.device)
@@ -378,19 +383,21 @@ def train_multi_npz(
                     loss.backward()
                     optimizer.step()
                     running_loss += float(loss.item())
-                    running_acc += occupancy_metrics(logits.detach(), y).accuracy
+                    _tp, _fp, _fn, ok, n_pts = occupancy_counts(logits.detach(), y)
+                    train_correct += ok
+                    train_n += n_pts
                     n_batches += 1
             mean_loss = running_loss / max(n_batches, 1)
-            mean_acc = running_acc / max(n_batches, 1)
-            test_acc, _prec, _rec, test_iou, test_f1 = _eval_parts(
-                model, test_parts, cfg.device, cfg.batch_size
+            mean_acc = train_correct / max(train_n, 1.0)
+            val_acc, _prec, _rec, val_iou, val_f1 = _eval_parts(
+                model, val_parts, cfg.device, cfg.batch_size
             )
             wall = time.perf_counter() - t0
             losses.append(mean_loss)
             accuracies.append(mean_acc)
-            test_accuracies.append(test_acc)
+            val_accuracies.append(val_acc)
             score = _selection_score(
-                cfg.checkpoint_metric, test_acc=test_acc, test_iou=test_iou
+                cfg.checkpoint_metric, val_acc=val_acc, val_iou=val_iou
             )
             last_result = saver.save(
                 _checkpoint_payload(model, dataset, cfg),
@@ -401,18 +408,20 @@ def train_multi_npz(
                 epoch=epoch,
                 loss=mean_loss,
                 train_acc=mean_acc,
-                val_acc=test_acc,
+                val_acc=val_acc,
                 wall_seconds=wall,
                 best_epoch=last_result.best_epoch,
                 best_metric=last_result.best_metric,
-                test_acc=test_acc,
-                test_iou=test_iou,
-                test_f1=test_f1,
+                val_iou=val_iou,
+                val_f1=val_f1,
+                test_acc=val_acc,
+                test_iou=val_iou,
+                test_f1=val_f1,
             )
             print(
                 f"epoch {epoch:03d}  loss={mean_loss:.6f}  "
-                f"train_acc={mean_acc:.4f}  test_acc={test_acc:.4f}  "
-                f"test_iou={test_iou:.4f}  test_f1={test_f1:.4f}  "
+                f"train_acc={mean_acc:.4f}  val_acc={val_acc:.4f}  "
+                f"val_iou={val_iou:.4f}  val_f1={val_f1:.4f}  "
                 f"best_epoch={last_result.best_epoch}  "
                 f"best={last_result.best_metric:.4f}"
             )
@@ -430,10 +439,10 @@ def train_multi_npz(
             best_path=saver.best_path,
             n_files=len(dataset.npz_paths),
             n_train=n_train,
-            n_test=n_test,
+            n_val=n_val,
             losses=losses,
             accuracies=accuracies,
-            test_accuracies=test_accuracies,
+            val_accuracies=val_accuracies,
             best_epoch=last_result.best_epoch,
             best_metric=last_result.best_metric,
         )

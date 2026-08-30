@@ -5,6 +5,30 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
 
+## 2026-08-30 14:00 — Work plans: current rung is Step 9 or stop
+
+Updated Phase 2 headers: Steps 1–8 done; next is face tokens or stop. Hygiene mesh-identity val is not Step 11. Phase 1 plans now point train write-ups at ``training_log.md``.
+
+## 2026-08-30 14:00 — Training log: split and val wording
+
+Clarified ``docs/training_log.md`` only: headings vs run id, historical ``test_*`` = today's val, file split is not a mesh holdout. Numbers unchanged.
+
+## 2026-08-30 14:00 — Hygiene 4–14: val names, infer, shared helpers, encoder extract
+
+Selection split is named **val** (``val_fraction`` / ``val_acc``; legacy ``test_*`` still accepted). ``src/infer_multi_npz.py`` reloads ``best.pt``. ``build_mlp``, shared trimesh/path helpers, envelope collate, point micro-average metrics, cache clear, YAML ``latent_dim``, ``random.seed`` + ``pin_memory``, and ``src/encoder_dataset.py`` land here. Conservative ``pyproject.toml`` keeps flat ``src`` imports.
+
+## 2026-08-30 13:00 — Hygiene 3: shared AABB per mesh
+
+Catalog parts that share a mesh reuse one ``center`` / ``scale`` (OBJ vertices when joined, else the union of that key's query points). Lattice and jitter no longer live in different frames.
+
+## 2026-08-30 13:00 — Hygiene 2: shape_id from mesh identity
+
+Catalog ``shape_id`` is a stable integer per ``mesh_split_key`` (sorted unique OBJs), not the file index. Two NPZs of one mesh share an id so encode-once is per OBJ.
+
+## 2026-08-30 13:00 — Hygiene 1: mesh-identity train/test split
+
+``test_fraction`` now holds out unique OBJs, not NPZ files. ``mesh_split_key`` / ``split_train_test_by_mesh`` keep every file of one mesh on the same side. Snapshot uses ``split: mesh`` plus ``n_train_meshes`` / ``n_test_meshes``.
+
 ## 2026-08-29 18:00 — Train/test 80/20 file split
 
 Catalog train holds out whole files as a **test** set (``test_fraction: 0.20``). Terminal and snapshot use ``test_acc`` / ``n_test_files``.

@@ -30,7 +30,7 @@ def _cpu_cfg() -> OccupancyConfig:
         seed=1,
         epochs=3,
         lr=1e-3,
-        test_fraction=0.2,
+        val_fraction=0.2,
         run_name="dummy",
     )
 
@@ -127,9 +127,11 @@ class RunTrackingTests(unittest.TestCase):
                 seed=1,
                 epochs=3,
                 lr=1e-3,
-                test_fraction=0.2,
+                val_fraction=0.2,
             )
             snap = occupancy_config_snapshot(cfg)
+            self.assertAlmostEqual(float(snap["val_fraction"]), 0.2)
+            self.assertIsNone(snap["latent_dim"])
             self.assertNotIn("catalog_npz_paths", snap)
             self.assertNotIn("checkpoint_path", snap)
             self.assertNotIn("sample_npz", snap)

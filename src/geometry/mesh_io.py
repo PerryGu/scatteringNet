@@ -7,11 +7,11 @@ It does **not** sample the envelope (Step 8) or build face tokens (Step 9).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
-
 import numpy as np
 import trimesh
 from numpy.typing import NDArray
+
+from geometry.trimesh_util import as_trimesh
 
 VerticesArray = NDArray[np.float32]
 FacesArray = NDArray[np.int32]
@@ -21,16 +21,9 @@ FacesArray = NDArray[np.int32]
 _TRIANGLE_CACHE: dict[str, tuple[VerticesArray, FacesArray]] = {}
 
 
-def _as_trimesh(mesh: Any) -> trimesh.Trimesh:
-    """Flatten a Trimesh or a Scene of triangle meshes to one Trimesh."""
-    if isinstance(mesh, trimesh.Scene):
-        geoms = [g for g in mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
-        if not geoms:
-            raise ValueError("Scene contains no triangle meshes")
-        mesh = trimesh.util.concatenate(geoms)
-    if not isinstance(mesh, trimesh.Trimesh):
-        raise TypeError(f"Unsupported mesh type: {type(mesh)!r}")
-    return mesh
+def clear_triangle_cache() -> None:
+    """Drop cached OBJ arrays (tests / long-lived notebooks)."""
+    _TRIANGLE_CACHE.clear()
 
 
 def load_obj_triangles(
@@ -67,7 +60,7 @@ def load_obj_triangles(
 
     # process=False keeps the authored vertices; we only need the join.
     loaded = trimesh.load(obj_path, force=None, process=False)
-    mesh = _as_trimesh(loaded)
+    mesh = as_trimesh(loaded)
     vertices = np.asarray(mesh.vertices, dtype=np.float32)
     faces = np.asarray(mesh.faces, dtype=np.int32)
     if vertices.ndim != 2 or vertices.shape[1] != 3:

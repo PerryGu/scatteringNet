@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scatteringnet"
+version = "0.1.0"
+description = "3D occupancy training for ScatteringNet"
+requires-python = ">=3.10"
+
+# Flat src modules stay importable as `from config import …` after
+# `pip install -e .`. Existing test sys.path injection is unchanged.
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = [
+    "checkpointing",
+    "config",
+    "data_npz",
+    "dataset",
+    "encoder_dataset",
+    "infer_multi_npz",
+    "metrics",
+    "normalize",
+    "occupancy_encoder",
+    "occupancy_mlp",
+    "run_tracking",
+    "train_multi_npz",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

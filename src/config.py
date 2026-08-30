@@ -1,9 +1,9 @@
-"""Hybrid config loader for the v2 occupancy MLP MVP.
+"""Hybrid config loader for catalog occupancy training.
 
 Static experiment knobs live in ``config.yaml``. ``device`` is resolved
 here from CUDA availability. Training knobs (epochs, lr, batch_size,
-optimizer, catalog) are YAML-owned so ``train_multi_npz`` does not
-hardcode them.
+optimizer, catalog, val split) are YAML-owned so ``train_multi_npz``
+does not hardcode them.
 
 This module does not read ``.env`` and does not open NPZ files.
 """
@@ -28,7 +28,6 @@ _REQUIRED_YAML_KEYS = (
     "data_dir",
     "epochs",
     "lr",
-    "test_fraction",
 )
 
 
@@ -41,7 +40,8 @@ class YamlKnobs(TypedDict):
     data_dir: str
     epochs: int
     lr: float
-    test_fraction: float
+    val_fraction: float
+    latent_dim: int | None
     npz_glob: str
     npz_paths: tuple[str, ...]
     max_files_per_shape: int | None
@@ -68,6 +68,11 @@ def get_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+
+def repo_root() -> Path:
+    """Git / project root (folder that contains ``src/`` and ``config.yaml``)."""
+    return _REPO_ROOT
 
 
 def gpu_name(device: torch.device | None = None) -> str | None:
@@ -145,11 +150,34 @@ def _as_run_name(value: Any) -> str:
     return text if text else "run"
 
 
+_CHECKPOINT_METRIC_ALIASES = {
+    "test_acc": "val_acc",
+    "test_iou": "val_iou",
+}
+
+
 def _as_checkpoint_metric(value: Any) -> str:
     """Name of the scalar used to decide ``best.pt`` (strict improve)."""
     if value is None or (isinstance(value, str) and not value.strip()):
         raise ValueError("checkpoint_metric must be a non-empty string")
-    return str(value).strip()
+    name = str(value).strip()
+    return _CHECKPOINT_METRIC_ALIASES.get(name, name)
+
+
+def _as_val_fraction(raw: Mapping[str, Any]) -> float:
+    """Prefer ``val_fraction``; accept legacy ``test_fraction``."""
+    if "val_fraction" in raw:
+        return _as_open_unit_interval("val_fraction", raw["val_fraction"])
+    if "test_fraction" in raw:
+        return _as_open_unit_interval("test_fraction", raw["test_fraction"])
+    raise ValueError("Config YAML missing keys: val_fraction")
+
+
+def _as_optional_latent_dim(raw: Mapping[str, Any]) -> int | None:
+    """YAML omit / null → use ``hidden`` at train time."""
+    if "latent_dim" not in raw or raw["latent_dim"] is None:
+        return None
+    return _as_positive_int("latent_dim", raw["latent_dim"])
 
 
 # Names accepted in config.yaml ``optimizer``. Used by train_multi_npz.
@@ -266,7 +294,8 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
         "data_dir": _as_data_dir_string(raw["data_dir"]),
         "epochs": _as_positive_int("epochs", raw["epochs"]),
         "lr": _as_positive_float("lr", raw["lr"]),
-        "test_fraction": _as_open_unit_interval("test_fraction", raw["test_fraction"]),
+        "val_fraction": _as_val_fraction(raw),
+        "latent_dim": _as_optional_latent_dim(raw),
         "npz_glob": (
             _as_nonempty_path_string("npz_glob", raw["npz_glob"])
             if "npz_glob" in raw
@@ -284,7 +313,7 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
         "checkpoint_metric": (
             _as_checkpoint_metric(raw["checkpoint_metric"])
             if "checkpoint_metric" in raw
-            else "test_acc"
+            else "val_acc"
         ),
         "batch_size": (
             _as_positive_int("batch_size", raw["batch_size"])
@@ -333,7 +362,7 @@ def require_data_dir(data_dir: Path, *, yaml_path: Path) -> None:
 
 @dataclass(frozen=True)
 class OccupancyConfig:
-    """Resolved MVP settings from YAML plus detected device."""
+    """Resolved experiment settings from YAML plus detected device."""
 
     data_dir: Path
     device: torch.device
@@ -342,8 +371,8 @@ class OccupancyConfig:
     seed: int
     epochs: int
     lr: float
-    # Fraction of catalog **files** held out as the test set (not points).
-    test_fraction: float
+    # Fraction of catalog **meshes** held out as val (selection split, not a locked test).
+    val_fraction: float
     # Catalog knobs (optional in YAML; omitted keys keep these defaults).
     npz_glob: str = "exports/dataset/*.npz"
     npz_paths: tuple[str, ...] = ()
@@ -351,7 +380,9 @@ class OccupancyConfig:
     # Suffix for runs/<timestamp>_<name>/ (device stays runtime-only).
     run_name: str = "run"
     # Which logged scalar selects best.pt (strict improve).
-    checkpoint_metric: str = "test_acc"
+    checkpoint_metric: str = "val_acc"
+    # Encoder latent width; None → use ``hidden`` at train / infer time.
+    latent_dim: int | None = None
     # Mini-batch size and optimizer family (train_multi_npz).
     batch_size: int = 1024
     optimizer: str = "adam"
@@ -398,7 +429,8 @@ def load_config(
         seed=knobs["seed"],
         epochs=knobs["epochs"],
         lr=knobs["lr"],
-        test_fraction=knobs["test_fraction"],
+        val_fraction=knobs["val_fraction"],
+        latent_dim=knobs["latent_dim"],
         npz_glob=knobs["npz_glob"],
         npz_paths=knobs["npz_paths"],
         max_files_per_shape=knobs["max_files_per_shape"],
@@ -409,6 +441,13 @@ def load_config(
         n_surface=knobs["n_surface"],
         shape_encoder=knobs["shape_encoder"],
     )
+
+
+def encoder_latent_dim(cfg: OccupancyConfig) -> int:
+    """OccupancyEncoder ``z`` width: YAML ``latent_dim`` or ``hidden``."""
+    if cfg.latent_dim is None:
+        return int(cfg.hidden)
+    return int(cfg.latent_dim)
 
 
 def format_config(cfg: OccupancyConfig) -> str:
@@ -435,7 +474,8 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  seed={cfg.seed}\n"
         f"  epochs={cfg.epochs}\n"
         f"  lr={cfg.lr}\n"
-        f"  test_fraction={cfg.test_fraction}\n"
+        f"  val_fraction={cfg.val_fraction}\n"
+        f"  latent_dim={cfg.latent_dim}\n"
         f"  npz_glob={cfg.npz_glob}\n"
         f"  npz_paths={list(cfg.npz_paths)}\n"
         f"  max_files_per_shape={cfg.max_files_per_shape}\n"

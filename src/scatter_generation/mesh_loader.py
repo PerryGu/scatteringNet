@@ -11,6 +11,8 @@ import open3d as o3d
 import trimesh
 import yaml
 
+from geometry.trimesh_util import as_trimesh
+
 MESH_EXTENSIONS: frozenset[str] = frozenset(
     {".obj", ".ply", ".stl", ".glb", ".gltf", ".off", ".dae"}
 )
@@ -20,12 +22,11 @@ def project_root() -> Path:
     """
     Resolve the repository root.
 
-    Returns
-    -------
-    Path
-        Folder that contains ``src/`` (``mesh_loader.py`` → parents[2]).
+    Same folder as ``config.repo_root`` (this file → parents[2]).
     """
-    return Path(__file__).resolve().parents[2]
+    from config import repo_root
+
+    return repo_root()
 
 
 def get_data_dir() -> Path:
@@ -64,16 +65,15 @@ def to_data_relative(path: str | Path, *, data_dir: Path | None = None) -> str:
         Path relative to ``data_dir``, or an absolute POSIX path if ``path``
         is outside that folder.
     """
+    from config import as_data_relative
+
     root = (data_dir if data_dir is not None else get_data_dir()).resolve()
     resolved = Path(path).expanduser()
     if not resolved.is_absolute():
         resolved = (root / resolved).resolve()
     else:
         resolved = resolved.resolve()
-    try:
-        return resolved.relative_to(root).as_posix()
-    except ValueError:
-        return resolved.as_posix()
+    return as_data_relative(resolved, root)
 
 
 def trimesh_to_open3d(mesh: trimesh.Trimesh) -> o3d.geometry.TriangleMesh:
@@ -121,37 +121,6 @@ class MeshInfo:
     num_faces: int
 
 
-def _as_trimesh(mesh: Any) -> trimesh.Trimesh:
-    """
-    Normalize trimesh load results to a single triangle mesh.
-
-    Parameters
-    ----------
-    mesh:
-        A ``Trimesh`` or a ``Scene`` containing triangle geometries.
-
-    Returns
-    -------
-    trimesh.Trimesh
-        One concatenated triangle mesh.
-
-    Raises
-    ------
-    ValueError
-        If a scene contains no triangle meshes.
-    TypeError
-        If ``mesh`` is neither a ``Trimesh`` nor a usable ``Scene``.
-    """
-    if isinstance(mesh, trimesh.Scene):
-        geoms = [g for g in mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
-        if not geoms:
-            raise ValueError("Scene contains no triangle meshes")
-        mesh = trimesh.util.concatenate(geoms)
-    if not isinstance(mesh, trimesh.Trimesh):
-        raise TypeError(f"Unsupported mesh type: {type(mesh)!r}")
-    return mesh
-
-
 def load_mesh(path: str | Path, *, process: bool = False) -> tuple[trimesh.Trimesh, MeshInfo]:
     """
     Load one mesh file.
@@ -187,7 +156,7 @@ def load_mesh(path: str | Path, *, process: bool = False) -> tuple[trimesh.Trime
             f"Supported: {', '.join(sorted(MESH_EXTENSIONS))}"
         )
     loaded = trimesh.load(path, force=None, process=process)
-    mesh = _as_trimesh(loaded)
+    mesh = as_trimesh(loaded)
     info = MeshInfo(
         path=str(path.resolve()),
         name=path.name,

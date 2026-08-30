@@ -12,7 +12,12 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from metrics import accuracy_from_logits, occupancy_metrics
+from metrics import (
+    accuracy_from_logits,
+    occupancy_counts,
+    occupancy_metrics,
+    occupancy_metrics_from_counts,
+)
 
 
 class OccupancyMetricsTests(unittest.TestCase):
@@ -51,6 +56,28 @@ class OccupancyMetricsTests(unittest.TestCase):
         self.assertAlmostEqual(scores.inside_precision, 0.0)
         self.assertAlmostEqual(scores.inside_recall, 0.0)
         self.assertAlmostEqual(scores.accuracy, 0.5)
+
+    def test_from_counts_is_point_micro_average(self) -> None:
+        # Batch A: 2/2 correct. Batch B: 1/4 correct. Mean of accs = 0.625;
+        # point micro-average is 3/6 = 0.5.
+        a = occupancy_counts(
+            torch.tensor([[4.0], [-4.0]]),
+            torch.tensor([[1.0], [0.0]]),
+        )
+        b = occupancy_counts(
+            torch.tensor([[4.0], [4.0], [4.0], [-4.0]]),
+            torch.tensor([[1.0], [0.0], [0.0], [1.0]]),
+        )
+        tp = a[0] + b[0]
+        fp = a[1] + b[1]
+        fn = a[2] + b[2]
+        correct = a[3] + b[3]
+        n = a[4] + b[4]
+        scores = occupancy_metrics_from_counts(
+            tp=tp, fp=fp, fn=fn, correct=correct, n=n
+        )
+        self.assertAlmostEqual(scores.accuracy, 0.5)
+        self.assertNotAlmostEqual(scores.accuracy, 0.625)
 
     def test_rejects_numel_mismatch(self) -> None:
         with self.assertRaises(ValueError):

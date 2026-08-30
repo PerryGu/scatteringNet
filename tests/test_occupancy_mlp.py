@@ -13,7 +13,7 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from occupancy_mlp import OccupancyMLP
+from occupancy_mlp import OccupancyMLP, build_mlp
 
 
 class OccupancyMLPTests(unittest.TestCase):
@@ -33,6 +33,14 @@ class OccupancyMLPTests(unittest.TestCase):
             model(torch.randn(8, 4))
         with self.assertRaises(ValueError):
             model(torch.randn(3))
+
+    def test_build_mlp_first_linear_matches_in_dim(self) -> None:
+        net = build_mlp(7, hidden=16, depth=2)
+        first = next(m for m in net.modules() if isinstance(m, torch.nn.Linear))
+        self.assertEqual(first.in_features, 7)
+        self.assertEqual(first.out_features, 16)
+        out = net(torch.randn(4, 7))
+        self.assertEqual(tuple(out.shape), (4, 1))
 
     def test_rejects_invalid_hyperparams(self) -> None:
         with self.assertRaises(ValueError):
