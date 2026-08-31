@@ -22,6 +22,7 @@ DEFAULTS: dict[str, Any] = {
     "point_size": 100,
     "draw_cap": 200_000,
     "density": 71,
+    "inside_cut": 50,
     "model_id": "",
 }
 
@@ -31,6 +32,7 @@ _INT_KEYS = {
     "point_size": (20, 400),
     "draw_cap": (5000, 200_000),
     "density": (0, 100),
+    "inside_cut": (0, 100),
 }
 
 

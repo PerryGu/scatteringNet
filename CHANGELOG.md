@@ -5,6 +5,10 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
 
+## 2026-08-31 18:00 — Viewer: inside-cut slider
+
+**Inside cut** (0.00–1.00, default 0.50) re-thresholds the last **Run model** from stored sigmoid probabilities (no extra GPU pass). Lower = more inside. Acc/IoU in the status line follow this cut. Occupancy train code and train metrics at 0.5 are unchanged. How to run: [`src/viewer/README.md`](src/viewer/README.md).
+
 ## 2026-08-31 20:00 — Viewer: prefs, fill UX, README
 
 Checkboxes, sliders, density, and selected model persist in ``src/viewer/ui_prefs.json``. Fill does not move the camera; density drag refills; Fill checks **Inside** / **Outside**. README matches Job A/B (Gradio skipped). How to run: [`src/viewer/README.md`](src/viewer/README.md). Occupancy train code unchanged.

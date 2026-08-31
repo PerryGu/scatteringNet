@@ -23,6 +23,7 @@ Put checkpoints at `models/<run_id>/best.pt`. The Model list is that folder.
 
 - **Mesh / Wireframe** (left), **Inside / Outside** (right)
 - **Opacity**, **Point size**, **Max points drawn** (display subsample only)
+- **Inside cut** (0.00–1.00, default 0.50): after **Run model**, inside if sigmoid *p* ≥ this value. Lower = more orange. Dragging re-cuts the last Run in the browser (no extra GPU pass). Status acc/IoU follow this cut (training metrics stay at 0.5)
 - Infer and Fill use every query point, not the draw cap
 
 ## Job A (NPZ)
@@ -47,7 +48,7 @@ Right = denser (smaller step). The helper caps the lattice at **200,000** points
 
 ## UI prefs
 
-Checkboxes, sliders, density, and the selected model are saved to `src/viewer/ui_prefs.json` (helper `GET`/`POST /api/ui-prefs`). Missing file uses defaults; see `ui_prefs.example.json`. Gitignored. Truth / Prediction / Errors are not saved (they depend on the loaded file).
+Checkboxes, sliders, density, **Inside cut**, and the selected model are saved to `src/viewer/ui_prefs.json` (helper `GET`/`POST /api/ui-prefs`). Missing file uses defaults; see `ui_prefs.example.json`. Gitignored. Truth / Prediction / Errors are not saved (they depend on the loaded file).
 
 ## Tests
 

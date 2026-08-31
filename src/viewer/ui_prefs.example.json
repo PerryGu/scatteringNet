@@ -1,5 +1,6 @@
 {
   "density": 71,
+  "inside_cut": 50,
   "draw_cap": 200000,
   "inside": true,
   "mesh": true,

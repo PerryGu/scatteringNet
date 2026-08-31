@@ -225,10 +225,18 @@ class UiPrefsTests(unittest.TestCase):
             self.assertFalse(saved["mesh"])
             self.assertEqual(saved["opacity"], 100)
             self.assertEqual(saved["density"], 0)
+            self.assertEqual(saved["inside_cut"], 50)
             self.assertEqual(saved["model_id"], "run_a")
             self.assertNotIn("ignored", saved)
             loaded = load_ui_prefs(tmp)
             self.assertEqual(loaded, saved)
+
+    def test_clamp_inside_cut(self) -> None:
+        from ui_prefs import clamp_ui_prefs
+
+        self.assertEqual(clamp_ui_prefs({"inside_cut": 999})["inside_cut"], 100)
+        self.assertEqual(clamp_ui_prefs({"inside_cut": -3})["inside_cut"], 0)
+        self.assertEqual(clamp_ui_prefs({})["inside_cut"], 50)
 
     def test_rejects_unsafe_model_id(self) -> None:
         from ui_prefs import clamp_ui_prefs

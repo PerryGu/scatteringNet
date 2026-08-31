@@ -91,6 +91,53 @@ export async function readHelperJson(res) {
 }
 
 /**
+ * Slider 0-100 maps to a sigmoid cut in [0, 1]. Default 50 = 0.50.
+ * @param {string|number} raw
+ * @returns {number}
+ */
+export function thresholdFromCutSlider(raw) {
+  const v = Number(raw);
+  if (!Number.isFinite(v)) {
+    return 0.5;
+  }
+  return Math.min(1, Math.max(0, v / 100));
+}
+
+/**
+ * Hard inside labels from stored sigmoid probabilities.
+ * @param {Float32Array} probs
+ * @param {number} threshold
+ * @returns {Uint8Array}
+ */
+export function predFromProbs(probs, threshold) {
+  const t = Math.min(1, Math.max(0, Number(threshold)));
+  const pred = new Uint8Array(probs.length);
+  for (let i = 0; i < probs.length; i += 1) {
+    pred[i] = probs[i] >= t ? 1 : 0;
+  }
+  return pred;
+}
+
+/**
+ * Optional float32 sigmoid vector from the helper (one value per query).
+ * @param {{prob_b64?: string}} body
+ * @param {number} n
+ * @returns {Float32Array|null}
+ */
+export function decodeProbB64(body, n) {
+  if (!body || typeof body.prob_b64 !== "string" || !body.prob_b64) {
+    return null;
+  }
+  const probs = base64ToFloat32(body.prob_b64);
+  if (probs.length !== n) {
+    throw new Error(
+      "probability length " + probs.length + " does not match points " + n
+    );
+  }
+  return probs;
+}
+
+/**
  * @returns {Promise<{id: string, path: string}[]>}
  */
 export async function fetchModelList() {
@@ -130,5 +177,6 @@ export async function inferNpzOnHelper(payload) {
       "prediction length " + pred.length + " does not match points " + payload.labels.length
     );
   }
-  return { pred, metrics: body };
+  const probs = decodeProbB64(body, payload.labels.length);
+  return { pred, probs, metrics: body };
 }

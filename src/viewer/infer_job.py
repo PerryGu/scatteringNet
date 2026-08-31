@@ -30,6 +30,33 @@ from obj_fill import triangles_from_obj_text  # noqa: E402
 MAX_POINTS = 2_000_000
 
 
+def pred_from_probs(probs: np.ndarray, threshold: float = 0.5) -> np.ndarray:
+    """Hard inside labels: 1 iff sigmoid probability is at least ``threshold``."""
+    t = float(threshold)
+    if not np.isfinite(t):
+        t = 0.5
+    t = min(1.0, max(0.0, t))
+    return (np.asarray(probs, dtype=np.float32).reshape(-1) >= t).astype(np.uint8)
+
+
+def _sigmoid_probs_and_pred(logits: Any) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Float32 sigmoid of a 1-D logit tensor, plus a 0.5-cut pred for tests/compat.
+
+    The inspect page re-cuts from ``prob_b64``; occupancy train metrics stay at 0.5.
+    """
+    import torch
+
+    probs = (
+        torch.sigmoid(logits.reshape(-1))
+        .detach()
+        .cpu()
+        .numpy()
+        .astype(np.float32, copy=False)
+    )
+    return probs, pred_from_probs(probs, 0.5)
+
+
 def aabb_for_viewer(
     ckpt: dict[str, Any],
     *,
@@ -177,13 +204,14 @@ def infer_uploaded_npz(
     y = torch.from_numpy(labels.astype(np.float32)).unsqueeze(1)
     logits = _forward_logits(model, cfg, xyz, envelope, shape_id)
     scores = occupancy_metrics(logits, y)
-    pred = (torch.sigmoid(logits.reshape(-1)) >= 0.5).to(torch.uint8).numpy()
+    probs, pred = _sigmoid_probs_and_pred(logits)
     gt = labels > 0
     pred_bool = pred > 0
     n_fn = int(np.count_nonzero(gt & ~pred_bool))
     n_fp = int(np.count_nonzero(~gt & pred_bool))
     return {
         "pred_b64": base64.b64encode(np.ascontiguousarray(pred)).decode("ascii"),
+        "prob_b64": base64.b64encode(np.ascontiguousarray(probs)).decode("ascii"),
         "n": n,
         "accuracy": float(scores.accuracy),
         "inside_iou": float(scores.inside_iou),
@@ -239,10 +267,11 @@ def infer_uploaded_obj(
     )
     xyz = torch.from_numpy(apply_normalization(points, center, scale))
     logits = _forward_logits(model, cfg, xyz, envelope, shape_id)
-    pred = (torch.sigmoid(logits.reshape(-1)) >= 0.5).to(torch.uint8).numpy()
+    probs, pred = _sigmoid_probs_and_pred(logits)
     n_in = int(np.count_nonzero(pred > 0))
     return {
         "pred_b64": base64.b64encode(np.ascontiguousarray(pred)).decode("ascii"),
+        "prob_b64": base64.b64encode(np.ascontiguousarray(probs)).decode("ascii"),
         "n": n,
         "n_inside": n_in,
         "n_outside": n - n_in,

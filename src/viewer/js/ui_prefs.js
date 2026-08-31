@@ -12,6 +12,7 @@ export const UI_PREF_DEFAULTS = {
   point_size: 100,
   draw_cap: 200000,
   density: 71,
+  inside_cut: 50,
   model_id: "",
 };
 

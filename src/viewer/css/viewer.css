@@ -335,6 +335,18 @@ canvas {
   border-color: #4a4538;
 }
 
+#model-panel .slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #a0a0a0;
+}
+
+#model-panel input[type="range"] {
+  width: 100%;
+}
+
 #fill-panel {
   display: flex;
   flex-direction: column;

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>scatteringNet occupancy viewer</title>
-  <link rel="stylesheet" href="css/viewer.css?v=27">
+  <link rel="stylesheet" href="css/viewer.css?v=28">
 </head>
 <body>
   <div id="canvas-container">
@@ -70,6 +70,10 @@
           <option value="">Loading models…</option>
         </select>
         <button type="button" id="btn-run" disabled>Run model</button>
+        <div class="slider-row">
+          <span title="After sigmoid: inside if p is at least this value. Lower = more orange. Applies to the last Run; no extra GPU pass.">Inside cut <span id="val-cut">0.50</span></span>
+          <input type="range" id="sld-cut" min="0" max="100" value="50" title="0 = treat everything as inside, 50 = 0.50 (default), 100 = almost nothing inside. Does not re-run the model.">
+        </div>
         <div class="view-row">
           <button type="button" class="view-btn on" data-view="truth" id="btn-view-truth">Truth</button>
           <button type="button" class="view-btn" data-view="pred" id="btn-view-pred" disabled>Prediction</button>
@@ -102,6 +106,6 @@
       }
     }, 2500);
   </script>
-  <script type="module" src="js/main.js?v=27"></script>
+  <script type="module" src="js/main.js?v=28"></script>
 </body>
 </html>

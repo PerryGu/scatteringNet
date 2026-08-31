@@ -7,6 +7,7 @@ import {
   float32ToBase64,
   base64ToFloat32,
   base64ToUint8,
+  decodeProbB64,
   readHelperJson,
 } from "./model_panel.js";
 
@@ -78,5 +79,6 @@ export async function inferObjOnHelper(payload) {
   if (pred.length !== n) {
     throw new Error("prediction length " + pred.length + " does not match fill " + n);
   }
-  return { pred, metrics: body };
+  const probs = decodeProbB64(body, n);
+  return { pred, probs, metrics: body };
 }

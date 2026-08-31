@@ -20,7 +20,12 @@ import {
 } from "./load_npz.js";
 import { fetchMeshObjText, meshBasename } from "./show_object.js";
 import { applyMeshOpacity, applyPointSize, ensureWireOverlays, forEachMesh } from "./inspect.js";
-import { fetchModelList, inferNpzOnHelper } from "./model_panel.js";
+import {
+  fetchModelList,
+  inferNpzOnHelper,
+  predFromProbs,
+  thresholdFromCutSlider,
+} from "./model_panel.js";
 import { fillObjOnHelper, inferObjOnHelper, spacingFromSlider } from "./obj_infer.js";
 import { fetchUiPrefs, postUiPrefs } from "./ui_prefs.js";
 
@@ -64,6 +69,8 @@ const fillPanel = document.getElementById("fill-panel");
 const btnFill = document.getElementById("btn-fill");
 const sldDensity = document.getElementById("sld-density");
 const valDensity = document.getElementById("val-density");
+const sldCut = document.getElementById("sld-cut");
+const valCut = document.getElementById("val-cut");
 
 let scene = null;
 let camera = null;
@@ -156,6 +163,7 @@ function collectUiPrefs() {
     point_size: Number(sldPsize && sldPsize.value),
     draw_cap: Number(sldCap && sldCap.value),
     density: Number(sldDensity && sldDensity.value),
+    inside_cut: Number(sldCut && sldCut.value),
     model_id: selModel && selModel.value ? String(selModel.value) : "",
   };
 }
@@ -192,7 +200,11 @@ function applyUiPrefs(prefs) {
   if (sldDensity && prefs.density != null) {
     sldDensity.value = String(prefs.density);
   }
+  if (sldCut && prefs.inside_cut != null) {
+    sldCut.value = String(prefs.inside_cut);
+  }
   updateDensityLabel();
+  updateCutLabel();
   applyInspectToMesh();
   applyInspectToPoints();
 }
@@ -206,6 +218,133 @@ function scheduleSaveUiPrefs() {
     prefsTimer = 0;
     postUiPrefs(collectUiPrefs()).catch(() => {});
   }, 200);
+}
+
+function currentInsideCut() {
+  return thresholdFromCutSlider(sldCut && sldCut.value);
+}
+
+function updateCutLabel() {
+  if (valCut) {
+    valCut.textContent = currentInsideCut().toFixed(2);
+  }
+}
+
+/**
+ * Acc / inside-IoU / FN / FP at the current hard cut (viewer inspect only).
+ * @param {Float32Array|Uint8Array} labels
+ * @param {Uint8Array} pred
+ */
+function scoreAtPred(labels, pred) {
+  let tp = 0;
+  let fp = 0;
+  let fn = 0;
+  let tn = 0;
+  const n = labels.length;
+  for (let i = 0; i < n; i += 1) {
+    const gt = labels[i] > 0.5;
+    const p = pred[i] > 0;
+    if (gt && p) {
+      tp += 1;
+    } else if (!gt && p) {
+      fp += 1;
+    } else if (gt && !p) {
+      fn += 1;
+    } else {
+      tn += 1;
+    }
+  }
+  const den = tp + fp + fn;
+  return {
+    nFn: fn,
+    nFp: fp,
+    acc: n ? (tp + tn) / n : 0,
+    iou: den > 0 ? tp / den : 0,
+  };
+}
+
+/**
+ * Re-threshold stored sigmoid probs with the Inside-cut slider (no GPU).
+ * @param {{rebuild?: boolean, status?: boolean}} [opts]
+ * @returns {boolean}
+ */
+function applyStoredProbs(opts) {
+  if (!npzState || !npzState.probs) {
+    return false;
+  }
+  const t = currentInsideCut();
+  npzState.pred = predFromProbs(npzState.probs, t);
+  if (isFillJob()) {
+    npzState.nInside = countPredClass(npzState.pred, true);
+    npzState.nOutside = countPredClass(npzState.pred, false);
+  } else {
+    const scored = scoreAtPred(npzState.labels, npzState.pred);
+    npzState.nFn = scored.nFn;
+    npzState.nFp = scored.nFp;
+    npzState.cutAcc = scored.acc;
+    npzState.cutIou = scored.iou;
+  }
+  const rebuild = !opts || opts.rebuild !== false;
+  if (rebuild && (viewMode === "pred" || viewMode === "errors" || isFillJob())) {
+    rebuildNpzLayers();
+  }
+  if (opts && opts.status) {
+    setStatus(statusForCurrentCut());
+  }
+  return true;
+}
+
+function statusForCurrentCut() {
+  const t = currentInsideCut().toFixed(2);
+  if (!npzState || !npzState.pred) {
+    return "Inside cut " + t + ".";
+  }
+  if (isFillJob()) {
+    return (
+      "Inside cut " +
+      t +
+      ": inside=" +
+      Number(npzState.nInside || 0).toLocaleString() +
+      " outside=" +
+      Number(npzState.nOutside || 0).toLocaleString() +
+      "."
+    );
+  }
+  const acc = Number(npzState.cutAcc);
+  const iou = Number(npzState.cutIou);
+  return (
+    "Inside cut " +
+    t +
+    ": acc=" +
+    (Number.isFinite(acc) ? acc.toFixed(4) : "—") +
+    " iou=" +
+    (Number.isFinite(iou) ? iou.toFixed(4) : "—") +
+    ". Flip Truth / Errors."
+  );
+}
+
+/**
+ * Keep helper 0.5 pred if probs are missing (old helper).
+ * @param {{pred: Uint8Array, probs: Float32Array|null, metrics: object}} result
+ */
+function attachInferResult(result) {
+  const n = npzState.n;
+  if (result.probs && result.probs.length === n) {
+    npzState.probs = result.probs;
+    applyStoredProbs({ rebuild: false });
+    return;
+  }
+  npzState.probs = null;
+  npzState.pred = result.pred;
+  if (isFillJob()) {
+    npzState.nInside = Number(result.metrics.n_inside) || countPredClass(result.pred, true);
+    npzState.nOutside = Number(result.metrics.n_outside) || countPredClass(result.pred, false);
+  } else {
+    npzState.nFn = result.metrics.n_fn;
+    npzState.nFp = result.metrics.n_fp;
+    npzState.cutAcc = Number(result.metrics.accuracy);
+    npzState.cutIou = Number(result.metrics.inside_iou);
+  }
 }
 
 function countPredClass(pred, wantInside) {
@@ -527,6 +666,7 @@ async function openUserFile(file, handle) {
       npzState.fileName = file.name;
       npzState.source = "npz";
       npzState.pred = null;
+      npzState.probs = null;
       objText = "";
       objFileName = "";
       viewMode = "truth";
@@ -650,6 +790,7 @@ async function runFill() {
       points: filled.points,
       labels: labels,
       pred: null,
+      probs: null,
       n: n,
       nInside: 0,
       nOutside: n,
@@ -769,21 +910,11 @@ async function runInfer() {
         objText: objText,
         points: npzState.points,
       });
-      npzState.pred = result.pred;
-      npzState.nInside = Number(result.metrics.n_inside) || countPredClass(result.pred, true);
-      npzState.nOutside = Number(result.metrics.n_outside) || countPredClass(result.pred, false);
+      attachInferResult(result);
       viewMode = "pred";
       applyLegendForView();
       rebuildNpzLayers();
-      setStatus(
-        "Prediction from “" +
-          checkpoint +
-          "”. inside=" +
-          npzState.nInside.toLocaleString() +
-          " outside=" +
-          npzState.nOutside.toLocaleString() +
-          "."
-      );
+      setStatus("Prediction from “" + checkpoint + "”. " + statusForCurrentCut());
     } else {
       const result = await inferNpzOnHelper({
         checkpoint,
@@ -792,23 +923,11 @@ async function runInfer() {
         points: npzState.points,
         labels: npzState.labels,
       });
-      npzState.pred = result.pred;
-      npzState.nFn = result.metrics.n_fn;
-      npzState.nFp = result.metrics.n_fp;
+      attachInferResult(result);
       viewMode = "pred";
       applyLegendForView();
       rebuildNpzLayers();
-      const acc = Number(result.metrics.accuracy);
-      const iou = Number(result.metrics.inside_iou);
-      setStatus(
-        "Prediction from “" +
-          checkpoint +
-          "”. acc=" +
-          acc.toFixed(4) +
-          " iou=" +
-          iou.toFixed(4) +
-          ". Flip Truth / Errors."
-      );
+      setStatus("Prediction from “" + checkpoint + "”. " + statusForCurrentCut());
     }
   } catch (err) {
     setStatus("Run failed: " + err);
@@ -920,6 +1039,14 @@ if (sldDensity) {
     scheduleSaveUiPrefs();
   });
   updateDensityLabel();
+}
+if (sldCut) {
+  sldCut.addEventListener("input", () => {
+    updateCutLabel();
+    applyStoredProbs({ status: true });
+    scheduleSaveUiPrefs();
+  });
+  updateCutLabel();
 }
 
 togMesh.addEventListener("change", () => {
