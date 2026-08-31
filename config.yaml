@@ -2,8 +2,8 @@
 # `device` is still detected at runtime in src/config.py (CUDA vs CPU).
 
 # --- Model Architecture ---
-hidden: 64        # Number of hidden units (channels) per layer in the OccupancyMLP
-depth: 4          # Number of hidden linear layers in the MLP network
+hidden: 128       # Number of hidden units (channels) per layer in the OccupancyMLP
+depth: 6          # Number of hidden linear layers in the MLP network
 seed: 1           # Same seed as the previous extrude_nr1 train
 
 # --- Path Configuration ---

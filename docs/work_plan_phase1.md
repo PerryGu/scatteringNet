@@ -138,10 +138,13 @@ Phase 1 is a teaching scaffold: one file, xyz only. It is not an interior-popula
 |---|---|
 | Phase 1 | this file |
 | What actually shipped | [`CHANGELOG.md`](../CHANGELOG.md) |
+| Catalog train write-up (mandatory after every run) | [`training_log.md`](training_log.md) |
 | Phase 1 wrap-up | [`2026-08-24_14-09_mvp_completion_review.md`](2026-08-24_14-09_mvp_completion_review.md) |
 | What comes next | [`work_plan_phase2.md`](work_plan_phase2.md) |
 
 ---
+
+
 
 ## Next action
 

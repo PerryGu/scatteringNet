@@ -34,6 +34,7 @@ from dataset import (
     mesh_split_key,
     split_train_test_by_mesh,
 )
+from infer_multi_npz import load_occupancy_model, resolve_best_pt
 from metrics import occupancy_counts, occupancy_metrics_from_counts
 from occupancy_encoder import OccupancyEncoder
 from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND
@@ -173,6 +174,7 @@ def _checkpoint_payload(
     model: OccupancyModel,
     dataset: OccupancyMultiNpzDataset,
     cfg: OccupancyConfig,
+    optimizer: torch.optim.Optimizer | None = None,
 ) -> dict:
     """Weights plus per-mesh AABB so infer can rebuild the same maps."""
     parts = []
@@ -200,6 +202,7 @@ def _checkpoint_payload(
         "latent_dim": encoder_latent_dim(cfg),
         "npz_paths": [as_data_relative(p, cfg.data_dir) for p in dataset.npz_paths],
         "parts": parts,
+        "optimizer": None if optimizer is None else optimizer.state_dict(),
     }
 
 
@@ -228,6 +231,8 @@ def train_multi_npz(
     epochs: int | None = None,
     root: Path | None = None,
     run_name: str | None = None,
+    resume_checkpoint: Path | str | None = None,
+    resume_run_id: str | None = None,
 ) -> TrainMultiResult:
     """
     Train OccupancyMLP on the catalog.
@@ -244,6 +249,9 @@ def train_multi_npz(
         Repo root for ``runs/`` and ``models/`` (tests pass a temp dir).
     run_name:
         Folder suffix; default ``cfg.run_name``.
+    resume_checkpoint, resume_run_id:
+        Load ``best.pt`` and run ``epochs`` **more** epochs (numbered
+        after the stored epoch). Omit both for a fresh train.
     """
     n_epochs = int(epochs if epochs is not None else cfg.epochs)
     lr = float(cfg.lr)
@@ -290,8 +298,25 @@ def train_multi_npz(
     val_parts = [dataset.parts[int(i)] for i in val_idx.tolist()]
     pin_memory = cfg.device.type == "cuda"
 
-    if _uses_surface(cfg):
-        model: OccupancyModel = OccupancyEncoder(
+    resume_ckpt: dict | None = None
+    resume_path: Path | None = None
+    start_epoch = 1
+    if resume_checkpoint is not None or resume_run_id is not None:
+        resume_path = resolve_best_pt(
+            checkpoint=resume_checkpoint,
+            run_id=resume_run_id,
+            root=root,
+        )
+        resume_ckpt = torch.load(resume_path, map_location="cpu", weights_only=False)
+        start_epoch = int(resume_ckpt.get("epoch") or 0) + 1
+        if start_epoch < 2:
+            raise ValueError(f"resume checkpoint has no epoch: {resume_path}")
+
+    if resume_ckpt is not None:
+        model = load_occupancy_model(resume_ckpt, cfg.device)
+        model.train()
+    elif _uses_surface(cfg):
+        model = OccupancyEncoder(
             hidden=cfg.hidden,
             depth=cfg.depth,
             latent_dim=encoder_latent_dim(cfg),
@@ -300,6 +325,8 @@ def train_multi_npz(
         model = OccupancyMLP(hidden=cfg.hidden, depth=cfg.depth).to(cfg.device)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = _make_optimizer(cfg.optimizer, model, lr)
+    if resume_ckpt is not None and resume_ckpt.get("optimizer"):
+        optimizer.load_state_dict(resume_ckpt["optimizer"])
 
     n_train_files = len(train_parts)
     n_val_files = len(val_parts)
@@ -319,17 +346,24 @@ def train_multi_npz(
         f"shape_encoder={cfg.shape_encoder} n_surface={cfg.n_surface} "
         f"latent_dim={encoder_latent_dim(cfg)}"
     )
+    last_epoch = start_epoch + n_epochs - 1
     print(
-        f"epochs={n_epochs} batch_size={cfg.batch_size} "
-        f"optimizer={cfg.optimizer} lr={lr}"
+        f"epochs={n_epochs} first_epoch={start_epoch} last_epoch={last_epoch} "
+        f"batch_size={cfg.batch_size} optimizer={cfg.optimizer} lr={lr}"
     )
+    if resume_path is not None:
+        print(f"resume={resume_path} from_epoch={start_epoch - 1}")
     for part in val_parts:
         print(f"  val_file={part.npz_path.name} N={len(part)}")
 
     name = run_name if run_name is not None else cfg.run_name
     with start_run(name, root=root, t0=t0, clock_start=clock_start) as run:
         snap = occupancy_config_snapshot(cfg)
-        snap["total"] = n_epochs
+        snap["total"] = last_epoch
+        if resume_path is not None:
+            snap["resume_from"] = str(resume_path)
+            snap["resume_epoch"] = start_epoch - 1
+            snap["extra_epochs"] = n_epochs
         run.write_config(snap)
         run.write_catalog(dataset.npz_paths, data_dir=cfg.data_dir)
         run.update_config(
@@ -351,15 +385,39 @@ def train_multi_npz(
         )
         saver = Checkpointer(
             run,
-            total_epochs=n_epochs,
+            total_epochs=last_epoch,
             metric_name=cfg.checkpoint_metric,
             root=root,
         )
+        if resume_ckpt is not None:
+            prior_best = float(
+                resume_ckpt["metric"]
+                if resume_ckpt.get("metric") is not None
+                else resume_ckpt.get("best_metric") or 0.0
+            )
+            prior_epoch = int(resume_ckpt["epoch"])
+            saver.best_metric = prior_best
+            saver.best_epoch = prior_epoch
+            seeded = _checkpoint_payload(model, dataset, cfg, optimizer)
+            seeded["epoch"] = prior_epoch
+            seeded["total"] = last_epoch
+            seeded["metric"] = prior_best
+            seeded["metric_name"] = cfg.checkpoint_metric
+            seeded["run_id"] = run.run_id
+            torch.save(seeded, saver.best_path)
+            saver.run.update_config(
+                {
+                    "total": last_epoch,
+                    "checkpoint": prior_epoch,
+                    "best_epoch": prior_epoch,
+                    "best_metric": prior_best,
+                }
+            )
         losses: list[float] = []
         accuracies: list[float] = []
         val_accuracies: list[float] = []
         last_result = None
-        for epoch in range(1, n_epochs + 1):
+        for epoch in range(start_epoch, last_epoch + 1):
             t0 = time.perf_counter()
             model.train()
             running_loss = 0.0
@@ -400,7 +458,7 @@ def train_multi_npz(
                 cfg.checkpoint_metric, val_acc=val_acc, val_iou=val_iou
             )
             last_result = saver.save(
-                _checkpoint_payload(model, dataset, cfg),
+                _checkpoint_payload(model, dataset, cfg, optimizer),
                 epoch=epoch,
                 metric=score,
             )
@@ -449,4 +507,29 @@ def train_multi_npz(
 
 
 if __name__ == "__main__":
-    train_multi_npz(load_config())
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Train occupancy on the YAML catalog")
+    parser.add_argument(
+        "--resume-run-id",
+        default=None,
+        help="Load models/<id>/best.pt and train cfg.epochs more epochs",
+    )
+    parser.add_argument(
+        "--resume",
+        default=None,
+        help="Path to best.pt (overrides --resume-run-id)",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=None,
+        help="Epochs to run (fresh train) or extra epochs (resume)",
+    )
+    args = parser.parse_args()
+    train_multi_npz(
+        load_config(),
+        epochs=args.epochs,
+        resume_checkpoint=args.resume,
+        resume_run_id=args.resume_run_id,
+    )

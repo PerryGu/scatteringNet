@@ -164,7 +164,7 @@ class OccupancyPointDatasetTests(unittest.TestCase):
                 path, data_dir=root, n_surface=64, seed=1, shape_id=3
             )
             xyz, y, envelope, shape_id = ds[0]
-            loader = make_dataloader(ds, batch_size=4, shuffle=False)
+            loader = make_dataloader(ds, batch_size=4, shuffle=False, pin_memory=True)
             b_xyz, b_y, b_env, b_id = next(iter(loader))
         self.assertEqual(tuple(xyz.shape), (3,))
         self.assertEqual(tuple(envelope.shape), (64, 3))
@@ -210,6 +210,17 @@ class OccupancyPointDatasetTests(unittest.TestCase):
         self.assertTrue(torch.equal(envelope[0], env_a))
         self.assertTrue(torch.equal(envelope[1], env_a))
         self.assertTrue(torch.equal(envelope[2], env_b))
+
+    def test_same_id_collate_envelope_is_pinnable(self) -> None:
+        env = torch.arange(12, dtype=torch.float32).reshape(4, 3)
+        batch = [
+            (torch.zeros(3), torch.zeros(1), env, torch.tensor(0)),
+            (torch.ones(3), torch.ones(1), env, torch.tensor(0)),
+        ]
+        _xyz, _y, envelope, _sid = occupancy_collate(batch)
+        self.assertTrue(envelope.is_contiguous())
+        pinned = envelope.pin_memory()
+        self.assertTrue(pinned.is_pinned())
 
 
 if __name__ == "__main__":

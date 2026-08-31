@@ -431,7 +431,9 @@ def occupancy_collate(
         dim=0,
     )
     if int(shape_id.min()) == int(shape_id.max()):
-        envelope = first[2].unsqueeze(0).expand(len(batch), -1, -1)
+        # expand() is a view (one cloud, B aliases). pin_memory cannot pin
+        # overlapping storage — CUDA catalog train hits this every batch.
+        envelope = first[2].unsqueeze(0).expand(len(batch), -1, -1).contiguous()
         return xyz, y, envelope, shape_id
     env_by_id: dict[int, Tensor] = {}
     for item in batch:
@@ -440,7 +442,7 @@ def occupancy_collate(
             env_by_id[sid] = item[2]
     unique_ids, inverse = torch.unique(shape_id, sorted=True, return_inverse=True)
     unique_env = torch.stack([env_by_id[int(u)] for u in unique_ids.tolist()], dim=0)
-    return xyz, y, unique_env[inverse], shape_id
+    return xyz, y, unique_env[inverse].contiguous(), shape_id
 
 
 def make_dataloader(

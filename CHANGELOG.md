@@ -5,6 +5,14 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
 
+## 2026-08-30 18:00 — Resume catalog train from best.pt
+
+``train_multi_npz`` accepts ``--resume-run-id`` / ``--resume``. It loads that ``best.pt``, keeps the stored selection score, and runs YAML ``epochs`` more (printed as 21…). New ``runs/`` + ``models/``; Adam state is restored only if the checkpoint stored it.
+
+## 2026-08-30 15:00 — Collate: pin_memory on expanded envelopes
+
+``occupancy_collate`` materializes the same-``shape_id`` envelope (``contiguous``) so CUDA ``pin_memory`` can pin it. Catalog surface train was crashing on the first batch.
+
 ## 2026-08-30 14:00 — Work plans: current rung is Step 9 or stop
 
 Updated Phase 2 headers: Steps 1–8 done; next is face tokens or stop. Hygiene mesh-identity val is not Step 11. Phase 1 plans now point train write-ups at ``training_log.md``.

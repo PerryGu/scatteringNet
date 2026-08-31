@@ -212,6 +212,43 @@ class TrainMultiNpzTests(unittest.TestCase):
             self.assertIn("test_iou", row)
             self.assertIn("test_f1", row)
 
+    def test_resume_continues_epoch_numbers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            a, b = _two_mesh_npzs(root)
+            first = train_multi_npz(
+                _cpu_cfg(root),
+                npz_paths=[a, b],
+                epochs=2,
+                root=root,
+                run_name="first",
+            )
+            loaded = torch.load(first.best_path, map_location="cpu", weights_only=False)
+            prior = int(loaded["epoch"])
+            cont = train_multi_npz(
+                _cpu_cfg(root),
+                npz_paths=[a, b],
+                epochs=1,
+                root=root,
+                run_name="cont",
+                resume_checkpoint=first.best_path,
+            )
+            rows = [
+                json.loads(line)
+                for line in cont.run_dir.joinpath("metrics.jsonl")
+                .read_text(encoding="utf-8")
+                .strip()
+                .splitlines()
+            ]
+            snap = yaml.safe_load(
+                cont.run_dir.joinpath("config.yaml").read_text(encoding="utf-8")
+            )
+            self.assertEqual([row["epoch"] for row in rows], [prior + 1])
+            self.assertEqual(snap["resume_epoch"], prior)
+            self.assertEqual(snap["extra_epochs"], 1)
+            self.assertEqual(snap["total"], prior + 1)
+            self.assertTrue(cont.best_path.is_file())
+
     def test_rejects_zero_epochs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
