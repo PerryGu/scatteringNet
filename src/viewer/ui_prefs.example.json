@@ -1,0 +1,11 @@
+{
+  "density": 71,
+  "draw_cap": 200000,
+  "inside": true,
+  "mesh": true,
+  "model_id": "",
+  "opacity": 100,
+  "outside": true,
+  "point_size": 100,
+  "wireframe": false
+}

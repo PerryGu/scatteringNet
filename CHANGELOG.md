@@ -5,6 +5,46 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
 
+## 2026-08-31 20:00 — Viewer: prefs, fill UX, README
+
+Checkboxes, sliders, density, and selected model persist in ``src/viewer/ui_prefs.json``. Fill does not move the camera; density drag refills; Fill checks **Inside** / **Outside**. README matches Job A/B (Gradio skipped). How to run: [`src/viewer/README.md`](src/viewer/README.md). Occupancy train code unchanged.
+
+## 2026-08-31 20:00 — Viewer Step 7: fill OBJ then infer
+
+**Fill points** + density (0 = spacing 0.40, 100 = 0.05, default ≈ 0.15). Unlabeled AABB lattice (no raycast GT). **Run model** classifies those points; envelope from the uploaded OBJ. No Errors view. Occupancy train code unchanged.
+
+## 2026-08-31 19:00 — Viewer Step 6: model on NPZ
+
+``GET /api/models`` lists ``models/<run>/best.pt``. **Run model** classifies NPZ points (envelope if surface-conditioned). **Truth** / **Prediction** / **Errors**. **Select Model**; amber **Run model**. ``open_viewer.bat`` uses conda ``scatteringNet``. Occupancy train code unchanged.
+
+## 2026-08-31 19:00 — Viewer Step 5: inspect UI
+
+Mesh / Inside / Outside / Wireframe (2×2), opacity, point size, **Max points drawn** (display subsample). NPZ **Total points** and counts next to swatches. Equal-width 280px rounded left panels. Occupancy train code unchanged.
+
+## 2026-08-31 18:00 — Viewer: auto-load mesh from NPZ
+
+Opening an NPZ fetches the linked OBJ (``Mesh`` is visibility). ``serve.py`` reads quoted ``config.yaml`` ``data_dir`` and ignores the inline comment. Occupancy train code unchanged.
+
+## 2026-08-31 18:00 — Viewer Step 4: Show object
+
+``GET /api/mesh`` loads the NPZ ``mesh_path`` OBJ from ``data_dir`` (path must stay under ``data_dir``). **Clear view** stays in the recents menu. Occupancy train code unchanged.
+
+## 2026-08-31 16:00 — Viewer: recents and Clear view
+
+Hover Open for last 5 files. A recents click loads the cached file (does not open Explorer). IndexedDB + Chrome file handles. Occupancy train code unchanged.
+
+## 2026-08-31 15:00 — Viewer Step 3: NPZ points
+
+Open/drop an occupancy NPZ shows file-label points (inside orange, outside steel), counts, and stored ``mesh_path``. Occupancy train code unchanged.
+
+## 2026-08-31 15:00 — Viewer Step 2: OBJ load
+
+Open, drop, and recent-click load a Wavefront OBJ (local ``OBJLoader``, camera frames the AABB). Occupancy train code unchanged.
+
+## 2026-08-31 13:00 — Viewer Step 1: page, helper, and plans
+
+``src/viewer/``: dark Three.js page (orbit, grid, Open, recents stub). ``serve.py`` / ``open_viewer.bat`` (local Three.js, free port, ``.js`` as ``text/javascript``, ``no-store``). Plans: Job A = NPZ points; Job B = OBJ fill + envelope; Gradio optional. Occupancy train code unchanged.
+
 ## 2026-08-30 18:00 — Resume catalog train from best.pt
 
 ``train_multi_npz`` accepts ``--resume-run-id`` / ``--resume``. It loads that ``best.pt``, keeps the stored selection score, and runs YAML ``epochs`` more (printed as 21…). New ``runs/`` + ``models/``; Adam state is restored only if the checkpoint stored it.

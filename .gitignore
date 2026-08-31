@@ -17,3 +17,7 @@ venv/
 # IDEs
 .vscode/
 .idea/
+
+# Viewer UI sliders/checkboxes (rewritten by the helper while you work)
+src/viewer/ui_prefs.json
+src/viewer/ui_prefs.json.tmp

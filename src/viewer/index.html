@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>scatteringNet occupancy viewer</title>
+  <link rel="stylesheet" href="css/viewer.css?v=27">
+</head>
+<body>
+  <div id="canvas-container">
+    <div id="title-bar">scatteringNet — occupancy viewer</div>
+    <div id="toolbar">
+      <div id="open-wrap">
+        <button type="button" id="btn-open" title="Open an OBJ or NPZ">Open</button>
+        <input id="file-input" type="file" accept=".obj,.npz,model/obj">
+        <input id="obj-fallback-input" type="file" accept=".obj,model/obj">
+        <div id="recents-popover" role="menu" aria-label="Recent files">
+          <div class="recents-title">Recent files</div>
+          <ul id="recents-list"></ul>
+        </div>
+      </div>
+      <div id="npz-panel" hidden>
+        <div id="npz-counts"></div>
+        <div id="npz-legend">
+          <span class="leg-item">
+            <span class="swatch in" id="leg-swatch-in"></span>
+            <span id="npz-n-inside" class="leg-n"></span>
+            <span id="leg-word-in">inside</span>
+          </span>
+          <span class="leg-item">
+            <span class="swatch out" id="leg-swatch-out"></span>
+            <span id="npz-n-outside" class="leg-n"></span>
+            <span id="leg-word-out">outside</span>
+          </span>
+        </div>
+        <div id="npz-path"></div>
+      </div>
+      <div id="inspect-panel" hidden>
+        <div class="chk-grid">
+          <label class="chk"><input type="checkbox" id="tog-mesh" checked> Mesh</label>
+          <label class="chk"><input type="checkbox" id="tog-inside" checked> <span id="lab-inside">Inside</span></label>
+          <label class="chk"><input type="checkbox" id="tog-wire"> Wireframe</label>
+          <label class="chk"><input type="checkbox" id="tog-outside" checked> <span id="lab-outside">Outside</span></label>
+        </div>
+        <div class="slider-row">
+          <span>Opacity <span id="val-opacity">100%</span></span>
+          <input type="range" id="sld-opacity" min="0" max="100" value="100">
+        </div>
+        <div class="slider-row">
+          <span>Point size <span id="val-psize">1.0×</span></span>
+          <input type="range" id="sld-psize" min="20" max="400" value="100">
+        </div>
+        <div class="slider-row">
+          <span title="How many NPZ points to draw. Large files are subsampled so the view stays smooth.">Max points drawn <span id="val-cap">200000</span></span>
+          <input type="range" id="sld-cap" min="5000" max="200000" step="5000" value="200000" title="Subsample the cloud. Does not change the file.">
+        </div>
+      </div>
+      <div id="fill-panel" hidden>
+        <div class="fill-row">
+          <button type="button" id="btn-fill" disabled>Fill points</button>
+          <div class="slider-row">
+            <span title="Lattice spacing in the mesh box. Right = denser (smaller step). Drag refills; camera stays put.">Density <span id="val-density">0.15</span></span>
+            <input type="range" id="sld-density" min="0" max="100" value="71" title="0 = spacing 0.40, 100 = 0.05. Drag to refill.">
+          </div>
+        </div>
+      </div>
+      <div id="model-panel">
+        <label class="model-lab" for="sel-model">Select Model</label>
+        <select id="sel-model" title="models/*/best.pt">
+          <option value="">Loading models…</option>
+        </select>
+        <button type="button" id="btn-run" disabled>Run model</button>
+        <div class="view-row">
+          <button type="button" class="view-btn on" data-view="truth" id="btn-view-truth">Truth</button>
+          <button type="button" class="view-btn" data-view="pred" id="btn-view-pred" disabled>Prediction</button>
+          <button type="button" class="view-btn" data-view="errors" id="btn-view-errors" disabled>Errors</button>
+        </div>
+      </div>
+      <div id="status">Loading 3D…</div>
+    </div>
+    <div id="drop-hint">Drop an OBJ or NPZ onto the view</div>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <script>
+    function showLoadError(message) {
+      var el = document.getElementById("status");
+      if (el) {
+        el.textContent = message;
+      }
+    }
+    window.addEventListener("error", function (event) {
+      showLoadError("Script error: " + (event.message || "see F12 Console"));
+    });
+    window.addEventListener("unhandledrejection", function (event) {
+      showLoadError("Module failed: " + event.reason);
+    });
+    setTimeout(function () {
+      var el = document.getElementById("status");
+      if (el && String(el.textContent).indexOf("Loading 3D") === 0) {
+        showLoadError("3D script never started (often a .js MIME type). Close this tab, close the black console, run open_viewer.bat again.");
+      }
+    }, 2500);
+  </script>
+  <script type="module" src="js/main.js?v=27"></script>
+</body>
+</html>
