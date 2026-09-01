@@ -1,7 +1,8 @@
 """Train occupancy on a catalog of NPZs, one shape (file) at a time.
 
 Each file keeps its own NPZ occupancy queries. Envelope points are
-sampled on the OBJ when ``shape_encoder`` is ``surface``. Mini-batches
+sampled on the OBJ when ``shape_encoder`` is ``surface``. Face tokens
+are the batch geometry when ``shape_encoder`` is ``mesh``. Mini-batches
 never mix two files. ``val_fraction`` of **meshes** is the val set
 (all NPZs of one OBJ stay on one side; used to select ``best.pt``).
 Logs in ``runs/<id>/``, weights in ``models/<id>/best.pt``.
@@ -57,6 +58,16 @@ def seed_everything(seed: int) -> None:
 def _uses_surface(cfg: OccupancyConfig) -> bool:
     """True when YAML selected the envelope-conditioned head."""
     return str(cfg.shape_encoder).strip().lower() == "surface"
+
+
+def _uses_mesh(cfg: OccupancyConfig) -> bool:
+    """True when YAML selected the face-token head."""
+    return str(cfg.shape_encoder).strip().lower() == "mesh"
+
+
+def _uses_encoder(cfg: OccupancyConfig) -> bool:
+    """True when the occupancy head takes a geometry tensor."""
+    return _uses_surface(cfg) or _uses_mesh(cfg)
 
 
 def _forward_batch(
@@ -191,7 +202,7 @@ def _checkpoint_payload(
                 "scale": float(part.scale),
             }
         )
-    kind = ENCODER_KIND if _uses_surface(cfg) else MLP_KIND
+    kind = ENCODER_KIND if _uses_encoder(cfg) else MLP_KIND
     return {
         "kind": kind,
         "state_dict": model.state_dict(),
@@ -199,6 +210,9 @@ def _checkpoint_payload(
         "depth": int(cfg.depth),
         "shape_encoder": str(cfg.shape_encoder),
         "n_surface": int(cfg.n_surface),
+        "n_faces": int(cfg.n_faces),
+        "encoder_hidden": int(cfg.encoder_hidden),
+        "encoder_depth": int(cfg.encoder_depth),
         "latent_dim": encoder_latent_dim(cfg),
         "npz_paths": [as_data_relative(p, cfg.data_dir) for p in dataset.npz_paths],
         "parts": parts,
@@ -266,7 +280,9 @@ def train_multi_npz(
     clock_start = datetime.now()
     t0 = time.perf_counter()
     print(f"started={clock_start.isoformat(timespec='seconds')}")
-    n_surface = int(cfg.n_surface) if _uses_surface(cfg) else None
+    n_surface = int(cfg.n_surface) if _uses_encoder(cfg) else None
+    n_faces = int(cfg.n_faces)
+    item_geom = "mesh" if _uses_mesh(cfg) else "surface"
     if npz_paths is None:
         dataset = OccupancyMultiNpzDataset.from_catalog(
             cfg.data_dir,
@@ -275,6 +291,8 @@ def train_multi_npz(
             max_files_per_shape=cfg.max_files_per_shape,
             n_surface=n_surface,
             seed=cfg.seed,
+            n_faces=n_faces,
+            item_geom=item_geom,
         )
     else:
         dataset = OccupancyMultiNpzDataset(
@@ -282,6 +300,8 @@ def train_multi_npz(
             data_dir=cfg.data_dir,
             n_surface=n_surface,
             seed=cfg.seed,
+            n_faces=n_faces,
+            item_geom=item_geom,
         )
 
     # File-level randperm leaks: lattice + jitter of one OBJ can sit on both sides.
@@ -315,11 +335,14 @@ def train_multi_npz(
     if resume_ckpt is not None:
         model = load_occupancy_model(resume_ckpt, cfg.device)
         model.train()
-    elif _uses_surface(cfg):
+    elif _uses_encoder(cfg):
         model = OccupancyEncoder(
             hidden=cfg.hidden,
             depth=cfg.depth,
             latent_dim=encoder_latent_dim(cfg),
+            shape_encoder=str(cfg.shape_encoder),
+            encoder_hidden=int(cfg.encoder_hidden),
+            encoder_depth=int(cfg.encoder_depth),
         ).to(cfg.device)
     else:
         model = OccupancyMLP(hidden=cfg.hidden, depth=cfg.depth).to(cfg.device)
@@ -344,6 +367,8 @@ def train_multi_npz(
         f"gpu={gpu_name(cfg.device)} "
         f"hidden={cfg.hidden} depth={cfg.depth} "
         f"shape_encoder={cfg.shape_encoder} n_surface={cfg.n_surface} "
+        f"n_faces={cfg.n_faces} "
+        f"encoder_hidden={cfg.encoder_hidden} encoder_depth={cfg.encoder_depth} "
         f"latent_dim={encoder_latent_dim(cfg)}"
     )
     last_epoch = start_epoch + n_epochs - 1

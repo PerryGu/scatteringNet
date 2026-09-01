@@ -161,18 +161,49 @@ class OccupancyPointDatasetTests(unittest.TestCase):
                 mesh_path=np.asarray("box.obj"),
             )
             ds = OccupancyEncoderDataset(
-                path, data_dir=root, n_surface=64, seed=1, shape_id=3
+                path, data_dir=root, n_surface=64, seed=1, shape_id=3, n_faces=8
             )
             xyz, y, envelope, shape_id = ds[0]
             loader = make_dataloader(ds, batch_size=4, shuffle=False, pin_memory=True)
             b_xyz, b_y, b_env, b_id = next(iter(loader))
         self.assertEqual(tuple(xyz.shape), (3,))
         self.assertEqual(tuple(envelope.shape), (64, 3))
+        self.assertEqual(tuple(ds.face_tokens.shape), (8, 12))
+        self.assertEqual(len(ds[0]), 4)
         self.assertEqual(int(shape_id.item()), 3)
         self.assertEqual(tuple(b_xyz.shape), (4, 3))
         self.assertEqual(tuple(b_env.shape), (4, 64, 3))
         self.assertEqual(tuple(b_id.shape), (4,))
         self.assertTrue(torch.equal(b_id, torch.tensor([3, 3, 3, 3])))
+
+    def test_mesh_item_geom_puts_face_tokens_in_batch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            obj = root / "box.obj"
+            trimesh.creation.box(extents=[2.0, 2.0, 2.0]).export(obj)
+            path = root / "sample.npz"
+            rng = np.random.default_rng(0)
+            points = rng.uniform(-2.0, 2.0, size=(8, 3)).astype(np.float32)
+            labels = (rng.random(8) > 0.5).astype(np.uint8)
+            np.savez(
+                path,
+                points=points,
+                labels=labels,
+                mesh_path=np.asarray("box.obj"),
+            )
+            ds = OccupancyEncoderDataset(
+                path,
+                data_dir=root,
+                n_surface=16,
+                seed=1,
+                n_faces=8,
+                item_geom="mesh",
+            )
+            xyz, y, geom, shape_id = ds[0]
+            loader = make_dataloader(ds, batch_size=4, shuffle=False)
+            _b_xyz, _b_y, b_geom, _b_id = next(iter(loader))
+        self.assertEqual(tuple(geom.shape), (8, 12))
+        self.assertEqual(tuple(b_geom.shape), (4, 8, 12))
 
     def test_mesh_join_keeps_npz_occupancy_count(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

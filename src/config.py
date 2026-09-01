@@ -50,6 +50,9 @@ class YamlKnobs(TypedDict):
     batch_size: int
     optimizer: str
     n_surface: int
+    n_faces: int
+    encoder_hidden: int
+    encoder_depth: int
     shape_encoder: str
 
 
@@ -183,7 +186,7 @@ def _as_optional_latent_dim(raw: Mapping[str, Any]) -> int | None:
 # Names accepted in config.yaml ``optimizer``. Used by train_multi_npz.
 _ALLOWED_OPTIMIZERS = ("adam", "adamw", "sgd")
 # ``none`` = OccupancyMLP (xyz only). ``surface`` = envelope encoder.
-_ALLOWED_SHAPE_ENCODERS = ("none", "surface")
+_ALLOWED_SHAPE_ENCODERS = ("none", "surface", "mesh")
 
 
 def _as_optimizer(value: Any) -> str:
@@ -328,6 +331,21 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             if "n_surface" in raw
             else 1024
         ),
+        "n_faces": (
+            _as_positive_int("n_faces", raw["n_faces"])
+            if "n_faces" in raw
+            else 256
+        ),
+        "encoder_hidden": (
+            _as_positive_int("encoder_hidden", raw["encoder_hidden"])
+            if "encoder_hidden" in raw
+            else 64
+        ),
+        "encoder_depth": (
+            _as_positive_int("encoder_depth", raw["encoder_depth"])
+            if "encoder_depth" in raw
+            else 4
+        ),
         "shape_encoder": (
             _as_shape_encoder(raw["shape_encoder"])
             if "shape_encoder" in raw
@@ -388,7 +406,11 @@ class OccupancyConfig:
     optimizer: str = "adam"
     # Envelope sample count (YAML). Used when ``shape_encoder`` is ``surface``.
     n_surface: int = 1024
-    # ``none`` keeps OccupancyMLP; ``surface`` uses OccupancyEncoder.
+    # Face-token length (YAML ``n_faces``).
+    n_faces: int = 256
+    encoder_hidden: int = 64
+    encoder_depth: int = 4
+    # ``none`` keeps OccupancyMLP; ``surface`` envelope; ``mesh`` face tokens.
     shape_encoder: str = "none"
 
 
@@ -439,6 +461,9 @@ def load_config(
         batch_size=knobs["batch_size"],
         optimizer=knobs["optimizer"],
         n_surface=knobs["n_surface"],
+        n_faces=knobs["n_faces"],
+        encoder_hidden=knobs["encoder_hidden"],
+        encoder_depth=knobs["encoder_depth"],
         shape_encoder=knobs["shape_encoder"],
     )
 
@@ -484,6 +509,9 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  batch_size={cfg.batch_size}\n"
         f"  optimizer={cfg.optimizer}\n"
         f"  n_surface={cfg.n_surface}\n"
+        f"  n_faces={cfg.n_faces}\n"
+        f"  encoder_hidden={cfg.encoder_hidden}\n"
+        f"  encoder_depth={cfg.encoder_depth}\n"
         f"  shape_encoder={cfg.shape_encoder}\n"
         f")"
     )

@@ -5,6 +5,14 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
 
+## 2026-09-01 09:00 — Step 10: MeshFaceEncoder
+
+``src/geometry/encoder.py`` ``MeshFaceEncoder``: ``(B, F, 12)`` → ``z_face``. YAML ``shape_encoder: mesh``. Occupancy head is ``cat(xyz, z_face)``. Envelope head (``surface``) still loads. Infer rebuilds face tokens with the stored AABB. Catalog train is for the user to run.
+
+## 2026-08-31 19:00 — Step 9: face tokens
+
+``src/geometry/face_tokens.py``: ``(n_faces, 12)`` ``[v0, v1, v2, n]``. YAML ``n_faces: 256``. Encoder dataset stores tokens (AABB on corners); ``OccupancyEncoder`` still uses the envelope only. ``MeshFaceEncoder`` is not trained.
+
 ## 2026-08-31 18:00 — Viewer: inside-cut slider
 
 **Inside cut** (0.00–1.00, default 0.50) re-thresholds the last **Run model** from stored sigmoid probabilities (no extra GPU pass). Lower = more inside. Acc/IoU in the status line follow this cut. Occupancy train code and train metrics at 0.5 are unchanged. How to run: [`src/viewer/README.md`](src/viewer/README.md).

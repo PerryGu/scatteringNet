@@ -1,8 +1,8 @@
 """Classify occupancy NPZs from ``models/<run_id>/best.pt``.
 
 Rebuilds ``OccupancyMLP`` or ``OccupancyEncoder`` from the checkpoint
-``kind``. Query XYZ (and the envelope, when conditioned) use the stored
-per-mesh AABB, not a fresh map.
+``kind``. Query XYZ (and envelope or face tokens, when conditioned) use
+the stored per-mesh AABB, not a fresh map.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import torch
 
 from config import OccupancyConfig, as_data_relative, load_config, repo_root
 from data_npz import load_points_labels, load_points_labels_mesh
+from geometry.face_tokens import apply_face_aabb, face_tokens_from_triangles
 from geometry.mesh_io import load_obj_triangles
 from geometry.surface import sample_surface_points
 from metrics import occupancy_metrics
@@ -67,7 +68,21 @@ def load_occupancy_model(
         model: OccupancyMLP | OccupancyEncoder = OccupancyMLP(hidden=hidden, depth=depth)
     elif kind == ENCODER_KIND:
         latent = int(ckpt["latent_dim"]) if ckpt.get("latent_dim") is not None else hidden
-        model = OccupancyEncoder(hidden=hidden, depth=depth, latent_dim=latent)
+        enc = str(ckpt.get("shape_encoder") or "surface").strip().lower()
+        eh = (
+            int(ckpt["encoder_hidden"])
+            if ckpt.get("encoder_hidden") is not None
+            else None
+        )
+        ed = int(ckpt["encoder_depth"]) if ckpt.get("encoder_depth") is not None else 4
+        model = OccupancyEncoder(
+            hidden=hidden,
+            depth=depth,
+            latent_dim=latent,
+            shape_encoder=enc,
+            encoder_hidden=eh,
+            encoder_depth=ed,
+        )
     else:
         raise ValueError(f"unsupported checkpoint kind {kind!r}")
     model.load_state_dict(ckpt["state_dict"])
@@ -110,20 +125,29 @@ def infer_npz(
     part = _part_for_npz(ckpt, npz, cfg.data_dir)
     center = np.asarray(part["center"], dtype=np.float32)
     scale = float(part["scale"])
-    if str(ckpt.get("shape_encoder", "none")).strip().lower() == "surface":
+    geom = None
+    shape_id = None
+    enc = str(ckpt.get("shape_encoder", "none")).strip().lower()
+    if enc in ("surface", "mesh"):
         points, labels, mesh_path = load_points_labels_mesh(npz, cfg.data_dir)
         vertices, faces = load_obj_triangles(mesh_path)
-        n_surface = int(ckpt.get("n_surface") or cfg.n_surface)
-        world = sample_surface_points(
-            vertices, faces, n_surface, seed=int(cfg.seed), cache_key=str(mesh_path.resolve())
-        )
-        env = apply_normalization(world, center, scale)
-        envelope = torch.from_numpy(env).unsqueeze(0)
+        cache_key = str(mesh_path.resolve())
+        if enc == "surface":
+            n_surface = int(ckpt.get("n_surface") or cfg.n_surface)
+            world = sample_surface_points(
+                vertices, faces, n_surface, seed=int(cfg.seed), cache_key=cache_key
+            )
+            arr = apply_normalization(world, center, scale)
+        else:
+            n_tok = int(ckpt.get("n_faces") or cfg.n_faces)
+            world_tok = face_tokens_from_triangles(
+                vertices, faces, n_tok, cache_key=cache_key
+            )
+            arr = apply_face_aabb(world_tok, center, scale)
+        geom = torch.from_numpy(arr).unsqueeze(0)
         shape_id = torch.zeros((), dtype=torch.long)
     else:
         points, labels = load_points_labels(npz)
-        envelope = None
-        shape_id = None
     xyz = torch.from_numpy(apply_normalization(points, center, scale))
     y = torch.from_numpy(np.asarray(labels, dtype=np.float32)).unsqueeze(1)
     logits_rows: list[torch.Tensor] = []
@@ -131,13 +155,13 @@ def infer_npz(
         for start in range(0, int(xyz.shape[0]), int(cfg.batch_size)):
             sl = slice(start, start + int(cfg.batch_size))
             batch_xyz = xyz[sl].to(cfg.device)
-            if envelope is None:
+            if geom is None:
                 logits_rows.append(model(batch_xyz).cpu())
             else:
                 b = int(batch_xyz.shape[0])
-                env_b = envelope.expand(b, -1, -1).to(cfg.device)
+                geom_b = geom.expand(b, -1, -1).to(cfg.device)
                 sid = shape_id.expand(b).to(cfg.device)
-                logits_rows.append(model(batch_xyz, env_b, sid).cpu())
+                logits_rows.append(model(batch_xyz, geom_b, sid).cpu())
     logits = torch.cat(logits_rows, dim=0)
     scores = occupancy_metrics(logits, y)
     print(

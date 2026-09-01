@@ -2,8 +2,8 @@
 # `device` is still detected at runtime in src/config.py (CUDA vs CPU).
 
 # --- Model Architecture ---
-hidden: 128       # Number of hidden units (channels) per layer in the OccupancyMLP
-depth: 6          # Number of hidden linear layers in the MLP network
+hidden: 64        # Number of hidden units (channels) per layer in the OccupancyMLP
+depth: 4          # Number of hidden linear layers in the MLP network
 seed: 1           # Same seed as the previous extrude_nr1 train
 
 # --- Path Configuration ---
@@ -21,10 +21,13 @@ optimizer: adam   # adam | adamw | sgd
 val_fraction: 0.20
 
 # --- Geometry ---
-# none = xyz-only OccupancyMLP. surface = query + shell cloud (n_surface points).
-# Occupancy labels stay in the NPZ. Envelope points are sampled on the OBJ.
-shape_encoder: surface
-n_surface: 1024          # Envelope samples on the OBJ (shape vector)
+# none = xyz-only OccupancyMLP. surface = envelope cloud. mesh = triangle tokens.
+# Occupancy labels stay in the NPZ.
+shape_encoder: mesh
+n_surface: 1024          # Envelope samples (kept on the dataset for A/B; head uses faces when mesh)
+n_faces: 256             # Triangle tokens per mesh
+encoder_hidden: 64       # MeshFaceEncoder width
+encoder_depth: 4         # MeshFaceEncoder depth
 # latent_dim: 64         # OccupancyEncoder z width; omit to use hidden
 
 # --- Catalog ---
@@ -36,11 +39,12 @@ max_files_per_shape: 2
 
 # --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
-run_name: extrude_nr1_surface
+run_name: extrude_nr1_mesh
 
 # --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.
 # The run snapshot (runs/<id>/config.yaml) records:
 #   total      — planned epoch count (copied from epochs)
 #   checkpoint — epoch index stored in best.pt (runtime; not a project knob)
-checkpoint_metric: val_acc
+# val_iou = keep the epoch with the best inside overlap (not overall accuracy).
+checkpoint_metric: val_iou

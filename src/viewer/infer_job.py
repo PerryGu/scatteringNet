@@ -18,6 +18,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from infer_multi_npz import load_occupancy_model  # noqa: E402
+from geometry.face_tokens import apply_face_aabb, face_tokens_from_triangles  # noqa: E402
 from geometry.mesh_io import load_obj_triangles  # noqa: E402
 from geometry.surface import sample_surface_points  # noqa: E402
 from metrics import occupancy_metrics  # noqa: E402
@@ -109,24 +110,33 @@ def _forward_logits(model, cfg, xyz, envelope, shape_id):
     return torch.cat(logits_rows, dim=0)
 
 
-def _envelope_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
+def _geom_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
     import torch
 
-    uses_surface = str(ckpt.get("shape_encoder", "none")).strip().lower() == "surface"
-    if not uses_surface:
-        return None, None
-    n_surface = int(ckpt.get("n_surface") or cfg.n_surface)
-    world = sample_surface_points(
-        vertices,
-        faces,
-        n_surface,
-        seed=int(cfg.seed),
-        cache_key=cache_key,
-    )
-    env = apply_normalization(world, center, scale)
-    envelope = torch.from_numpy(env).unsqueeze(0)
-    shape_id = torch.zeros((), dtype=torch.long)
-    return envelope, shape_id
+    enc = str(ckpt.get("shape_encoder", "none")).strip().lower()
+    if enc == "surface":
+        n_surface = int(ckpt.get("n_surface") or cfg.n_surface)
+        world = sample_surface_points(
+            vertices,
+            faces,
+            n_surface,
+            seed=int(cfg.seed),
+            cache_key=cache_key,
+        )
+        env = apply_normalization(world, center, scale)
+        geom = torch.from_numpy(env).unsqueeze(0)
+        shape_id = torch.zeros((), dtype=torch.long)
+        return geom, shape_id
+    if enc == "mesh":
+        n_tok = int(ckpt.get("n_faces") or cfg.n_faces)
+        world_tok = face_tokens_from_triangles(
+            vertices, faces, n_tok, cache_key=cache_key
+        )
+        tok = apply_face_aabb(world_tok, center, scale)
+        geom = torch.from_numpy(tok).unsqueeze(0)
+        shape_id = torch.zeros((), dtype=torch.long)
+        return geom, shape_id
+    return None, None
 
 
 def decode_points_b64(text: str) -> np.ndarray:
@@ -186,17 +196,20 @@ def infer_uploaded_npz(
         points=points,
         data_dir=data_dir,
     )
-    uses_surface = str(ckpt.get("shape_encoder", "none")).strip().lower() == "surface"
+    uses_geom = str(ckpt.get("shape_encoder", "none")).strip().lower() in (
+        "surface",
+        "mesh",
+    )
     envelope = None
     shape_id = None
-    if uses_surface:
+    if uses_geom:
         if not mesh_path:
-            raise ValueError("this checkpoint needs a mesh_path for the envelope")
+            raise ValueError("this checkpoint needs a mesh_path for the geometry encoder")
         if data_dir is None:
             raise ValueError("helper has no data_dir; cannot sample the envelope")
         mesh_file = resolve_viewer_mesh(mesh_path, data_dir)
         vertices, faces = load_obj_triangles(mesh_file)
-        envelope, shape_id = _envelope_from_mesh(
+        envelope, shape_id = _geom_from_mesh(
             ckpt, cfg, vertices, faces, center, scale, str(mesh_file.resolve())
         )
 
@@ -262,7 +275,7 @@ def infer_uploaded_obj(
         data_dir=data_dir,
         vertices=vertices,
     )
-    envelope, shape_id = _envelope_from_mesh(
+    envelope, shape_id = _geom_from_mesh(
         ckpt, cfg, vertices, faces, center, scale, "upload:" + str(obj_name or "obj")
     )
     xyz = torch.from_numpy(apply_normalization(points, center, scale))

@@ -26,6 +26,7 @@ from data_npz import (
     resolve_npz_catalog,
     shape_key,
 )
+from geometry.face_tokens import apply_face_aabb, undo_face_aabb
 from geometry.mesh_io import load_obj_triangles
 from normalize import apply_normalization, compute_center_scale
 
@@ -96,6 +97,8 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
         self.shape_id = int(shape_id)
         self.n_surface: int | None = None
         self.envelope: Tensor | None = None
+        self.n_faces: int | None = None
+        self.face_tokens: Tensor | None = None
 
     def __len__(self) -> int:
         return int(self.xyz.shape[0])
@@ -120,6 +123,8 @@ class OccupancyMultiNpzDataset:
         *,
         n_surface: int | None = None,
         seed: int = 1,
+        n_faces: int = 256,
+        item_geom: str = "surface",
     ) -> None:
         """
         Load each NPZ as :class:`OccupancyPointDataset` (no point pooling).
@@ -134,6 +139,10 @@ class OccupancyMultiNpzDataset:
             Envelope count; ``None`` keeps xyz-only items.
         seed:
             Sample seed (forwarded to each part).
+        n_faces:
+            Face-token length when the encoder dataset is used.
+        item_geom:
+            ``surface`` puts the envelope in the batch; ``mesh`` puts face tokens.
         """
         paths = [Path(p) for p in npz_paths]
         if not paths:
@@ -149,6 +158,8 @@ class OccupancyMultiNpzDataset:
                     data_dir=data_dir,
                     n_surface=n_surface,
                     seed=seed,
+                    n_faces=n_faces,
+                    item_geom=item_geom,
                 )
                 for path in paths
             ]
@@ -166,6 +177,8 @@ class OccupancyMultiNpzDataset:
         self.npz_paths = [part.npz_path for part in parts]
         self.data_dir = Path(data_dir) if data_dir is not None else None
         self.n_surface = n_surface
+        self.n_faces = n_faces if n_surface is not None else None
+        self.item_geom = item_geom if n_surface is not None else None
 
     def __len__(self) -> int:
         """Number of files (shapes), not pooled points."""
@@ -196,6 +209,8 @@ class OccupancyMultiNpzDataset:
         max_files_per_shape: int | None = 2,
         n_surface: int | None = None,
         seed: int = 1,
+        n_faces: int = 256,
+        item_geom: str = "surface",
     ) -> OccupancyMultiNpzDataset:
         """
         Build from :func:`resolve_npz_catalog`.
@@ -206,6 +221,8 @@ class OccupancyMultiNpzDataset:
             Forwarded to :func:`resolve_npz_catalog`.
         n_surface, seed:
             Envelope sampling; ``None`` keeps xyz-only items.
+        n_faces:
+            Face-token length on encoder parts.
 
         Returns
         -------
@@ -223,6 +240,8 @@ class OccupancyMultiNpzDataset:
             data_dir=data_dir,
             n_surface=n_surface,
             seed=seed,
+            n_faces=n_faces,
+            item_geom=item_geom,
         )
 
 
@@ -277,7 +296,8 @@ def apply_shared_mesh_aabb(parts: Sequence[OccupancyPointDataset]) -> None:
     Give every NPZ of one mesh the same ``center`` / ``scale``.
 
     Lattice and jitter query AABBs differ. The encoder and the occupancy
-    head must see one frame per OBJ. Envelope clouds are remapped too.
+    head must see one frame per OBJ. Envelope clouds and face tokens
+    are remapped too.
     """
     groups: dict[str, list[OccupancyPointDataset]] = {}
     for part in parts:
@@ -291,10 +311,21 @@ def apply_shared_mesh_aabb(parts: Sequence[OccupancyPointDataset]) -> None:
                 env = np.asarray(part.envelope.numpy(), dtype=np.float32)
                 old_c = np.asarray(part.center, dtype=np.float32).reshape(3)
                 world_env = env * np.float32(part.scale) + old_c
+            world_tok = None
+            if part.face_tokens is not None:
+                world_tok = undo_face_aabb(
+                    np.asarray(part.face_tokens.numpy(), dtype=np.float32),
+                    part.center,
+                    float(part.scale),
+                )
             part.xyz = torch.from_numpy(apply_normalization(world_xyz, center, scale))
             if world_env is not None:
                 part.envelope = torch.from_numpy(
                     apply_normalization(world_env, center, scale)
+                )
+            if world_tok is not None:
+                part.face_tokens = torch.from_numpy(
+                    apply_face_aabb(world_tok, center, scale)
                 )
             part.center = center
             part.scale = scale

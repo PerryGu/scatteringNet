@@ -182,6 +182,7 @@ class TrainMultiNpzTests(unittest.TestCase):
                 _cpu_cfg(root),
                 shape_encoder="surface",
                 n_surface=32,
+                n_faces=16,
                 latent_dim=8,
             )
             result = train_multi_npz(
@@ -195,12 +196,14 @@ class TrainMultiNpzTests(unittest.TestCase):
             self.assertEqual(ckpt["kind"], ENCODER_KIND)
             self.assertEqual(ckpt["shape_encoder"], "surface")
             self.assertEqual(ckpt["n_surface"], 32)
+            self.assertEqual(ckpt["n_faces"], 16)
             self.assertEqual(ckpt["latent_dim"], 8)
             snap = yaml.safe_load(
                 result.run_dir.joinpath("config.yaml").read_text(encoding="utf-8")
             )
             self.assertEqual(snap["shape_encoder"], "surface")
             self.assertEqual(snap["n_surface"], 32)
+            self.assertEqual(snap["n_faces"], 16)
             row = json.loads(
                 result.run_dir.joinpath("metrics.jsonl")
                 .read_text(encoding="utf-8")
@@ -211,6 +214,38 @@ class TrainMultiNpzTests(unittest.TestCase):
             self.assertIn("val_f1", row)
             self.assertIn("test_iou", row)
             self.assertIn("test_f1", row)
+
+    def test_mesh_encoder_train_uses_face_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            a, b = _two_mesh_npzs(root)
+            cfg = replace(
+                _cpu_cfg(root),
+                shape_encoder="mesh",
+                n_surface=16,
+                n_faces=12,
+                encoder_hidden=8,
+                encoder_depth=2,
+                latent_dim=8,
+            )
+            result = train_multi_npz(
+                cfg,
+                npz_paths=[a, b],
+                epochs=2,
+                root=root,
+                run_name="mesh",
+            )
+            ckpt = torch.load(result.best_path, map_location="cpu", weights_only=False)
+            self.assertEqual(ckpt["kind"], ENCODER_KIND)
+            self.assertEqual(ckpt["shape_encoder"], "mesh")
+            self.assertEqual(ckpt["n_faces"], 12)
+            self.assertEqual(ckpt["encoder_hidden"], 8)
+            self.assertEqual(ckpt["encoder_depth"], 2)
+            snap = yaml.safe_load(
+                result.run_dir.joinpath("config.yaml").read_text(encoding="utf-8")
+            )
+            self.assertEqual(snap["shape_encoder"], "mesh")
+            self.assertIn("mesh.", "".join(ckpt["state_dict"].keys()))
 
     def test_resume_continues_epoch_numbers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
