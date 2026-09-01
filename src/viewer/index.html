@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>scatteringNet occupancy viewer</title>
-  <link rel="stylesheet" href="css/viewer.css?v=28">
+  <link rel="stylesheet" href="css/viewer.css?v=32">
 </head>
 <body>
   <div id="canvas-container">
@@ -47,8 +47,8 @@
           <input type="range" id="sld-opacity" min="0" max="100" value="100">
         </div>
         <div class="slider-row">
-          <span>Point size <span id="val-psize">1.0×</span></span>
-          <input type="range" id="sld-psize" min="20" max="400" value="100">
+          <span title="Occupancy points (orange/blue) and envelope points (purple).">Point size <span id="val-psize">1.0×</span></span>
+          <input type="range" id="sld-psize" min="20" max="400" value="100" title="Occupancy and envelope dots.">
         </div>
         <div class="slider-row">
           <span title="How many NPZ points to draw. Large files are subsampled so the view stays smooth.">Max points drawn <span id="val-cap">200000</span></span>
@@ -56,6 +56,21 @@
         </div>
       </div>
       <div id="fill-panel" hidden>
+        <div class="fill-title">Create dots</div>
+        <div class="fill-row">
+          <button type="button" id="btn-envelope" disabled title="Sample purple points on the mesh surface (same envelope as occupancy training).">Envelope</button>
+          <div class="slider-row">
+            <span title="How many surface samples. Training often uses 1024.">Count <span id="val-envelope">1024</span></span>
+            <input type="range" id="sld-envelope" min="256" max="4096" step="64" value="1024" title="256–4096 surface points. Drag refreshes if Envelope is on.">
+          </div>
+        </div>
+        <div class="fill-row">
+          <button type="button" id="btn-faces" disabled title="Show the triangles + normals the mesh encoder uses (largest faces by area, then tile).">Faces</button>
+          <div class="slider-row">
+            <span title="How many face tokens. Training default is 256.">Count <span id="val-faces">256</span></span>
+            <input type="range" id="sld-faces" min="64" max="1024" step="16" value="256" title="64–1024 tokens. Drag refreshes if Faces is on.">
+          </div>
+        </div>
         <div class="fill-row">
           <button type="button" id="btn-fill" disabled>Fill points</button>
           <div class="slider-row">
@@ -106,6 +121,6 @@
       }
     }, 2500);
   </script>
-  <script type="module" src="js/main.js?v=28"></script>
+  <script type="module" src="js/main.js?v=32"></script>
 </body>
 </html>

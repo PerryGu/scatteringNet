@@ -13,6 +13,8 @@ export const UI_PREF_DEFAULTS = {
   draw_cap: 200000,
   density: 71,
   inside_cut: 50,
+  envelope_n: 1024,
+  faces_n: 256,
   model_id: "",
 };
 

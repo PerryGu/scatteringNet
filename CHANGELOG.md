@@ -5,6 +5,18 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
 
+## 2026-09-01 15:00 — Viewer: face-token overlay
+
+**Faces** in Create dots (between Envelope and Fill). Teal triangles + cyan normal ticks = occupancy ``n_faces`` tokens (largest by area, tiled if short). Count 64–1024, default 256. Occupancy train code unchanged.
+
+## 2026-09-01 14:00 — Viewer: envelope overlay
+
+**Envelope** + **Count** (256–4096, default 1024) in the Fill panel (**Create dots**), above **Fill points**. Purple area-weighted surface samples from the loaded OBJ (same ``sample_surface_points`` as occupancy). Click toggles; slider refreshes while shown. **Point size** scales occupancy and envelope dots. Occupancy train code unchanged.
+
+## 2026-09-01 13:00 — Viewer: envelope and face-token checkpoints
+
+Job A / Job B rebuild shape tokens from the **selected** ``best.pt`` (envelope ``(N,3)`` or faces ``(F,12)``), not from live YAML. Model list labels ``(envelope)`` / ``(faces)``. Occupancy train code unchanged.
+
 ## 2026-09-01 09:00 — Step 10: MeshFaceEncoder
 
 ``src/geometry/encoder.py`` ``MeshFaceEncoder``: ``(B, F, 12)`` → ``z_face``. YAML ``shape_encoder: mesh``. Occupancy head is ``cat(xyz, z_face)``. Envelope head (``surface``) still loads. Infer rebuilds face tokens with the stored AABB. Catalog train is for the user to run.

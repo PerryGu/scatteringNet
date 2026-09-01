@@ -1,6 +1,7 @@
-"""Job A: classify uploaded NPZ query points with a ``models/*/best.pt``.
+"""Job A / B: classify uploaded points with a ``models/*/best.pt``.
 
-Reuses ``load_occupancy_model``, AABB helpers, and envelope sampling.
+Reuses ``load_occupancy_model`` and AABB helpers. Geometry tokens follow
+the **checkpoint** (envelope vs face tokens), not live ``config.yaml``.
 Does not modify occupancy train/infer modules.
 """
 
@@ -9,7 +10,10 @@ from __future__ import annotations
 import base64
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from config import OccupancyConfig
 
 import numpy as np
 
@@ -23,6 +27,7 @@ from geometry.mesh_io import load_obj_triangles  # noqa: E402
 from geometry.surface import sample_surface_points  # noqa: E402
 from metrics import occupancy_metrics  # noqa: E402
 from normalize import apply_normalization, compute_center_scale  # noqa: E402
+from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND  # noqa: E402
 
 from mesh_access import resolve_viewer_mesh  # noqa: E402
 from model_access import match_checkpoint_part, resolve_viewer_checkpoint  # noqa: E402
@@ -90,8 +95,33 @@ def aabb_for_viewer(
     return center, scale, "points"
 
 
-def _forward_logits(model, cfg, xyz, envelope, shape_id):
-    """Batched occupancy logits on CPU."""
+def _ckpt_shape_encoder(ckpt: dict[str, Any]) -> str:
+    """
+    Encoder stored on ``best.pt``, not live YAML.
+
+    Missing ``shape_encoder`` on an occupancy-encoder checkpoint is the
+    original envelope head.
+    """
+    raw = str(ckpt.get("shape_encoder") or "").strip().lower()
+    if raw in ("surface", "mesh", "none"):
+        return raw
+    kind = str(ckpt.get("kind") or "")
+    if kind == ENCODER_KIND:
+        return "surface"
+    return "none"
+
+
+def _runtime_cfg(cfg: OccupancyConfig | None):
+    """Use the caller cfg (tests) or load repo YAML for device / batch / seed."""
+    if cfg is not None:
+        return cfg
+    from config import load_config
+
+    return load_config()
+
+
+def _forward_logits(model, cfg, xyz, geom, shape_id):
+    """Batched occupancy logits. ``geom`` is envelope ``(1,N,3)`` or faces ``(1,F,12)``."""
     import torch
 
     n = int(xyz.shape[0])
@@ -100,41 +130,53 @@ def _forward_logits(model, cfg, xyz, envelope, shape_id):
         for start in range(0, n, int(cfg.batch_size)):
             sl = slice(start, start + int(cfg.batch_size))
             batch_xyz = xyz[sl].to(cfg.device)
-            if envelope is None:
+            if geom is None:
                 logits_rows.append(model(batch_xyz).cpu())
             else:
                 b = int(batch_xyz.shape[0])
-                env_b = envelope.expand(b, -1, -1).to(cfg.device)
-                sid = shape_id.expand(b).to(cfg.device)
-                logits_rows.append(model(batch_xyz, env_b, sid).cpu())
+                geom_b = geom.expand(b, -1, -1).to(cfg.device)
+                sid = shape_id.reshape(()).expand(b).to(cfg.device)
+                logits_rows.append(model(batch_xyz, geom_b, sid).cpu())
     return torch.cat(logits_rows, dim=0)
 
 
 def _geom_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
+    """
+    Build the shape tensor this checkpoint was trained with.
+
+    ``surface`` → ``(1, n_surface, 3)`` envelope XYZ.
+    ``mesh`` → ``(1, n_faces, 12)`` triangle tokens.
+    ``none`` → no geometry (xyz-only MLP).
+    Counts and kind come from the checkpoint so a mesh ``best.pt`` still
+    infers after YAML is switched back to envelope (and the reverse).
+    """
     import torch
 
-    enc = str(ckpt.get("shape_encoder", "none")).strip().lower()
+    enc = _ckpt_shape_encoder(ckpt)
+    seed = int(ckpt["seed"]) if ckpt.get("seed") is not None else int(cfg.seed)
     if enc == "surface":
-        n_surface = int(ckpt.get("n_surface") or cfg.n_surface)
+        n_surface = (
+            int(ckpt["n_surface"]) if ckpt.get("n_surface") is not None else 1024
+        )
         world = sample_surface_points(
             vertices,
             faces,
             n_surface,
-            seed=int(cfg.seed),
+            seed=seed,
             cache_key=cache_key,
         )
         env = apply_normalization(world, center, scale)
         geom = torch.from_numpy(env).unsqueeze(0)
-        shape_id = torch.zeros((), dtype=torch.long)
+        shape_id = torch.zeros(1, dtype=torch.long)
         return geom, shape_id
     if enc == "mesh":
-        n_tok = int(ckpt.get("n_faces") or cfg.n_faces)
+        n_tok = int(ckpt["n_faces"]) if ckpt.get("n_faces") is not None else 256
         world_tok = face_tokens_from_triangles(
             vertices, faces, n_tok, cache_key=cache_key
         )
         tok = apply_face_aabb(world_tok, center, scale)
         geom = torch.from_numpy(tok).unsqueeze(0)
-        shape_id = torch.zeros((), dtype=torch.long)
+        shape_id = torch.zeros(1, dtype=torch.long)
         return geom, shape_id
     return None, None
 
@@ -168,12 +210,14 @@ def infer_uploaded_npz(
     mesh_path: str,
     points: np.ndarray,
     labels: np.ndarray,
+    cfg: OccupancyConfig | None = None,
 ) -> dict[str, Any]:
     """
     Classify ``points`` with ``best.pt``. Returns pred bytes (base64) and scores.
+
+    Envelope vs face tokens follow ``ckpt['shape_encoder']``.
     """
     import torch
-    from config import load_config
 
     n = int(points.shape[0])
     if n < 1:
@@ -187,7 +231,7 @@ def infer_uploaded_npz(
 
     ckpt_path = resolve_viewer_checkpoint(run_id, models_root)
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    cfg = load_config()
+    cfg = _runtime_cfg(cfg)
     model = load_occupancy_model(ckpt, cfg.device)
     center, scale, aabb_src = aabb_for_viewer(
         ckpt,
@@ -196,26 +240,25 @@ def infer_uploaded_npz(
         points=points,
         data_dir=data_dir,
     )
-    uses_geom = str(ckpt.get("shape_encoder", "none")).strip().lower() in (
-        "surface",
-        "mesh",
-    )
-    envelope = None
+    enc = _ckpt_shape_encoder(ckpt)
+    geom = None
     shape_id = None
-    if uses_geom:
+    if enc in ("surface", "mesh"):
         if not mesh_path:
             raise ValueError("this checkpoint needs a mesh_path for the geometry encoder")
         if data_dir is None:
-            raise ValueError("helper has no data_dir; cannot sample the envelope")
+            raise ValueError("helper has no data_dir; cannot load the OBJ for the encoder")
         mesh_file = resolve_viewer_mesh(mesh_path, data_dir)
         vertices, faces = load_obj_triangles(mesh_file)
-        envelope, shape_id = _geom_from_mesh(
+        geom, shape_id = _geom_from_mesh(
             ckpt, cfg, vertices, faces, center, scale, str(mesh_file.resolve())
         )
+        if geom is None:
+            raise ValueError(f"checkpoint shape_encoder={enc!r} built no geometry tokens")
 
     xyz = torch.from_numpy(apply_normalization(points, center, scale))
     y = torch.from_numpy(labels.astype(np.float32)).unsqueeze(1)
-    logits = _forward_logits(model, cfg, xyz, envelope, shape_id)
+    logits = _forward_logits(model, cfg, xyz, geom, shape_id)
     scores = occupancy_metrics(logits, y)
     probs, pred = _sigmoid_probs_and_pred(logits)
     gt = labels > 0
@@ -230,6 +273,7 @@ def infer_uploaded_npz(
         "inside_iou": float(scores.inside_iou),
         "inside_f1": float(scores.inside_f1),
         "kind": str(ckpt.get("kind") or ""),
+        "shape_encoder": enc,
         "aabb": aabb_src,
         "n_error": n_fn + n_fp,
         "n_fn": n_fn,
@@ -246,13 +290,16 @@ def infer_uploaded_obj(
     obj_name: str,
     obj_text: str,
     points: np.ndarray,
+    cfg: OccupancyConfig | None = None,
 ) -> dict[str, Any]:
     """
-    Classify fill-lattice XYZ with ``best.pt``. Envelope comes from the uploaded OBJ.
+    Classify fill-lattice XYZ with ``best.pt``.
+
+    Shape tokens are built from the uploaded OBJ: envelope when the
+    checkpoint is ``surface``, face tokens when it is ``mesh``.
     No file labels (Job B): metrics are omitted.
     """
     import torch
-    from config import load_config
 
     n = int(points.shape[0])
     if n < 1:
@@ -265,7 +312,7 @@ def infer_uploaded_obj(
     vertices, faces = triangles_from_obj_text(obj_text)
     ckpt_path = resolve_viewer_checkpoint(run_id, models_root)
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    cfg = load_config()
+    cfg = _runtime_cfg(cfg)
     model = load_occupancy_model(ckpt, cfg.device)
     center, scale, aabb_src = aabb_for_viewer(
         ckpt,
@@ -275,11 +322,14 @@ def infer_uploaded_obj(
         data_dir=data_dir,
         vertices=vertices,
     )
-    envelope, shape_id = _geom_from_mesh(
+    enc = _ckpt_shape_encoder(ckpt)
+    geom, shape_id = _geom_from_mesh(
         ckpt, cfg, vertices, faces, center, scale, "upload:" + str(obj_name or "obj")
     )
+    if enc in ("surface", "mesh") and geom is None:
+        raise ValueError(f"checkpoint shape_encoder={enc!r} built no geometry tokens")
     xyz = torch.from_numpy(apply_normalization(points, center, scale))
-    logits = _forward_logits(model, cfg, xyz, envelope, shape_id)
+    logits = _forward_logits(model, cfg, xyz, geom, shape_id)
     probs, pred = _sigmoid_probs_and_pred(logits)
     n_in = int(np.count_nonzero(pred > 0))
     return {
@@ -289,6 +339,7 @@ def infer_uploaded_obj(
         "n_inside": n_in,
         "n_outside": n - n_in,
         "kind": str(ckpt.get("kind") or ""),
+        "shape_encoder": enc,
         "aabb": aabb_src,
         "run_id": Path(ckpt_path).parent.name,
     }

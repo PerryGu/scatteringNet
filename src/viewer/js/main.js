@@ -27,6 +27,8 @@ import {
   thresholdFromCutSlider,
 } from "./model_panel.js";
 import { fillObjOnHelper, inferObjOnHelper, spacingFromSlider } from "./obj_infer.js";
+import { clampNSurface, envelopeObjOnHelper, makeEnvelopeLayer } from "./envelope.js";
+import { clampNFaces, facesObjOnHelper, makeFaceTokenGroup } from "./faces.js";
 import { fetchUiPrefs, postUiPrefs } from "./ui_prefs.js";
 
 const container = document.getElementById("canvas-container");
@@ -69,6 +71,12 @@ const fillPanel = document.getElementById("fill-panel");
 const btnFill = document.getElementById("btn-fill");
 const sldDensity = document.getElementById("sld-density");
 const valDensity = document.getElementById("val-density");
+const btnEnvelope = document.getElementById("btn-envelope");
+const sldEnvelope = document.getElementById("sld-envelope");
+const valEnvelope = document.getElementById("val-envelope");
+const btnFaces = document.getElementById("btn-faces");
+const sldFaces = document.getElementById("sld-faces");
+const valFaces = document.getElementById("val-faces");
 const sldCut = document.getElementById("sld-cut");
 const valCut = document.getElementById("val-cut");
 
@@ -85,6 +93,12 @@ let inferBusy = false;
 let fillBusy = false;
 let fillTimer = 0;
 let fillPending = false;
+let envelopeBusy = false;
+let envelopeTimer = 0;
+let envelopeVisible = false;
+let facesBusy = false;
+let facesTimer = 0;
+let facesVisible = false;
 let objText = "";
 let objFileName = "";
 let basePointSize = 0.05;
@@ -127,12 +141,21 @@ function isNpzJob() {
 }
 
 function syncFillPanel() {
-  const jobB = !!objText && !isNpzJob();
+  const hasMesh = !!objText;
+  const jobB = hasMesh && !isNpzJob();
   if (fillPanel) {
-    fillPanel.hidden = !jobB;
+    fillPanel.hidden = !hasMesh;
   }
   if (btnFill) {
     btnFill.disabled = !jobB || fillBusy || inferBusy;
+  }
+  if (btnEnvelope) {
+    btnEnvelope.disabled = !hasMesh || envelopeBusy || inferBusy;
+    btnEnvelope.classList.toggle("on", envelopeVisible);
+  }
+  if (btnFaces) {
+    btnFaces.disabled = !hasMesh || facesBusy || inferBusy;
+    btnFaces.classList.toggle("on", facesVisible);
   }
 }
 
@@ -163,6 +186,8 @@ function collectUiPrefs() {
     point_size: Number(sldPsize && sldPsize.value),
     draw_cap: Number(sldCap && sldCap.value),
     density: Number(sldDensity && sldDensity.value),
+    envelope_n: clampNSurface(sldEnvelope && sldEnvelope.value),
+    faces_n: clampNFaces(sldFaces && sldFaces.value),
     inside_cut: Number(sldCut && sldCut.value),
     model_id: selModel && selModel.value ? String(selModel.value) : "",
   };
@@ -200,10 +225,18 @@ function applyUiPrefs(prefs) {
   if (sldDensity && prefs.density != null) {
     sldDensity.value = String(prefs.density);
   }
+  if (sldEnvelope && prefs.envelope_n != null) {
+    sldEnvelope.value = String(clampNSurface(prefs.envelope_n));
+  }
+  if (sldFaces && prefs.faces_n != null) {
+    sldFaces.value = String(clampNFaces(prefs.faces_n));
+  }
   if (sldCut && prefs.inside_cut != null) {
     sldCut.value = String(prefs.inside_cut);
   }
   updateDensityLabel();
+  updateEnvelopeLabel();
+  updateFacesLabel();
   updateCutLabel();
   applyInspectToMesh();
   applyInspectToPoints();
@@ -407,7 +440,7 @@ function syncInspectEnabled() {
   togOutside.disabled = !hasNpz;
   togWire.disabled = !hasMesh;
   sldOpacity.disabled = !hasMesh;
-  sldPsize.disabled = !hasNpz;
+  sldPsize.disabled = !hasNpz && !envelopeVisible;
   sldCap.disabled = !hasNpz;
   inspectPanel.hidden = !loadedRoot;
   syncModelPanel();
@@ -440,6 +473,49 @@ function applyInspectToPoints() {
   setLayerVisible("npz-inside", togInside.checked);
   setLayerVisible("npz-outside", togOutside.checked);
   valPsize.textContent = (Number(sldPsize.value) / 100).toFixed(1) + "×";
+}
+
+function removeEnvelopeLayer() {
+  if (!loadedRoot) {
+    envelopeVisible = false;
+    return;
+  }
+  const old = loadedRoot.getObjectByName("envelope-points");
+  if (old) {
+    loadedRoot.remove(old);
+    disposeObject3d(old);
+  }
+}
+
+function attachEnvelopeLayer(xyz) {
+  if (!loadedRoot) {
+    return;
+  }
+  removeEnvelopeLayer();
+  loadedRoot.add(makeEnvelopeLayer(xyz, currentPointSize()));
+  envelopeVisible = true;
+  applyInspectToPoints();
+}
+
+function removeFaceTokenLayer() {
+  if (!loadedRoot) {
+    facesVisible = false;
+    return;
+  }
+  const old = loadedRoot.getObjectByName("face-tokens");
+  if (old) {
+    loadedRoot.remove(old);
+    disposeObject3d(old);
+  }
+}
+
+function attachFaceTokenLayer(tokens, n, tick) {
+  if (!loadedRoot) {
+    return;
+  }
+  removeFaceTokenLayer();
+  loadedRoot.add(makeFaceTokenGroup(tokens, n, tick));
+  facesVisible = true;
 }
 
 function rebuildNpzLayers() {
@@ -561,6 +637,8 @@ function replaceContent(group) {
   }
   loadedRoot = group;
   shownMesh = null;
+  envelopeVisible = false;
+  facesVisible = false;
   scene.add(loadedRoot);
   const framed = fitCameraToObject(camera, controls, loadedRoot);
   setHelpers(framed.radius, framed.yMin, framed.center);
@@ -612,6 +690,10 @@ function clearView() {
   objFileName = "";
   inferBusy = false;
   fillBusy = false;
+  envelopeBusy = false;
+  envelopeVisible = false;
+  facesBusy = false;
+  facesVisible = false;
   cancelPendingFill();
   resetViewMode();
   hideNpzPanel();
@@ -709,8 +791,10 @@ async function openUserFile(file, handle) {
 }
 
 async function attachObjText(text) {
-  const meshGroup = parseObjText(text, { opacity: 0.42, name: "shown-obj" });
+  objText = String(text || "");
+  const meshGroup = parseObjText(objText, { opacity: 0.42, name: "shown-obj" });
   attachShownMesh(meshGroup);
+  syncFillPanel();
 }
 
 function promptObjFallback(reason) {
@@ -752,6 +836,134 @@ function updateDensityLabel() {
     return;
   }
   valDensity.textContent = spacingFromSlider(sldDensity.value).toFixed(2);
+}
+
+function updateFacesLabel() {
+  if (!valFaces || !sldFaces) {
+    return;
+  }
+  valFaces.textContent = String(clampNFaces(sldFaces.value));
+}
+
+function scheduleFacesFromSlider() {
+  updateFacesLabel();
+  if (!facesVisible || !objText) {
+    return;
+  }
+  window.clearTimeout(facesTimer);
+  facesTimer = window.setTimeout(() => {
+    facesTimer = 0;
+    runFaces({ refresh: true });
+  }, 180);
+}
+
+async function runFaces(opts) {
+  const refresh = !!(opts && opts.refresh);
+  if (!objText) {
+    return;
+  }
+  if (!refresh && facesVisible) {
+    removeFaceTokenLayer();
+    facesVisible = false;
+    syncFillPanel();
+    setStatus("Faces hidden.");
+    return;
+  }
+  if (facesBusy || inferBusy) {
+    return;
+  }
+  facesBusy = true;
+  syncFillPanel();
+  const nFaces = clampNFaces(sldFaces && sldFaces.value);
+  setStatus("Building " + nFaces.toLocaleString() + " face tokens…");
+  try {
+    const overlay = await facesObjOnHelper({
+      objText: objText,
+      nFaces: nFaces,
+    });
+    attachFaceTokenLayer(overlay.tokens, overlay.n, overlay.tick);
+    const tiled =
+      overlay.nUnique < overlay.n
+        ? " (" + overlay.nUnique.toLocaleString() + " unique, tiled)"
+        : "";
+    setStatus(
+      "Faces “" +
+        (objFileName || "mesh") +
+        "”: " +
+        overlay.n.toLocaleString() +
+        " tokens" +
+        tiled +
+        " of " +
+        overlay.nMesh.toLocaleString() +
+        " mesh triangles."
+    );
+    scheduleSaveUiPrefs();
+  } catch (err) {
+    setStatus("Faces failed: " + err);
+  }
+  facesBusy = false;
+  syncFillPanel();
+}
+
+function updateEnvelopeLabel() {
+  if (!valEnvelope || !sldEnvelope) {
+    return;
+  }
+  valEnvelope.textContent = String(clampNSurface(sldEnvelope.value));
+}
+
+function scheduleEnvelopeFromSlider() {
+  updateEnvelopeLabel();
+  if (!envelopeVisible || !objText) {
+    return;
+  }
+  window.clearTimeout(envelopeTimer);
+  envelopeTimer = window.setTimeout(() => {
+    envelopeTimer = 0;
+    runEnvelope({ refresh: true });
+  }, 180);
+}
+
+async function runEnvelope(opts) {
+  const refresh = !!(opts && opts.refresh);
+  if (!objText) {
+    return;
+  }
+  if (!refresh && envelopeVisible) {
+    removeEnvelopeLayer();
+    envelopeVisible = false;
+    syncFillPanel();
+    setStatus("Envelope hidden.");
+    syncInspectEnabled();
+    return;
+  }
+  if (envelopeBusy || inferBusy) {
+    return;
+  }
+  envelopeBusy = true;
+  syncFillPanel();
+  const nSurface = clampNSurface(sldEnvelope && sldEnvelope.value);
+  setStatus("Sampling " + nSurface.toLocaleString() + " envelope points…");
+  try {
+    const sampled = await envelopeObjOnHelper({
+      objText: objText,
+      nSurface: nSurface,
+    });
+    attachEnvelopeLayer(sampled.points);
+    syncInspectEnabled();
+    setStatus(
+      "Envelope “" +
+        (objFileName || "mesh") +
+        "”: " +
+        sampled.n.toLocaleString() +
+        " purple surface points."
+    );
+    scheduleSaveUiPrefs();
+  } catch (err) {
+    setStatus("Envelope failed: " + err);
+  }
+  envelopeBusy = false;
+  syncFillPanel();
 }
 
 /** Debounce live density so drag does not POST on every tick. */
@@ -855,7 +1067,14 @@ async function fillModelSelect(preferredId) {
     models.forEach((row) => {
       const opt = document.createElement("option");
       opt.value = row.id;
-      opt.textContent = row.id;
+      const enc = row.shape_encoder ? String(row.shape_encoder) : "";
+      let label = row.id;
+      if (enc === "mesh") {
+        label += " (faces)";
+      } else if (enc === "surface") {
+        label += " (envelope)";
+      }
+      opt.textContent = label;
       selModel.appendChild(opt);
     });
     if (previous && models.some((row) => row.id === previous)) {
@@ -1032,6 +1251,34 @@ if (btnFill) {
     fillTimer = 0;
     runFill();
   });
+}
+if (btnEnvelope) {
+  btnEnvelope.addEventListener("click", () => {
+    window.clearTimeout(envelopeTimer);
+    envelopeTimer = 0;
+    runEnvelope();
+  });
+}
+if (sldEnvelope) {
+  sldEnvelope.addEventListener("input", () => {
+    scheduleEnvelopeFromSlider();
+    scheduleSaveUiPrefs();
+  });
+  updateEnvelopeLabel();
+}
+if (btnFaces) {
+  btnFaces.addEventListener("click", () => {
+    window.clearTimeout(facesTimer);
+    facesTimer = 0;
+    runFaces();
+  });
+}
+if (sldFaces) {
+  sldFaces.addEventListener("input", () => {
+    scheduleFacesFromSlider();
+    scheduleSaveUiPrefs();
+  });
+  updateFacesLabel();
 }
 if (sldDensity) {
   sldDensity.addEventListener("input", () => {

@@ -82,7 +82,7 @@ def _read_data_dir() -> Path | None:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    """Static viewer files, mesh fetch, NPZ infer (Job A), OBJ fill/infer (Job B)."""
+    """Static viewer files, mesh fetch, NPZ infer (Job A), OBJ fill/envelope/infer (Job B)."""
 
     data_dir: Path | None = None
     models_dir: Path | None = None
@@ -123,7 +123,9 @@ class Handler(SimpleHTTPRequestHandler):
                 try:
                     from model_access import list_viewer_models
 
-                    models = list_viewer_models(self.models_dir)
+                    models = list_viewer_models(
+                        self.models_dir, runs_root=REPO / "runs"
+                    )
                 except Exception:
                     models = []
             self._send_json(
@@ -156,6 +158,12 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/fill-obj":
             self._fill_obj()
             return
+        if parsed.path == "/api/envelope-obj":
+            self._envelope_obj()
+            return
+        if parsed.path == "/api/faces-obj":
+            self._faces_obj()
+            return
         if parsed.path == "/api/infer-obj":
             self._infer_obj()
             return
@@ -177,7 +185,11 @@ class Handler(SimpleHTTPRequestHandler):
             from model_access import list_viewer_models
 
             root = self.models_dir
-            models = list_viewer_models(root) if root is not None else []
+            models = (
+                list_viewer_models(root, runs_root=REPO / "runs")
+                if root is not None
+                else []
+            )
         except Exception as exc:
             self._send_json(500, {"error": str(exc)})
             return
@@ -304,6 +316,64 @@ class Handler(SimpleHTTPRequestHandler):
             result = fill_from_obj_text(str(payload.get("obj_text") or ""), spacing)
         except ImportError as exc:
             self._send_json(503, {"error": "fill helper import failed: " + str(exc)})
+            return
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        except Exception as exc:
+            self._send_json(500, {"error": str(exc)})
+            return
+        self._send_json(200, {"ok": True, **result})
+
+    def _envelope_obj(self) -> None:
+        try:
+            payload = self._read_json_body()
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        except json.JSONDecodeError as exc:
+            self._send_json(400, {"error": "invalid JSON: " + str(exc)})
+            return
+        try:
+            from envelope_job import envelope_from_obj_text
+
+            n_surface = int(payload.get("n_surface") or 0)
+            result = envelope_from_obj_text(
+                str(payload.get("obj_text") or ""), n_surface
+            )
+        except ImportError as exc:
+            self._send_json(
+                503, {"error": "envelope helper import failed: " + str(exc)}
+            )
+            return
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        except Exception as exc:
+            self._send_json(500, {"error": str(exc)})
+            return
+        self._send_json(200, {"ok": True, **result})
+
+    def _faces_obj(self) -> None:
+        try:
+            payload = self._read_json_body()
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        except json.JSONDecodeError as exc:
+            self._send_json(400, {"error": "invalid JSON: " + str(exc)})
+            return
+        try:
+            from faces_job import faces_overlay_from_obj_text
+
+            n_faces = int(payload.get("n_faces") or 0)
+            result = faces_overlay_from_obj_text(
+                str(payload.get("obj_text") or ""), n_faces
+            )
+        except ImportError as exc:
+            self._send_json(
+                503, {"error": "faces helper import failed: " + str(exc)}
+            )
             return
         except ValueError as exc:
             self._send_json(400, {"error": str(exc)})

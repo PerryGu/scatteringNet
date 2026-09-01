@@ -9,11 +9,38 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def list_viewer_models(models_root: Path | str) -> list[dict[str, str | int]]:
+def _shape_encoder_from_run(runs_root: Path | None, run_id: str) -> str:
+    """Read ``shape_encoder`` from ``runs/<id>/config.yaml`` (no torch)."""
+    if runs_root is None:
+        return ""
+    path = Path(runs_root) / run_id / "config.yaml"
+    try:
+        if not path.is_file():
+            return ""
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#") or not stripped.startswith("shape_encoder:"):
+                continue
+            raw = stripped.split(":", 1)[1].split("#", 1)[0].strip().strip("\"'")
+            kind = raw.lower()
+            if kind in ("surface", "mesh", "none"):
+                return kind
+            return ""
+    except OSError:
+        return ""
+    return ""
+
+
+def list_viewer_models(
+    models_root: Path | str,
+    *,
+    runs_root: Path | str | None = None,
+) -> list[dict[str, str | int]]:
     """
     Return ``best.pt`` checkpoints one level under ``models_root``.
 
-    Each item: ``id`` (folder name), ``path`` (repo-relative), ``mtime``.
+    Each item: ``id`` (folder name), ``path`` (repo-relative), ``mtime``,
+    and ``shape_encoder`` when ``runs/<id>/config.yaml`` is present.
     Newest first. Missing folder → empty list.
     """
     root = Path(models_root)
@@ -23,6 +50,7 @@ def list_viewer_models(models_root: Path | str) -> list[dict[str, str | int]]:
         return []
     if not root.is_dir():
         return []
+    runs = Path(runs_root) if runs_root is not None else None
     items: list[dict[str, str | int]] = []
     for best in root.glob("*/best.pt"):
         if not best.is_file():
@@ -32,13 +60,15 @@ def list_viewer_models(models_root: Path | str) -> list[dict[str, str | int]]:
             mtime = int(best.stat().st_mtime)
         except OSError:
             mtime = 0
-        items.append(
-            {
-                "id": run_id,
-                "path": "models/" + run_id + "/best.pt",
-                "mtime": mtime,
-            }
-        )
+        enc = _shape_encoder_from_run(runs, run_id)
+        row: dict[str, str | int] = {
+            "id": run_id,
+            "path": "models/" + run_id + "/best.pt",
+            "mtime": mtime,
+        }
+        if enc:
+            row["shape_encoder"] = enc
+        items.append(row)
     items.sort(key=lambda row: (-int(row["mtime"]), str(row["id"])))
     return items
 

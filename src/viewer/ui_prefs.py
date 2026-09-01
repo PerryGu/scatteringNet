@@ -23,6 +23,8 @@ DEFAULTS: dict[str, Any] = {
     "draw_cap": 200_000,
     "density": 71,
     "inside_cut": 50,
+    "envelope_n": 1024,
+    "faces_n": 256,
     "model_id": "",
 }
 
@@ -33,6 +35,8 @@ _INT_KEYS = {
     "draw_cap": (5000, 200_000),
     "density": (0, 100),
     "inside_cut": (0, 100),
+    "envelope_n": (256, 4096),
+    "faces_n": (64, 1024),
 }
 
 

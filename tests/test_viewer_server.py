@@ -79,6 +79,24 @@ class ViewerModelAccessTests(unittest.TestCase):
             ids = [row["id"] for row in list_viewer_models(root)]
             self.assertEqual(ids, ["run_new", "run_old"])
 
+    def test_list_includes_shape_encoder_from_runs_yaml(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            models = base / "models"
+            runs = base / "runs"
+            run = models / "mesh_run"
+            run.mkdir(parents=True)
+            (run / "best.pt").write_bytes(b"x")
+            snap = runs / "mesh_run"
+            snap.mkdir(parents=True)
+            (snap / "config.yaml").write_text(
+                "shape_encoder: mesh\nhidden: 64\n", encoding="utf-8"
+            )
+            from model_access import list_viewer_models
+
+            rows = list_viewer_models(models, runs_root=runs)
+            self.assertEqual(rows[0]["shape_encoder"], "mesh")
+
     def test_list_missing_dir_is_empty(self) -> None:
         from model_access import list_viewer_models
 
@@ -198,6 +216,61 @@ class ObjFillTests(unittest.TestCase):
         self.assertEqual(len(raw), out["n"] * 3 * 4)
 
 
+class EnvelopeOverlayTests(unittest.TestCase):
+    """Purple surface overlay: occupancy sampler, no torch in this module."""
+
+    def test_envelope_job_does_not_import_torch(self) -> None:
+        src = Path(__file__).resolve().parents[1] / "src" / "viewer" / "envelope_job.py"
+        text = src.read_text(encoding="utf-8")
+        self.assertNotRegex(text, r"(?m)^(import torch|from torch\b)")
+
+    def test_clamp_n_surface(self) -> None:
+        from envelope_job import clamp_n_surface
+
+        self.assertEqual(clamp_n_surface(1024), 1024)
+        with self.assertRaises(ValueError):
+            clamp_n_surface(8)
+        with self.assertRaises(ValueError):
+            clamp_n_surface(99_000)
+
+    def test_envelope_cube_count(self) -> None:
+        from envelope_job import envelope_from_obj_text
+
+        out = envelope_from_obj_text(_CUBE_OBJ, 256)
+        self.assertEqual(out["n"], 256)
+        raw = base64.b64decode(out["points_b64"])
+        self.assertEqual(len(raw), 256 * 3 * 4)
+
+
+class FaceTokenOverlayTests(unittest.TestCase):
+    """Teal triangle + normal overlay: occupancy face tokens, no torch."""
+
+    def test_faces_job_does_not_import_torch(self) -> None:
+        src = Path(__file__).resolve().parents[1] / "src" / "viewer" / "faces_job.py"
+        text = src.read_text(encoding="utf-8")
+        self.assertNotRegex(text, r"(?m)^(import torch|from torch\b)")
+
+    def test_clamp_n_faces(self) -> None:
+        from faces_job import clamp_n_faces
+
+        self.assertEqual(clamp_n_faces(256), 256)
+        with self.assertRaises(ValueError):
+            clamp_n_faces(8)
+        with self.assertRaises(ValueError):
+            clamp_n_faces(99_000)
+
+    def test_faces_cube_tiles_to_count(self) -> None:
+        from faces_job import faces_overlay_from_obj_text
+
+        out = faces_overlay_from_obj_text(_CUBE_OBJ, 64)
+        self.assertEqual(out["n"], 64)
+        self.assertEqual(out["n_mesh"], 12)
+        self.assertEqual(out["n_unique"], 12)
+        raw = base64.b64decode(out["tokens_b64"])
+        self.assertEqual(len(raw), 64 * 12 * 4)
+        self.assertGreater(out["tick"], 0.0)
+
+
 class UiPrefsTests(unittest.TestCase):
     def test_missing_file_is_defaults(self) -> None:
         from ui_prefs import DEFAULTS, load_ui_prefs
@@ -238,6 +311,20 @@ class UiPrefsTests(unittest.TestCase):
         self.assertEqual(clamp_ui_prefs({"inside_cut": -3})["inside_cut"], 0)
         self.assertEqual(clamp_ui_prefs({})["inside_cut"], 50)
 
+    def test_clamp_envelope_n(self) -> None:
+        from ui_prefs import clamp_ui_prefs
+
+        self.assertEqual(clamp_ui_prefs({"envelope_n": 99999})["envelope_n"], 4096)
+        self.assertEqual(clamp_ui_prefs({"envelope_n": 10})["envelope_n"], 256)
+        self.assertEqual(clamp_ui_prefs({})["envelope_n"], 1024)
+
+    def test_clamp_faces_n(self) -> None:
+        from ui_prefs import clamp_ui_prefs
+
+        self.assertEqual(clamp_ui_prefs({"faces_n": 99999})["faces_n"], 1024)
+        self.assertEqual(clamp_ui_prefs({"faces_n": 8})["faces_n"], 64)
+        self.assertEqual(clamp_ui_prefs({})["faces_n"], 256)
+
     def test_rejects_unsafe_model_id(self) -> None:
         from ui_prefs import clamp_ui_prefs
 
@@ -251,6 +338,137 @@ class UiPrefsTests(unittest.TestCase):
             (Path(tmp) / PREFS_NAME).write_text("{not json", encoding="utf-8")
             prefs = load_ui_prefs(tmp)
         self.assertEqual(prefs["density"], DEFAULTS["density"])
+
+
+def _viewer_cpu_cfg(data_dir: Path):
+    """Tiny OccupancyConfig so infer tests do not read repo config.yaml."""
+    import sys
+
+    src = Path(__file__).resolve().parents[1] / "src"
+    if str(src) not in sys.path:
+        sys.path.insert(0, str(src))
+    import torch
+    from config import OccupancyConfig
+
+    return OccupancyConfig(
+        data_dir=data_dir,
+        device=torch.device("cpu"),
+        hidden=8,
+        depth=1,
+        seed=1,
+        epochs=1,
+        lr=1e-3,
+        val_fraction=0.2,
+        batch_size=16,
+        n_surface=16,
+        n_faces=8,
+        encoder_hidden=8,
+        encoder_depth=2,
+        latent_dim=4,
+    )
+
+
+def _save_encoder_ckpt(models: Path, run_id: str, *, shape_encoder: str) -> None:
+    """Untrained OccupancyEncoder weights with the viewer checkpoint keys."""
+    import sys
+
+    src = Path(__file__).resolve().parents[1] / "src"
+    if str(src) not in sys.path:
+        sys.path.insert(0, str(src))
+    import numpy as np
+    import torch
+    from occupancy_encoder import CHECKPOINT_KIND, OccupancyEncoder
+
+    folder = models / run_id
+    folder.mkdir(parents=True)
+    model = OccupancyEncoder(
+        hidden=8,
+        depth=1,
+        latent_dim=4,
+        shape_encoder=shape_encoder,
+        encoder_hidden=8,
+        encoder_depth=2,
+    )
+    ckpt = {
+        "kind": CHECKPOINT_KIND,
+        "state_dict": model.state_dict(),
+        "hidden": 8,
+        "depth": 1,
+        "latent_dim": 4,
+        "shape_encoder": shape_encoder,
+        "n_surface": 16,
+        "n_faces": 8,
+        "encoder_hidden": 8,
+        "encoder_depth": 2,
+        "seed": 1,
+        "parts": [
+            {
+                "npz": "box.npz",
+                "mesh": "box.obj",
+                "center": np.array([0.5, 0.5, 0.5], dtype=np.float32),
+                "scale": 1.0,
+            }
+        ],
+    }
+    torch.save(ckpt, folder / "best.pt")
+
+
+class ViewerInferBothEncodersTests(unittest.TestCase):
+    """Job A / B must rebuild envelope or face tokens from the checkpoint."""
+
+    def test_infer_npz_surface_and_mesh(self) -> None:
+        import numpy as np
+        from infer_job import infer_uploaded_npz
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "box.obj").write_text(_CUBE_OBJ, encoding="utf-8")
+            models = root / "models"
+            rng = np.random.default_rng(0)
+            points = rng.uniform(0.0, 1.0, size=(24, 3)).astype(np.float32)
+            labels = (points[:, 0] > 0.5).astype(np.uint8)
+            cfg = _viewer_cpu_cfg(root)
+            for enc in ("surface", "mesh"):
+                run = f"run_{enc}"
+                _save_encoder_ckpt(models, run, shape_encoder=enc)
+                out = infer_uploaded_npz(
+                    run_id=run,
+                    models_root=models,
+                    data_dir=root,
+                    npz_name="box.npz",
+                    mesh_path="box.obj",
+                    points=points,
+                    labels=labels,
+                    cfg=cfg,
+                )
+                self.assertEqual(out["n"], 24)
+                self.assertEqual(out["shape_encoder"], enc)
+                raw = base64.b64decode(out["pred_b64"])
+                self.assertEqual(len(raw), 24)
+
+    def test_infer_obj_mesh_uses_face_tokens(self) -> None:
+        import numpy as np
+        from infer_job import infer_uploaded_obj
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models = root / "models"
+            _save_encoder_ckpt(models, "mesh_job", shape_encoder="mesh")
+            points = np.array(
+                [[0.5, 0.5, 0.5], [1.5, 1.5, 1.5]], dtype=np.float32
+            )
+            out = infer_uploaded_obj(
+                run_id="mesh_job",
+                models_root=models,
+                data_dir=root,
+                obj_name="cube.obj",
+                obj_text=_CUBE_OBJ,
+                points=points,
+                cfg=_viewer_cpu_cfg(root),
+            )
+            self.assertEqual(out["shape_encoder"], "mesh")
+            self.assertEqual(out["n"], 2)
+            self.assertEqual(out["n_inside"] + out["n_outside"], 2)
 
 
 if __name__ == "__main__":

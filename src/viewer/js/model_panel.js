@@ -138,7 +138,7 @@ export function decodeProbB64(body, n) {
 }
 
 /**
- * @returns {Promise<{id: string, path: string}[]>}
+ * @returns {Promise<{id: string, path: string, shape_encoder?: string}[]>}
  */
 export async function fetchModelList() {
   const res = await fetch("/api/models");
