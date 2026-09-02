@@ -24,6 +24,7 @@ from checkpointing import Checkpointer
 from config import (
     OccupancyConfig,
     as_data_relative,
+    encoder_knn_local_dim,
     encoder_latent_dim,
     gpu_name,
     load_config,
@@ -211,6 +212,8 @@ def _checkpoint_payload(
         "shape_encoder": str(cfg.shape_encoder),
         "n_surface": int(cfg.n_surface),
         "envelope_mix": int(cfg.envelope_mix),
+        "knn_k": int(cfg.knn_k),
+        "knn_local_dim": encoder_knn_local_dim(cfg) if int(cfg.knn_k) > 0 else 0,
         "n_faces": int(cfg.n_faces),
         "encoder_hidden": int(cfg.encoder_hidden),
         "encoder_depth": int(cfg.encoder_depth),
@@ -289,6 +292,7 @@ def train_multi_npz(
             cfg.data_dir,
             npz_glob=cfg.npz_glob,
             npz_paths=cfg.npz_paths or None,
+            npz_catalog=cfg.npz_catalog or None,
             max_files_per_shape=cfg.max_files_per_shape,
             n_surface=n_surface,
             seed=cfg.seed,
@@ -346,6 +350,8 @@ def train_multi_npz(
             shape_encoder=str(cfg.shape_encoder),
             encoder_hidden=int(cfg.encoder_hidden),
             encoder_depth=int(cfg.encoder_depth),
+            knn_k=int(cfg.knn_k),
+            knn_local_dim=encoder_knn_local_dim(cfg) if int(cfg.knn_k) > 0 else None,
         ).to(cfg.device)
     else:
         model = OccupancyMLP(hidden=cfg.hidden, depth=cfg.depth).to(cfg.device)
@@ -361,6 +367,8 @@ def train_multi_npz(
     n_train = sum(len(part) for part in train_parts)
     n_val = sum(len(part) for part in val_parts)
     print(f"files={len(dataset.parts)} meshes={dataset.n_meshes}")
+    if cfg.npz_catalog:
+        print(f"npz_catalog_rows={len(cfg.npz_catalog)}")
     _print_mesh_join(dataset, cfg.data_dir)
     print(
         f"split=mesh train_files={n_train_files} val_files={n_val_files} "
@@ -371,6 +379,7 @@ def train_multi_npz(
         f"hidden={cfg.hidden} depth={cfg.depth} "
         f"shape_encoder={cfg.shape_encoder} n_surface={cfg.n_surface} "
         f"envelope_mix={cfg.envelope_mix} "
+        f"knn_k={cfg.knn_k} "
         f"n_faces={cfg.n_faces} "
         f"encoder_hidden={cfg.encoder_hidden} encoder_depth={cfg.encoder_depth} "
         f"latent_dim={encoder_latent_dim(cfg)}"

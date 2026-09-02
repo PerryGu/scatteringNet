@@ -12,7 +12,7 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from occupancy_encoder import OccupancyEncoder, SurfaceEncoder
+from occupancy_encoder import OccupancyEncoder, SurfaceEncoder, knn_offsets
 from geometry.encoder import MeshFaceEncoder
 
 
@@ -102,6 +102,42 @@ class OccupancyEncoderTests(unittest.TestCase):
         enc = MeshFaceEncoder(latent_dim=4, hidden=8, depth=2)
         out = enc(torch.randn(3, 12, 12))
         self.assertEqual(tuple(out.shape), (3, 4))
+
+    def test_knn_offsets_pick_nearest(self) -> None:
+        xyz = torch.tensor([[0.0, 0.0, 0.9]], dtype=torch.float32)
+        near = torch.tensor([[0.0, 0.0, 1.0], [0.1, 0.0, 1.0]], dtype=torch.float32)
+        far = torch.tensor([[0.0, 0.0, -1.0], [0.1, 0.0, -1.0]], dtype=torch.float32)
+        env = torch.cat([far, near], dim=0).unsqueeze(0)
+        rel = knn_offsets(xyz, env, k=2)
+        self.assertEqual(tuple(rel.shape), (1, 2, 3))
+        nbrs = rel + xyz.unsqueeze(1)
+        self.assertTrue(torch.all(nbrs[0, :, 2] > 0.5))
+
+    def test_knn_head_logits_and_grad(self) -> None:
+        model = OccupancyEncoder(hidden=16, depth=2, latent_dim=8, knn_k=4)
+        xyz = torch.randn(5, 3, requires_grad=True)
+        envelope = torch.randn(5, 20, 3)
+        shape_id = torch.zeros(5, dtype=torch.long)
+        logits = model(xyz, envelope, shape_id)
+        self.assertEqual(tuple(logits.shape), (5, 1))
+        logits.sum().backward()
+        self.assertIsNotNone(xyz.grad)
+        self.assertTrue(xyz.grad.abs().sum().item() > 0.0)
+
+    def test_knn_rejects_mesh_encoder(self) -> None:
+        with self.assertRaises(ValueError):
+            OccupancyEncoder(
+                hidden=8,
+                depth=1,
+                latent_dim=4,
+                shape_encoder="mesh",
+                knn_k=8,
+            )
+
+    def test_knn_zero_has_no_local_module(self) -> None:
+        model = OccupancyEncoder(hidden=8, depth=1, latent_dim=4, knn_k=0)
+        self.assertFalse(hasattr(model, "local"))
+        self.assertEqual(model.knn_k, 0)
 
 
 if __name__ == "__main__":

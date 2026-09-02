@@ -10,6 +10,7 @@ many NPZs (glob or explicit paths) without training.
 from __future__ import annotations
 
 import glob as globlib
+import random
 from pathlib import Path
 from typing import Sequence
 
@@ -213,32 +214,80 @@ def _cap_per_shape(
     return out
 
 
+def _glob_npz(root: Path, pattern: str) -> list[Path]:
+    """Match ``pattern`` under ``root`` (``*`` / ``**``)."""
+    full = str(root / pattern)
+    recursive = "**" in pattern.replace("\\", "/")
+    found = globlib.glob(full, recursive=recursive)
+    return [Path(p).resolve() for p in found if Path(p).is_file()]
+
+
+def _is_parameterized_stem(path: Path) -> bool:
+    """
+    Maya catalog names are ``family_param_...``. Varied one-off stems
+    (``Cone.obj`` → ``Cone__occupancy.npz``) have no ``_`` in the shape key
+    and must not ride along when Windows glob is case-insensitive.
+    """
+    return "_" in shape_key(path)
+
+
+def _subsample_shapes(
+    paths: Sequence[Path],
+    max_shapes: int,
+    seed: int,
+) -> list[Path]:
+    """Keep NPZs for at most ``max_shapes`` unique :func:`shape_key` values."""
+    if max_shapes < 1:
+        raise ValueError(f"max_shapes must be >= 1, got {max_shapes}")
+    keys: list[str] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = shape_key(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        keys.append(key)
+    if max_shapes >= len(keys):
+        return list(paths)
+    # Sort then sample so the same seed always picks the same meshes.
+    chosen_keys = set(random.Random(int(seed)).sample(sorted(keys), max_shapes))
+    return [path for path in paths if shape_key(path) in chosen_keys]
+
+
 def resolve_npz_catalog(
     data_dir: Path | str,
     *,
     npz_glob: str = "exports/dataset/*.npz",
     npz_paths: Sequence[str | Path] | None = None,
+    npz_catalog: Sequence[tuple[str, int | None]] | None = None,
     max_files_per_shape: int | None = 2,
     exclude_combo: bool = True,
+    seed: int = 1,
 ) -> list[Path]:
     """
     Resolve occupancy NPZ paths under ``data_dir`` (no point loading).
 
-    An explicit ``npz_paths`` list wins over ``npz_glob``. Relative entries are
-    joined to ``data_dir``. Missing files raise ``FileNotFoundError``.
+    Priority: explicit ``npz_paths``, else ``npz_catalog`` (union of globs),
+    else ``npz_glob``. Relative entries are joined to ``data_dir``.
+    Missing files in ``npz_paths`` raise ``FileNotFoundError``.
 
     Parameters
     ----------
     data_dir:
         Dataset root (``config.yaml`` ``data_dir``).
     npz_glob:
-        Glob relative to ``data_dir`` (``*`` and ``**`` allowed).
+        Single glob relative to ``data_dir`` (``*`` and ``**`` allowed).
     npz_paths:
-        Explicit relative or absolute NPZ paths. Empty / None → use glob.
+        Explicit relative or absolute NPZ paths. Empty / None → use glob(s).
+    npz_catalog:
+        ``(glob, max_shapes)`` rows. ``max_shapes`` is unique meshes after
+        the per-shape file cap; ``None`` keeps every mesh the glob hits.
     max_files_per_shape:
         Cap per :func:`shape_key` after sort. ``None`` = no cap.
     exclude_combo:
         Drop filenames containing ``combo``.
+    seed:
+        RNG for ``max_shapes`` subsampling (YAML ``seed``).
 
     Returns
     -------
@@ -255,21 +304,45 @@ def resolve_npz_catalog(
             if not resolved.is_file():
                 raise FileNotFoundError(f"NPZ not found: {resolved}")
             chosen.append(resolved.resolve())
+    elif npz_catalog:
+        # Union in YAML order. Same file from two globs is kept once.
+        seen: set[Path] = set()
+        chosen = []
+        for pattern, max_shapes in npz_catalog:
+            hit = _glob_npz(root, str(pattern))
+            if exclude_combo:
+                hit = [p for p in hit if not _is_combo_npz(p)]
+            hit = [
+                p
+                for p in hit
+                if p.suffix.lower() == ".npz" and _is_parameterized_stem(p)
+            ]
+            hit = sorted(hit)
+            hit = _cap_per_shape(hit, max_files_per_shape)
+            if max_shapes is not None:
+                hit = _subsample_shapes(hit, int(max_shapes), int(seed))
+            for path in hit:
+                if path in seen:
+                    continue
+                seen.add(path)
+                chosen.append(path)
     else:
-        pattern = str(root / npz_glob)
-        recursive = "**" in npz_glob.replace("\\", "/")
-        found = globlib.glob(pattern, recursive=recursive)
-        chosen = [Path(p).resolve() for p in found if Path(p).is_file()]
+        chosen = _glob_npz(root, npz_glob)
 
     npz_only = [p for p in chosen if p.suffix.lower() == ".npz"]
     if exclude_combo:
         npz_only = [p for p in npz_only if not _is_combo_npz(p)]
-    npz_only = sorted(npz_only)
-    capped = _cap_per_shape(npz_only, max_files_per_shape)
+    if npz_catalog and not npz_paths:
+        # Already capped per glob; keep YAML union order (not a global sort).
+        capped = npz_only
+    else:
+        npz_only = sorted(npz_only)
+        capped = _cap_per_shape(npz_only, max_files_per_shape)
     if not capped:
         raise FileNotFoundError(
             f"No occupancy NPZ files matched under {root} "
-            f"(glob={npz_glob!r}, explicit={bool(npz_paths)})"
+            f"(glob={npz_glob!r}, catalog={bool(npz_catalog)}, "
+            f"explicit={bool(npz_paths)})"
         )
     return capped
 
@@ -302,10 +375,13 @@ if __name__ == "__main__":
             cfg.data_dir,
             npz_glob=cfg.npz_glob,
             npz_paths=cfg.npz_paths or None,
+            npz_catalog=cfg.npz_catalog or None,
             max_files_per_shape=cfg.max_files_per_shape,
+            seed=cfg.seed,
         )
         print(f"data_dir={cfg.data_dir}")
         print(f"npz_glob={cfg.npz_glob}")
+        print(f"npz_catalog={list(cfg.npz_catalog)}")
         print(f"max_files_per_shape={cfg.max_files_per_shape}")
         print(f"files={len(paths)}")
         # Load a few files only — the full catalog can be thousands of NPZs.

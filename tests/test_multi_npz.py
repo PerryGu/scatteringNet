@@ -76,6 +76,45 @@ class MultiNpzCatalogTests(unittest.TestCase):
             self.assertEqual(len(ds.parts), 2)
             self.assertEqual(len(ds.npz_paths), 2)
 
+    def test_npz_catalog_unions_globs_and_caps_shapes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for i in range(6):
+                _write_npz(root / f"box_{i}__occupancy.npz", n=4, seed=i)
+            for i in range(4):
+                _write_npz(root / f"pipe_{i}__occupancy.npz", n=4, seed=10 + i)
+            paths = resolve_npz_catalog(
+                root,
+                npz_glob="missing_*.npz",
+                npz_catalog=(
+                    ("box_*.npz", 3),
+                    ("pipe_*.npz", None),
+                ),
+                max_files_per_shape=None,
+                seed=1,
+            )
+            keys = [shape_key(p) for p in paths]
+            n_box = sum(1 for k in keys if k.startswith("box_"))
+            n_pipe = sum(1 for k in keys if k.startswith("pipe_"))
+            self.assertEqual(n_box, 3)
+            self.assertEqual(n_pipe, 4)
+            stray = root / "Cone__occupancy.npz"
+            _write_npz(stray, n=4, seed=99)
+            with self.assertRaises(FileNotFoundError):
+                resolve_npz_catalog(
+                    root,
+                    npz_catalog=(("cone_*.npz", None),),
+                    max_files_per_shape=None,
+                    seed=1,
+                )
+            again = resolve_npz_catalog(
+                root,
+                npz_catalog=(("box_*.npz", 3), ("pipe_*.npz", None)),
+                max_files_per_shape=None,
+                seed=1,
+            )
+            self.assertEqual([p.name for p in again], [p.name for p in paths])
+
     def test_max_files_per_shape_caps_same_mesh(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

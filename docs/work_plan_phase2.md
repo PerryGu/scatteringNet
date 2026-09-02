@@ -8,9 +8,9 @@ The idea is mainly to add one more layer of complexity at a time—points on the
 and so on—and to look at each layer before deciding whether we even need the next.
 We might get good enough results without moving on. Some layers may not help at all; some may even make things worse.
 
-This is still **Phase 2**. There is no Phase 3 in this repo. The numbered items below are *steps inside Phase 2*.
+This is still **Phase 2**. Occupancy continuation after the global envelope (local k-NN, mixed catalog, denser envelope) lives in [`work_plan_phase3.md`](work_plan_phase3.md). The numbered items below remain *steps inside Phase 2*.
 
-**Current rung (2026-08-30):** Steps **1–8 are done**. Next planned rung is **Step 9** (face tokens), or stop if the envelope result is enough. Hygiene already holds out whole meshes as **val** (selection split for `best.pt`). That is not Step 11. Step 11 is still a locked / new-family test. Infer is `src/infer_multi_npz.py` (do not restore `infer_one_npz.py`).
+**Current rung (2026-09-03):** Steps **1–10 are done** in code (envelope, then face tokens, then `MeshFaceEncoder`). Envelope Fill still left thin arms empty; that reading problem is Phase 3, not another Phase 2 face rung. Hygiene already holds out whole meshes as **val** (selection split for `best.pt`). That is not Step 11. Step 11 is still a locked / new-family test. Infer is `src/infer_multi_npz.py` (do not restore `infer_one_npz.py`).
 
 ---
 
@@ -42,8 +42,8 @@ Progress is visible in:
 | 6 | First occupancy train (Phase 1 MLP, many NPZs) | done | Multi-file xyz training uses the reader, the logs, and the checkpoint saver |
 | 7 | Join NPZ to OBJ | done | Each occupancy file can load the mesh it came from |
 | 8 | Sample the surface envelope | done | Do dense points on the shell help occupancy *before* we use faces? |
-| 9 | Describe the mesh as triangles | next | Vertices + normals become a geometry language the net can consume later |
-| 10 | Encode faces and fuse with xyz | pending | The occupancy head finally looks at mesh structure |
+| 9 | Describe the mesh as triangles | done | Vertices + normals become a geometry language the net can consume later |
+| 10 | Encode faces and fuse with xyz | done | Face head lost vs envelope on `nr1`; occupancy continuation is Phase 3 |
 | 11 | Hold out entire shapes | pending | Locked / new-family test: a mesh that was never a training identity (not the hygiene val split) |
 
 The path in one line:
@@ -223,9 +223,11 @@ torus holes, and stacked parts will remain hard even if holdout looks promising.
 | Weights to load | `models/<id>/best.pt` |
 | How to build NPZs | [`npz_dataset_generation.md`](npz_dataset_generation.md) |
 | Phase 1 | [`work_plan_phase1.md`](work_plan_phase1.md) |
+| Occupancy after global envelope | [`work_plan_phase3.md`](work_plan_phase3.md) |
+| Implementation protocol | [`work_plan_phase2_AI.md`](work_plan_phase2_AI.md) |
 
 ---
 
 ## Next action
 
-**Steps 1–8 are done.** Approve or edit **Step 9** (face tokens), or stop here if the envelope result is enough. The Step 8 catalog write-up is in [`training_log.md`](training_log.md) (`extrude_nr1_surface`).
+**Steps 1–10 are done** (face tokens + mesh encoder measured; envelope won on `nr1`). Occupancy continuation is **Phase 3**: [`work_plan_phase3.md`](work_plan_phase3.md). Do not start Phase 2 Step 11 as “add a train/val split.”

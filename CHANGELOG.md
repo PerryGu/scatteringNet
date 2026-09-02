@@ -5,6 +5,23 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
 
+
+## 2026-09-02 15:00 — Catalog union + per-glob mesh cap
+
+YAML ``npz_catalog`` unions several globs. Optional ``max_shapes`` keeps that many unique meshes per glob (sampled with ``seed``) so a mixed primitives + extrude train is not 2500 ``nr1`` files. Explicit ``npz_paths`` still wins. Live YAML is all primitive families plus 700 ``nr1``, 100 ``nr3``, and 80 ``nr4`` meshes (no ``nr2`` NPZs on disk), ``knn_k: 16``, mix 75, ``run_name: prim_extrude_knn16``.
+
+## 2026-09-02 10:00 — Local k-NN envelope occupancy
+
+Each Fill (and NPZ) point finds the ``knn_k`` closest envelope dots (16 in the occupancy trains; YAML so the count is controllable) instead of one shared summary of the whole skin, so the occupancy decision is local to that point. Surface ``OccupancyEncoder`` concatenates a per-query code from those nearest envelope offsets (``knn_k`` 0 = old global ``z`` only). Stored on ``best.pt``; missing key loads the global head so mix-75 checkpoints still infer. Mesh encoder unchanged. Catalog train is for the user.
+
+## 2026-09-01 10:00 — Phase 3 work plans (local k-NN occupancy)
+
+Occupancy continuation after Phase 2 exhaustion (global envelope could not fill thin arms) is [`docs/work_plan_phase3.md`](docs/work_plan_phase3.md).
+
+
+## ================= END OF PHASE 2 =================
+
+
 ## 2026-09-01 17:00 — Envelope mix in occupancy train
 
 YAML ``envelope_mix`` 0–100 (0 = face-area darts, 100 = creases; same split as the viewer Mix slider). Stored on ``best.pt`` and the run snapshot. Infer rebuilds with the **checkpoint** mix (missing key = 0, so old envelope checkpoints stay area-weighted). OccupancyMLP unchanged.

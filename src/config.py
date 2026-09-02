@@ -44,6 +44,7 @@ class YamlKnobs(TypedDict):
     latent_dim: int | None
     npz_glob: str
     npz_paths: tuple[str, ...]
+    npz_catalog: tuple[tuple[str, int | None], ...]
     max_files_per_shape: int | None
     run_name: str
     checkpoint_metric: str
@@ -51,6 +52,8 @@ class YamlKnobs(TypedDict):
     optimizer: str
     n_surface: int
     envelope_mix: int
+    knn_k: int
+    knn_local_dim: int | None
     n_faces: int
     encoder_hidden: int
     encoder_depth: int
@@ -239,6 +242,37 @@ def _as_npz_paths(value: Any) -> tuple[str, ...]:
     return tuple(out)
 
 
+def _as_npz_catalog(value: Any) -> tuple[tuple[str, int | None], ...]:
+    """Union of globs; optional ``max_shapes`` is unique meshes per glob."""
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError(
+            f"npz_catalog must be a list or null, got {type(value).__name__}"
+        )
+    out: list[tuple[str, int | None]] = []
+    for i, raw in enumerate(value):
+        if isinstance(raw, str):
+            glob_s = _as_nonempty_path_string(f"npz_catalog[{i}]", raw)
+            out.append((glob_s, None))
+            continue
+        if not isinstance(raw, Mapping):
+            raise ValueError(
+                f"npz_catalog[{i}] must be a glob string or mapping, "
+                f"got {type(raw).__name__}"
+            )
+        if "glob" not in raw:
+            raise ValueError(f"npz_catalog[{i}] missing glob")
+        glob_s = _as_nonempty_path_string(f"npz_catalog[{i}].glob", raw["glob"])
+        max_shapes: int | None = None
+        if "max_shapes" in raw and raw["max_shapes"] is not None:
+            max_shapes = _as_positive_int(
+                f"npz_catalog[{i}].max_shapes", raw["max_shapes"]
+            )
+        out.append((glob_s, max_shapes))
+    return tuple(out)
+
+
 def as_repo_relative(path: Path | str, *, root: Path | None = None) -> str:
     """
     POSIX string relative to the git repo when ``path`` is inside it.
@@ -317,6 +351,7 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             else "exports/dataset/*.npz"
         ),
         "npz_paths": _as_npz_paths(raw.get("npz_paths")),
+        "npz_catalog": _as_npz_catalog(raw.get("npz_catalog")),
         "max_files_per_shape": (
             _as_optional_positive_int("max_files_per_shape", raw["max_files_per_shape"])
             if "max_files_per_shape" in raw
@@ -347,6 +382,16 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             _as_int_in_range("envelope_mix", raw["envelope_mix"], 0, 100)
             if "envelope_mix" in raw
             else 0
+        ),
+        "knn_k": (
+            _as_int_in_range("knn_k", raw["knn_k"], 0, 4096)
+            if "knn_k" in raw
+            else 0
+        ),
+        "knn_local_dim": (
+            _as_positive_int("knn_local_dim", raw["knn_local_dim"])
+            if "knn_local_dim" in raw
+            else None
         ),
         "n_faces": (
             _as_positive_int("n_faces", raw["n_faces"])
@@ -411,6 +456,9 @@ class OccupancyConfig:
     # Catalog knobs (optional in YAML; omitted keys keep these defaults).
     npz_glob: str = "exports/dataset/*.npz"
     npz_paths: tuple[str, ...] = ()
+    # ``(glob, max_shapes)`` rows. Empty → use ``npz_glob``. ``max_shapes``
+    # None keeps every mesh that glob hits (after ``max_files_per_shape``).
+    npz_catalog: tuple[tuple[str, int | None], ...] = ()
     max_files_per_shape: int | None = 2
     # Suffix for runs/<timestamp>_<name>/ (device stays runtime-only).
     run_name: str = "run"
@@ -425,6 +473,10 @@ class OccupancyConfig:
     n_surface: int = 1024
     # 0 = area-weighted envelope, 100 = crease-hugging (viewer Mix).
     envelope_mix: int = 0
+    # 0 = global envelope z only. >0 = that many nearest envelope dots per query.
+    knn_k: int = 0
+    # Width of z_local; None → same as occupancy latent_dim / hidden.
+    knn_local_dim: int | None = None
     # Face-token length (YAML ``n_faces``).
     n_faces: int = 256
     encoder_hidden: int = 64
@@ -474,6 +526,7 @@ def load_config(
         latent_dim=knobs["latent_dim"],
         npz_glob=knobs["npz_glob"],
         npz_paths=knobs["npz_paths"],
+        npz_catalog=knobs["npz_catalog"],
         max_files_per_shape=knobs["max_files_per_shape"],
         run_name=knobs["run_name"],
         checkpoint_metric=knobs["checkpoint_metric"],
@@ -481,6 +534,8 @@ def load_config(
         optimizer=knobs["optimizer"],
         n_surface=knobs["n_surface"],
         envelope_mix=knobs["envelope_mix"],
+        knn_k=knobs["knn_k"],
+        knn_local_dim=knobs["knn_local_dim"],
         n_faces=knobs["n_faces"],
         encoder_hidden=knobs["encoder_hidden"],
         encoder_depth=knobs["encoder_depth"],
@@ -493,6 +548,13 @@ def encoder_latent_dim(cfg: OccupancyConfig) -> int:
     if cfg.latent_dim is None:
         return int(cfg.hidden)
     return int(cfg.latent_dim)
+
+
+def encoder_knn_local_dim(cfg: OccupancyConfig) -> int:
+    """Local envelope code width: YAML ``knn_local_dim`` or global latent."""
+    if cfg.knn_local_dim is None:
+        return encoder_latent_dim(cfg)
+    return int(cfg.knn_local_dim)
 
 
 def format_config(cfg: OccupancyConfig) -> str:
@@ -523,6 +585,7 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  latent_dim={cfg.latent_dim}\n"
         f"  npz_glob={cfg.npz_glob}\n"
         f"  npz_paths={list(cfg.npz_paths)}\n"
+        f"  npz_catalog={list(cfg.npz_catalog)}\n"
         f"  max_files_per_shape={cfg.max_files_per_shape}\n"
         f"  run_name={cfg.run_name}\n"
         f"  checkpoint_metric={cfg.checkpoint_metric}\n"
@@ -530,6 +593,8 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  optimizer={cfg.optimizer}\n"
         f"  n_surface={cfg.n_surface}\n"
         f"  envelope_mix={cfg.envelope_mix}\n"
+        f"  knn_k={cfg.knn_k}\n"
+        f"  knn_local_dim={cfg.knn_local_dim}\n"
         f"  n_faces={cfg.n_faces}\n"
         f"  encoder_hidden={cfg.encoder_hidden}\n"
         f"  encoder_depth={cfg.encoder_depth}\n"

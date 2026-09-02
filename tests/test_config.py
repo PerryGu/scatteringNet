@@ -47,6 +47,12 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertEqual(knobs["optimizer"], str(disk["optimizer"]).strip().lower())
         self.assertEqual(knobs["n_surface"], int(disk["n_surface"]))
         self.assertEqual(knobs["envelope_mix"], int(disk["envelope_mix"]))
+        self.assertEqual(knobs["knn_k"], int(disk["knn_k"]))
+        self.assertEqual(len(knobs["npz_catalog"]), len(disk["npz_catalog"]))
+        self.assertEqual(knobs["npz_catalog"][-1][0], disk["npz_catalog"][-1]["glob"])
+        self.assertEqual(
+            knobs["npz_catalog"][-1][1], int(disk["npz_catalog"][-1]["max_shapes"])
+        )
         self.assertEqual(knobs["n_faces"], int(disk["n_faces"]))
         self.assertEqual(knobs["encoder_hidden"], int(disk["encoder_hidden"]))
         self.assertEqual(knobs["encoder_depth"], int(disk["encoder_depth"]))
@@ -71,12 +77,14 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn("val_fraction=", rendered)
         self.assertIn("latent_dim=", rendered)
         self.assertIn("npz_glob=", rendered)
+        self.assertIn("npz_catalog=", rendered)
         self.assertIn("run_name=", rendered)
         self.assertIn("checkpoint_metric=", rendered)
         self.assertIn("batch_size=", rendered)
         self.assertIn("optimizer=", rendered)
         self.assertIn("n_surface=", rendered)
         self.assertIn("envelope_mix=", rendered)
+        self.assertIn("knn_k=", rendered)
         self.assertIn("n_faces=", rendered)
         self.assertIn("encoder_hidden=", rendered)
         self.assertIn("encoder_depth=", rendered)
@@ -183,6 +191,7 @@ class OccupancyConfigTests(unittest.TestCase):
             self.assertEqual(knobs["latent_dim"], 16)
             # Old YAML without the key trains like Step 8 (all face-area).
             self.assertEqual(knobs["envelope_mix"], 0)
+            self.assertEqual(knobs["knn_k"], 0)
 
     def test_envelope_mix_out_of_range_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

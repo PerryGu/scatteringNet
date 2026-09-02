@@ -75,6 +75,10 @@ def load_occupancy_model(
             else None
         )
         ed = int(ckpt["encoder_depth"]) if ckpt.get("encoder_depth") is not None else 4
+        knn_k = int(ckpt["knn_k"]) if ckpt.get("knn_k") is not None else 0
+        knn_local = None
+        if knn_k > 0 and ckpt.get("knn_local_dim") is not None:
+            knn_local = int(ckpt["knn_local_dim"])
         model = OccupancyEncoder(
             hidden=hidden,
             depth=depth,
@@ -82,6 +86,8 @@ def load_occupancy_model(
             shape_encoder=enc,
             encoder_hidden=eh,
             encoder_depth=ed,
+            knn_k=knn_k,
+            knn_local_dim=knn_local,
         )
     else:
         raise ValueError(f"unsupported checkpoint kind {kind!r}")

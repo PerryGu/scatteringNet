@@ -210,6 +210,7 @@ class OccupancyMultiNpzDataset:
         *,
         npz_glob: str = "exports/dataset/*.npz",
         npz_paths: Sequence[str | Path] | None = None,
+        npz_catalog: Sequence[tuple[str, int | None]] | None = None,
         max_files_per_shape: int | None = 2,
         n_surface: int | None = None,
         seed: int = 1,
@@ -222,10 +223,11 @@ class OccupancyMultiNpzDataset:
 
         Parameters
         ----------
-        data_dir, npz_glob, npz_paths, max_files_per_shape:
+        data_dir, npz_glob, npz_paths, npz_catalog, max_files_per_shape:
             Forwarded to :func:`resolve_npz_catalog`.
         n_surface, seed:
-            Envelope sampling; ``None`` keeps xyz-only items.
+            Envelope sampling; ``None`` keeps xyz-only items. ``seed`` also
+            drives ``max_shapes`` catalog subsampling.
         n_faces:
             Face-token length on encoder parts.
         envelope_mix:
@@ -240,7 +242,9 @@ class OccupancyMultiNpzDataset:
             data_dir,
             npz_glob=npz_glob,
             npz_paths=npz_paths,
+            npz_catalog=npz_catalog,
             max_files_per_shape=max_files_per_shape,
+            seed=seed,
         )
         return cls(
             catalog,

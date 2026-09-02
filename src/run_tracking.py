@@ -115,6 +115,8 @@ def occupancy_config_snapshot(
         "optimizer": str(cfg.optimizer),
         "n_surface": int(cfg.n_surface),
         "envelope_mix": int(cfg.envelope_mix),
+        "knn_k": int(cfg.knn_k),
+        "knn_local_dim": cfg.knn_local_dim,
         "n_faces": int(cfg.n_faces),
         "encoder_hidden": int(cfg.encoder_hidden),
         "encoder_depth": int(cfg.encoder_depth),
@@ -124,6 +126,10 @@ def occupancy_config_snapshot(
     explicit = [as_data_relative(p, cfg.data_dir) for p in cfg.npz_paths]
     if explicit:
         payload["npz_paths"] = explicit
+    if cfg.npz_catalog:
+        payload["npz_catalog"] = [
+            {"glob": glob_s, "max_shapes": max_s} for glob_s, max_s in cfg.npz_catalog
+        ]
     return _jsonable(payload)
 
 

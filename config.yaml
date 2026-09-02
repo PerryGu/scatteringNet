@@ -26,21 +26,42 @@ val_fraction: 0.20
 shape_encoder: surface   # surface / mesh
 n_surface: 1024          # Envelope samples (kept on the dataset for A/B; head uses faces when mesh)
 envelope_mix: 75         # 0 = face-area darts (old envelope), 100 = creases. Same split as the viewer Mix slider.
+knn_k: 16                # 0 = global z only. 16 = nearest envelope dots per query (local occupancy).
+# knn_local_dim: 64      # z_local width; omit to use latent_dim / hidden
 n_faces: 256             # Triangle tokens per mesh
 encoder_hidden: 64       # MeshFaceEncoder width
 encoder_depth: 4         # MeshFaceEncoder depth
 # latent_dim: 64         # OccupancyEncoder z width; omit to use hidden
 
 # --- Catalog ---
-# Glob is relative to data_dir. If npz_paths is set (non-empty), it replaces the glob.
-npz_glob: "exports/dataset/extrude_*_nr1_*.npz"
-# npz_paths:   # optional explicit list; leave unset/empty to use npz_glob
-#   - exports/dataset/sphere_r0p5_sa16_sh16__occupancy_s0.15_inout.npz
+# npz_catalog wins over npz_glob. Each row is all meshes for that glob unless
+# max_shapes is set (unique OBJs, sampled with seed; still max_files_per_shape NPZs).
+# Varied/organic and combo* are omitted on purpose.
+# Fallback glob is unused while npz_catalog is set.
+npz_glob: "exports/dataset/*.npz"
+npz_catalog:
+  - glob: "exports/dataset/cone_*.npz"
+  - glob: "exports/dataset/cube_*.npz"
+  - glob: "exports/dataset/cyl_*.npz"
+  - glob: "exports/dataset/gear_*.npz"
+  - glob: "exports/dataset/helix_*.npz"
+  - glob: "exports/dataset/pipe_*.npz"
+  - glob: "exports/dataset/platonic_*.npz"
+  - glob: "exports/dataset/prism_*.npz"
+  - glob: "exports/dataset/sphere_*.npz"
+  - glob: "exports/dataset/torus_*.npz"
+  - glob: "exports/dataset/extrude_*_nr1_*.npz"
+    max_shapes: 700
+  # No nr2 NPZs on disk. Next extrude rounds are nr3 / nr4.
+  - glob: "exports/dataset/extrude_*_nr3_*.npz"
+    max_shapes: 100
+  - glob: "exports/dataset/extrude_*_nr4_*.npz"
+    max_shapes: 80
 max_files_per_shape: 2
 
 # --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
-run_name: extrude_nr1_surface_mix75
+run_name: prim_extrude_knn16
 
 # --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.

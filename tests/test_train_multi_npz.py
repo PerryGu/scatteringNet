@@ -185,6 +185,7 @@ class TrainMultiNpzTests(unittest.TestCase):
                 n_faces=16,
                 latent_dim=8,
                 envelope_mix=50,
+                knn_k=8,
             )
             result = train_multi_npz(
                 cfg,
@@ -198,6 +199,7 @@ class TrainMultiNpzTests(unittest.TestCase):
             self.assertEqual(ckpt["shape_encoder"], "surface")
             self.assertEqual(ckpt["n_surface"], 32)
             self.assertEqual(ckpt["envelope_mix"], 50)
+            self.assertEqual(ckpt["knn_k"], 8)
             self.assertEqual(ckpt["n_faces"], 16)
             self.assertEqual(ckpt["latent_dim"], 8)
             snap = yaml.safe_load(
@@ -206,6 +208,7 @@ class TrainMultiNpzTests(unittest.TestCase):
             self.assertEqual(snap["shape_encoder"], "surface")
             self.assertEqual(snap["n_surface"], 32)
             self.assertEqual(snap["envelope_mix"], 50)
+            self.assertEqual(snap["knn_k"], 8)
             self.assertEqual(snap["n_faces"], 16)
             row = json.loads(
                 result.run_dir.joinpath("metrics.jsonl")
