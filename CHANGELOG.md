@@ -4,7 +4,9 @@ Completed work for the occupancy MLP MVP.
 
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
+## 2026-09-03 13:00 — Training log Fill gallery
 
+Fill stills in [`docs/training_log.md`](docs/training_log.md) sit in a 3-column grid; click a thumbnail to open the PNG. Occupancy train code unchanged.
 
 ## 2026-09-02 15:00 — Catalog union + per-glob mesh cap
 
@@ -20,6 +22,7 @@ Occupancy continuation after Phase 2 exhaustion (global envelope could not fill 
 
 
 ## ================= END OF PHASE 2 =================
+
 
 
 ## 2026-09-01 17:00 — Envelope mix in occupancy train
