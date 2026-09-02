@@ -158,11 +158,13 @@ def _geom_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
         n_surface = (
             int(ckpt["n_surface"]) if ckpt.get("n_surface") is not None else 1024
         )
+        mix = int(ckpt["envelope_mix"]) if ckpt.get("envelope_mix") is not None else 0
         world = sample_surface_points(
             vertices,
             faces,
             n_surface,
             seed=seed,
+            mix=mix,
             cache_key=cache_key,
         )
         env = apply_normalization(world, center, scale)

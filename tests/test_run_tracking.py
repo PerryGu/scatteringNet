@@ -53,6 +53,7 @@ class RunTrackingTests(unittest.TestCase):
                 self.assertEqual(run.run_id, "2026-08-27_16-00-00_dummy")
                 self.assertTrue(run.dir.is_dir())
                 snap = occupancy_config_snapshot(_cpu_cfg())
+                self.assertEqual(snap["envelope_mix"], 0)
                 run.write_config(snap)
                 run.write_catalog(
                     ["exports/a.npz", "exports/b.npz"],

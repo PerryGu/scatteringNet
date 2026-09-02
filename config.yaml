@@ -23,8 +23,9 @@ val_fraction: 0.20
 # --- Geometry ---
 # none = xyz-only OccupancyMLP. surface = envelope cloud. mesh = triangle tokens.
 # Occupancy labels stay in the NPZ.
-shape_encoder: mesh
+shape_encoder: surface   # surface / mesh
 n_surface: 1024          # Envelope samples (kept on the dataset for A/B; head uses faces when mesh)
+envelope_mix: 75         # 0 = face-area darts (old envelope), 100 = creases. Same split as the viewer Mix slider.
 n_faces: 256             # Triangle tokens per mesh
 encoder_hidden: 64       # MeshFaceEncoder width
 encoder_depth: 4         # MeshFaceEncoder depth
@@ -39,7 +40,7 @@ max_files_per_shape: 2
 
 # --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
-run_name: extrude_nr1_mesh
+run_name: extrude_nr1_surface_mix75
 
 # --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.

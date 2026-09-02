@@ -134,8 +134,14 @@ def infer_npz(
         cache_key = str(mesh_path.resolve())
         if enc == "surface":
             n_surface = int(ckpt.get("n_surface") or cfg.n_surface)
+            mix = int(ckpt["envelope_mix"]) if ckpt.get("envelope_mix") is not None else 0
             world = sample_surface_points(
-                vertices, faces, n_surface, seed=int(cfg.seed), cache_key=cache_key
+                vertices,
+                faces,
+                n_surface,
+                seed=int(cfg.seed),
+                mix=mix,
+                cache_key=cache_key,
             )
             arr = apply_normalization(world, center, scale)
         else:

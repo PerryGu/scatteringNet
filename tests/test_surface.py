@@ -54,16 +54,44 @@ class SurfaceSampleTests(unittest.TestCase):
         b = sample_surface_points(
             mesh.vertices, mesh.faces, 16, seed=3, cache_key="box-cache"
         )
-        key = ("box-cache", 16, 3)
+        key = ("box-cache", 16, 3, 0)
         self.assertIn(key, _ENVELOPE_CACHE)
         self.assertIs(a, b)
         clear_envelope_cache()
         self.assertNotIn(key, _ENVELOPE_CACHE)
 
+    def test_mix_uses_separate_cache_slot(self) -> None:
+        mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
+        clear_envelope_cache()
+        a = sample_surface_points(
+            mesh.vertices, mesh.faces, 16, seed=3, mix=0, cache_key="box-mix"
+        )
+        b = sample_surface_points(
+            mesh.vertices, mesh.faces, 16, seed=3, mix=100, cache_key="box-mix"
+        )
+        self.assertIn(("box-mix", 16, 3, 0), _ENVELOPE_CACHE)
+        self.assertIn(("box-mix", 16, 3, 100), _ENVELOPE_CACHE)
+        self.assertFalse(np.allclose(a, b))
+
     def test_rejects_zero_count(self) -> None:
         mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
         with self.assertRaises(ValueError):
             sample_surface_points(mesh.vertices, mesh.faces, 0)
+
+    def test_mix_100_hugs_box_edges(self) -> None:
+        mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
+        pts = sample_surface_points(
+            mesh.vertices, mesh.faces, 256, seed=1, mix=100
+        )
+        # Box faces sit at |coord|=1. Distance to the nearest of 12 edges.
+        xyz = np.abs(np.asarray(pts, dtype=np.float64))
+        d_edge = np.sort(np.abs(xyz - 1.0), axis=1)[:, 1]
+        self.assertLess(float(np.median(d_edge)), 0.15)
+
+    def test_rejects_bad_mix(self) -> None:
+        mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
+        with self.assertRaises(ValueError):
+            sample_surface_points(mesh.vertices, mesh.faces, 8, mix=101)
 
 
 if __name__ == "__main__":

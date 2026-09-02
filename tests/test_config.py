@@ -46,6 +46,7 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertEqual(knobs["batch_size"], int(disk["batch_size"]))
         self.assertEqual(knobs["optimizer"], str(disk["optimizer"]).strip().lower())
         self.assertEqual(knobs["n_surface"], int(disk["n_surface"]))
+        self.assertEqual(knobs["envelope_mix"], int(disk["envelope_mix"]))
         self.assertEqual(knobs["n_faces"], int(disk["n_faces"]))
         self.assertEqual(knobs["encoder_hidden"], int(disk["encoder_hidden"]))
         self.assertEqual(knobs["encoder_depth"], int(disk["encoder_depth"]))
@@ -75,6 +76,7 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn("batch_size=", rendered)
         self.assertIn("optimizer=", rendered)
         self.assertIn("n_surface=", rendered)
+        self.assertIn("envelope_mix=", rendered)
         self.assertIn("n_faces=", rendered)
         self.assertIn("encoder_hidden=", rendered)
         self.assertIn("encoder_depth=", rendered)
@@ -179,6 +181,30 @@ class OccupancyConfigTests(unittest.TestCase):
             self.assertAlmostEqual(knobs["val_fraction"], 0.25)
             self.assertEqual(knobs["checkpoint_metric"], "val_acc")
             self.assertEqual(knobs["latent_dim"], 16)
+            # Old YAML without the key trains like Step 8 (all face-area).
+            self.assertEqual(knobs["envelope_mix"], 0)
+
+    def test_envelope_mix_out_of_range_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            yaml_path = Path(tmp) / "config.yaml"
+            yaml_path.write_text(
+                "\n".join(
+                    [
+                        "hidden: 64",
+                        "depth: 4",
+                        "seed: 1",
+                        f'data_dir: "{Path(tmp).as_posix()}"',
+                        "epochs: 2",
+                        "lr: 0.001",
+                        "test_fraction: 0.2",
+                        "envelope_mix: 101",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                load_yaml_knobs(yaml_path)
 
 
 if __name__ == "__main__":

@@ -114,6 +114,7 @@ def occupancy_config_snapshot(
         "batch_size": int(cfg.batch_size),
         "optimizer": str(cfg.optimizer),
         "n_surface": int(cfg.n_surface),
+        "envelope_mix": int(cfg.envelope_mix),
         "n_faces": int(cfg.n_faces),
         "encoder_hidden": int(cfg.encoder_hidden),
         "encoder_depth": int(cfg.encoder_depth),

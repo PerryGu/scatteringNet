@@ -338,8 +338,9 @@ class Handler(SimpleHTTPRequestHandler):
             from envelope_job import envelope_from_obj_text
 
             n_surface = int(payload.get("n_surface") or 0)
+            mix = int(payload.get("mix") if payload.get("mix") is not None else 100)
             result = envelope_from_obj_text(
-                str(payload.get("obj_text") or ""), n_surface
+                str(payload.get("obj_text") or ""), n_surface, mix=mix
             )
         except ImportError as exc:
             self._send_json(

@@ -125,6 +125,7 @@ class OccupancyMultiNpzDataset:
         seed: int = 1,
         n_faces: int = 256,
         item_geom: str = "surface",
+        envelope_mix: int = 0,
     ) -> None:
         """
         Load each NPZ as :class:`OccupancyPointDataset` (no point pooling).
@@ -143,6 +144,8 @@ class OccupancyMultiNpzDataset:
             Face-token length when the encoder dataset is used.
         item_geom:
             ``surface`` puts the envelope in the batch; ``mesh`` puts face tokens.
+        envelope_mix:
+            0–100 split between face-area and crease samples (viewer Mix).
         """
         paths = [Path(p) for p in npz_paths]
         if not paths:
@@ -160,6 +163,7 @@ class OccupancyMultiNpzDataset:
                     seed=seed,
                     n_faces=n_faces,
                     item_geom=item_geom,
+                    envelope_mix=envelope_mix,
                 )
                 for path in paths
             ]
@@ -211,6 +215,7 @@ class OccupancyMultiNpzDataset:
         seed: int = 1,
         n_faces: int = 256,
         item_geom: str = "surface",
+        envelope_mix: int = 0,
     ) -> OccupancyMultiNpzDataset:
         """
         Build from :func:`resolve_npz_catalog`.
@@ -223,6 +228,8 @@ class OccupancyMultiNpzDataset:
             Envelope sampling; ``None`` keeps xyz-only items.
         n_faces:
             Face-token length on encoder parts.
+        envelope_mix:
+            0–100 split between face-area and crease samples.
 
         Returns
         -------
@@ -242,6 +249,7 @@ class OccupancyMultiNpzDataset:
             seed=seed,
             n_faces=n_faces,
             item_geom=item_geom,
+            envelope_mix=envelope_mix,
         )
 
 

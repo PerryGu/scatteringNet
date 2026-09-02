@@ -5,6 +5,22 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
 
+## 2026-09-01 17:00 — Envelope mix in occupancy train
+
+YAML ``envelope_mix`` 0–100 (0 = face-area darts, 100 = creases; same split as the viewer Mix slider). Stored on ``best.pt`` and the run snapshot. Infer rebuilds with the **checkpoint** mix (missing key = 0, so old envelope checkpoints stay area-weighted). OccupancyMLP unchanged.
+
+## 2026-09-01 17:00 — Viewer: Create dots slider column
+
+Create dots uses a two-column grid so Mix lines up with Count and Density. Occupancy train code unchanged.
+
+## 2026-09-01 17:00 — Viewer: envelope Faces/Edges mix
+
+**Envelope Mix** slider (0 = all face-area samples, 100 = all crease samples) splits **Count** between the two overlay methods. Occupancy train and Job A/B infer still use area-weighted ``sample_surface_points``.
+
+## 2026-09-01 15:00 — Viewer: crease-weighted envelope overlay
+
+**Envelope** overlay welds OBJ corners, then puts purple dots **on/near sharp mesh edges** (dihedral ≥ 20°). Density falls off toward face centers. Status reports crease count (0 = area fallback). Occupancy train and Job A/B infer still use area-weighted ``sample_surface_points``.
+
 ## 2026-09-01 15:00 — Viewer: face-token overlay
 
 **Faces** in Create dots (between Envelope and Fill). Teal triangles + cyan normal ticks = occupancy ``n_faces`` tokens (largest by area, tiled if short). Count 64–1024, default 256. Occupancy train code unchanged.

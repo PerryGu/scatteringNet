@@ -210,6 +210,7 @@ def _checkpoint_payload(
         "depth": int(cfg.depth),
         "shape_encoder": str(cfg.shape_encoder),
         "n_surface": int(cfg.n_surface),
+        "envelope_mix": int(cfg.envelope_mix),
         "n_faces": int(cfg.n_faces),
         "encoder_hidden": int(cfg.encoder_hidden),
         "encoder_depth": int(cfg.encoder_depth),
@@ -293,6 +294,7 @@ def train_multi_npz(
             seed=cfg.seed,
             n_faces=n_faces,
             item_geom=item_geom,
+            envelope_mix=int(cfg.envelope_mix),
         )
     else:
         dataset = OccupancyMultiNpzDataset(
@@ -302,6 +304,7 @@ def train_multi_npz(
             seed=cfg.seed,
             n_faces=n_faces,
             item_geom=item_geom,
+            envelope_mix=int(cfg.envelope_mix),
         )
 
     # File-level randperm leaks: lattice + jitter of one OBJ can sit on both sides.
@@ -367,6 +370,7 @@ def train_multi_npz(
         f"gpu={gpu_name(cfg.device)} "
         f"hidden={cfg.hidden} depth={cfg.depth} "
         f"shape_encoder={cfg.shape_encoder} n_surface={cfg.n_surface} "
+        f"envelope_mix={cfg.envelope_mix} "
         f"n_faces={cfg.n_faces} "
         f"encoder_hidden={cfg.encoder_hidden} encoder_depth={cfg.encoder_depth} "
         f"latent_dim={encoder_latent_dim(cfg)}"

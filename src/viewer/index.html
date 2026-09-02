@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>scatteringNet occupancy viewer</title>
-  <link rel="stylesheet" href="css/viewer.css?v=32">
+  <link rel="stylesheet" href="css/viewer.css?v=35">
 </head>
 <body>
   <div id="canvas-container">
@@ -58,10 +58,20 @@
       <div id="fill-panel" hidden>
         <div class="fill-title">Create dots</div>
         <div class="fill-row">
-          <button type="button" id="btn-envelope" disabled title="Sample purple points on the mesh surface (same envelope as occupancy training).">Envelope</button>
+          <button type="button" id="btn-envelope" disabled title="Purple overlay. Mix slider splits Count between face-area samples and crease samples (viewer only, not occupancy train).">Envelope</button>
           <div class="slider-row">
             <span title="How many surface samples. Training often uses 1024.">Count <span id="val-envelope">1024</span></span>
             <input type="range" id="sld-envelope" min="256" max="4096" step="64" value="1024" title="256–4096 surface points. Drag refreshes if Envelope is on.">
+          </div>
+        </div>
+        <div class="fill-row fill-row-mix">
+          <span class="mix-slot" title="Area-weighted darts on triangles (old envelope).">Faces</span>
+          <div class="slider-row">
+            <span class="mix-caption">
+              <span title="Left = all face-area samples. Right = all crease samples. Splits Count between the two.">Mix <span id="val-envelope-mix">100% edges</span></span>
+              <span class="mix-end" title="Dots on/near sharp dihedral edges.">Edges</span>
+            </span>
+            <input type="range" id="sld-envelope-mix" min="0" max="100" value="100" title="0 = Faces only, 100 = Edges only. Drag refreshes if Envelope is on.">
           </div>
         </div>
         <div class="fill-row">
@@ -121,6 +131,6 @@
       }
     }, 2500);
   </script>
-  <script type="module" src="js/main.js?v=32"></script>
+  <script type="module" src="js/main.js?v=34"></script>
 </body>
 </html>

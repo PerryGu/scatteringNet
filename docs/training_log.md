@@ -12,14 +12,227 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 
 **Names in older entries.** Before 2026-08-30 hygiene, the selection split was stored as `test_*` (`test_fraction`, `test_acc`, `n_test_files`). That is today's **val** split: scored every epoch to pick `best.pt`, not a locked holdout. Snapshot `split: shape` on those runs means whole **files**, not mesh identity.
 
-| Run id | Name |
+**Score** is the `best.pt` epoch: val_iou · val_acc. Splits are not all the same (see Name). xyz-only has no IoU.
+
+| Run id | Name | Score |
+|---|---|---|
+| `2026-09-01_23-39-04_extrude_nr1_surface_mix75` | Mix 75 look-see (epochs 29–40 from @ 28) | IoU 0.796 · acc 0.965 @ 30 |
+| `2026-09-01_22-01-09_extrude_nr1_surface_mix75` | Continuation of mix 75 (epochs 21–30) | IoU 0.780 · acc 0.963 @ 28 |
+| `2026-09-01_18-27-19_extrude_nr1_surface_mix75` | Envelope mix 75 (creases) + xyz, `h64/d4` | IoU 0.771 · acc 0.961 @ 20 |
+| `2026-09-01_10-38-57_extrude_nr1_mesh` | Face tokens + xyz, `shape_encoder: mesh` (Step 10) | IoU 0.691 · acc 0.946 @ 19 |
+| `2026-08-30_22-59-57_extrude_nr1_surface` | Envelope + xyz, `hidden: 128` `depth: 6` (width+depth A/B) | IoU 0.754 · acc 0.959 @ 19 |
+| `2026-08-30_20-31-00_extrude_nr1_surface` | Envelope + xyz, `hidden: 128` (width A/B) | IoU 0.757 · acc 0.959 @ 18 |
+| `2026-08-30_18-40-06_extrude_nr1_surface` | Continuation of `15-50-05` (epochs 21–30) | IoU 0.775 · acc 0.962 @ 25 |
+| `2026-08-30_15-50-05_extrude_nr1_surface` | Envelope + xyz, mesh-identity val | IoU 0.756 · acc 0.958 @ 20 |
+| `2026-08-29_19-43-15_extrude_nr1_surface` | Envelope + xyz, file holdout | IoU 0.691 · acc 0.970 @ 18 |
+| `2026-08-29_09-28-54_extrude_nr1` | Xyz-only, pooled point split | acc 0.853 @ 20 |
+
+---
+
+## 2026-09-02 08:00 — extrude_nr1_surface mix75 look-see (epochs 29–40)
+
+**Continuation of** [`2026-09-01_22-01-09_extrude_nr1_surface_mix75`](#2026-09-01-2300--extrude_nr1_surface-mix75-continuation-epochs-2130). Same catalog, seed, mesh val, `h64/d4`, `envelope_mix: 75`. Loaded that run’s `best.pt` (**epoch 28**, val_iou 0.780), not the weaker epoch-30 weights from the same folder. Goal: does pushing the printed budget to 40 beat epoch 28, or has val rolled over?
+
+A second folder `2026-09-02_07-40-54_extrude_nr1_surface_mix75` is the same resume started again the next morning (through epoch 35 when this was written, same numbers). Treat **`23-39-04`** as the completed look-see. Stop `07-40-54` if it is still running.
+
+### What ran
+
+| Knob | Value |
 |---|---|
-| `2026-08-30_22-59-57_extrude_nr1_surface` | Envelope + xyz, `hidden: 128` `depth: 6` (width+depth A/B) |
-| `2026-08-30_20-31-00_extrude_nr1_surface` | Envelope + xyz, `hidden: 128` (width A/B) |
-| `2026-08-30_18-40-06_extrude_nr1_surface` | Continuation of `15-50-05` (epochs 21–30) |
-| `2026-08-30_15-50-05_extrude_nr1_surface` | Envelope + xyz, mesh-identity val |
-| `2026-08-29_19-43-15_extrude_nr1_surface` | Envelope + xyz, file holdout |
-| `2026-08-29_09-28-54_extrude_nr1` | Xyz-only, pooled point split |
+| Script | `src/train_multi_npz.py --resume-run-id 2026-09-01_22-01-09_extrude_nr1_surface_mix75 --epochs 12` |
+| Parent | `models/2026-09-01_22-01-09_extrude_nr1_surface_mix75/best.pt` (`resume_epoch: 28`) |
+| Extra epochs | 12 (printed 029–040). Snapshot `total: 40` |
+| Device | `cuda` / NVIDIA GeForce GTX 1080 |
+
+**Artifacts**
+
+- Run: `runs/2026-09-01_23-39-04_extrude_nr1_surface_mix75/`
+- Weights: `models/2026-09-01_23-39-04_extrude_nr1_surface_mix75/best.pt`
+- Wall: **1h 21m 51.63s** (`started=2026-09-01T23:37:15` → `finished=2026-09-02T00:59:06`)
+- `best_epoch: 30`, `best_metric: 0.796476` (val_iou)
+
+### Vs the parent
+
+| | parent best @ 28 | parent’s own @ 30 | **this run best @ 30** | this run @ 40 |
+|---|---|---|---|---|
+| val_acc | 0.9633 | 0.9590 | **0.9655** | 0.9648 |
+| val_iou / val_f1 | 0.780 / 0.877 | 0.774 / 0.872 | **0.796 / 0.887** | 0.788 / 0.882 |
+| train_acc | 0.962 | 0.963 | 0.964 | 0.966 |
+| loss | 0.087 | 0.086 | 0.085 | 0.079 |
+
+Two different stories:
+
+1. **31–40 did not win.** Best stayed at 30. Epoch 33 got close (IoU 0.792); 34 dipped to 0.737; 40 finished at 0.788. Train loss and acc kept improving (`0.085 → 0.079`, `0.964 → 0.966`) while val never beat 30. That is the rollover we expected.
+2. **This epoch 30 is not the parent’s epoch 30.** Resuming from the peak-28 weights and walking 29–30 again found a new high (IoU 0.796 vs the parent’s 0.774 at its own epoch 30, and vs 0.780 at 28). The look-see was not empty — the gain is the replay of 29–30, not the tail to 40.
+
+**Not shown by this run**
+
+- Viewer Fill vs `18-40-06` or the parent `22-01-09`
+- That mix 50 / 100 would win
+- That a lower LR after 30 would climb; this recipe is done
+
+**Bottom line:** you were right that **nothing after 30 became `best.pt`**. Do not resume again. The file to keep is this run’s epoch-30 `best.pt` (IoU 0.796), which beats `22-01-09` epoch 28. That is the current occupancy numbers champion on `extrude_*_nr1`. Next useful work is Fill in the viewer, not epoch 41.
+
+---
+
+## 2026-09-01 23:00 — extrude_nr1_surface mix75 continuation (epochs 21–30)
+
+**Continuation of** [`2026-09-01_18-27-19_extrude_nr1_surface_mix75`](#2026-09-01-2100--extrude_nr1_surface-mix75-crease-weighted-envelope). Same catalog, seed, mesh val, `h64/d4`, and `envelope_mix: 75`. Weights loaded from that run’s `best.pt` (epoch 20, val_iou 0.771). Not a new train from scratch. Goal: the parent was still rising at 20 — do 10 more epochs beat the area continuation `18-40-06` (best @ 25, IoU 0.775) at a matched 30-epoch budget?
+
+Selection stays **`checkpoint_metric: val_iou`**. Parent `best.pt` stored Adam moments; optimizer resumed.
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py --resume-run-id 2026-09-01_18-27-19_extrude_nr1_surface_mix75 --epochs 10` |
+| Parent | `models/2026-09-01_18-27-19_extrude_nr1_surface_mix75/best.pt` (`resume_epoch: 20`) |
+| Split | Same mesh holdout as the parent (seed 1, 2000 / 500 meshes) |
+| Extra epochs | 10 (printed 021–030). Snapshot `total: 30` |
+| Device | `cuda` / NVIDIA GeForce GTX 1080 |
+| Geometry | `envelope_mix=75` (unchanged) |
+
+**Artifacts**
+
+- Run: `runs/2026-09-01_22-01-09_extrude_nr1_surface_mix75/`
+- Weights: `models/2026-09-01_22-01-09_extrude_nr1_surface_mix75/best.pt`
+- Wall: **1h 06m 29.73s** (`started=2026-09-01T21:57:43` → `finished=2026-09-01T23:04:12`)
+- `best_epoch: 28`, `best_metric: 0.780496` (val_iou)
+
+### Vs the parent and the area continuation
+
+| | mix 75 parent @ 20 | **this run best @ 28** | this run @ 30 | area `18-40-06` @ 25 |
+|---|---|---|---|---|
+| val_acc | 0.9608 | **0.9633** | 0.9590 | 0.9624 |
+| val_iou / val_f1 | 0.771 / 0.870 | **0.780 / 0.877** | 0.774 / 0.872 | 0.775 / 0.873 |
+| train_acc | 0.959 | 0.962 | 0.963 | 0.960 |
+| loss | 0.096 | 0.087 | 0.086 | 0.093 |
+
+Epoch 21 dipped (val_iou 0.737) then recovered. Epoch 22 already beat the parent (0.774). Epoch 25 was already past `18-40-06` (IoU 0.780 vs 0.775). Best is epoch **28**. After that, train acc and loss keep improving while val wobbles and finishes **below** 28 — same rollover as the area recipe after 25. Use epoch 28, not 30, and not the parent epoch-20 file.
+
+**Not shown by this run**
+
+- Viewer Fill vs `18-40-06` (numbers only)
+- That mix 50 or 100 would win
+- That 10 more epochs would help; val already rolled over
+
+**Bottom line:** the extra 10 epochs bought a **small, real** gain, and mix 75 now **beats** the old area inspect checkpoint on the matched 30-epoch budget (IoU 0.780 vs 0.775). This `best.pt` (epoch 28) is the current occupancy numbers champion on `extrude_*_nr1`. Another resume on this recipe is not justified. Inspect default can move here after a Fill look; until then keep `18-40-06` only if the viewer still looks better.
+
+---
+
+## 2026-09-01 21:00 — extrude_nr1_surface mix75 (crease-weighted envelope)
+
+Fresh train. Same catalog, seed, mesh val, occupancy `h64/d4`, Adam `lr=0.001`, and `n_surface: 1024` as `15-50-05`. The only geometry change is **`envelope_mix: 75`**: of 1024 shell points, ~256 are area-weighted face darts (old envelope) and ~768 hug sharp creases. OccupancyMLP / OccupancyEncoder unchanged. Goal: does putting most envelope mass on edges beat the 20-epoch area envelope on the same holdout?
+
+Selection is **`checkpoint_metric: val_iou`** (`15-50-05` used `val_acc`). Both runs’ `best.pt` is epoch 20, so the epoch-20 row is a matched comparison.
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` (from scratch; not a resume) |
+| Glob | YAML `exports/dataset/extrude_*_nr1_*.npz` |
+| `run_name` | `extrude_nr1_surface_mix75` |
+| Files | 5000 NPZs, 2500 unique OBJs (`max_files_per_shape: 2`) |
+| Geometry | `n_surface=1024`, `envelope_mix=75`, `shape_encoder=surface` (`n_faces` unused by this head) |
+| Split | **Mesh** identity (`n_train_meshes=2000` / `n_val_meshes=500`, seed 1) — same groups as `15-50-05` |
+| Model | OccupancyEncoder `hidden=64` `depth=4` (`latent_dim` omitted → 64) |
+| Device | `cuda` / NVIDIA GeForce GTX 1080 |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+
+**Artifacts**
+
+- Run: `runs/2026-09-01_18-27-19_extrude_nr1_surface_mix75/`
+- Weights: `models/2026-09-01_18-27-19_extrude_nr1_surface_mix75/best.pt`
+- Wall: **2h 13m 22.08s** (`started=2026-09-01T18:23:19` → `finished=2026-09-01T20:36:41`)
+- `best_epoch: 20`, `best_metric: 0.770542` (val_iou)
+
+### Vs 20-epoch area envelope (same split)
+
+Do **not** treat a win over `10-38-57` (mesh tokens, IoU 0.691) as the story. That run already lost. The matched recipe is `15-50-05` (`envelope_mix` omitted = 0). `18-40-06` is 10 extra epochs on that area envelope, not a matched budget.
+
+| | area envelope (`15-50-05`) | **mix 75 (`18-27-19`)** | area + 10 epochs (`18-40-06` @ 25) |
+|---|---|---|---|
+| best val_acc | 0.9584 @ 20 (`val_acc` pick) | **0.9608 @ 20** (`val_iou` pick) | 0.9624 @ 25 |
+| best val_iou / f1 | 0.756 / 0.861 | **0.771 / 0.870** | 0.775 / 0.873 |
+| epoch-20 val_acc | 0.9584 | **0.9608** | — |
+| epoch-20 val_iou / f1 | 0.756 / 0.861 | **0.771 / 0.870** | — |
+| epoch-20 loss | 0.098 | **0.096** | 0.093 @ 25 |
+| wall | 2h 14m | 2h 13m | +1h (epochs 21–30) |
+
+Loss falls `0.241 → 0.096`. Train and val stay together (train acc 0.959 vs val 0.961 at 20). Val IoU still wobbles mid-run (dips at 12 and 15), same pattern as the area envelope, then a clean last-epoch best. It **beats** the matched 20-epoch area train: IoU +0.015, acc +0.002. At 20 epochs it is already within ~0.004 IoU of `18-40-06` epoch 25.
+
+Unlike `18-40-06`, this run is still **rising** at the last epoch (best = 20). A 10-epoch resume is more justified here than another resume of the area recipe.
+
+**Not shown by this run**
+
+- That mix 50 or 100 would win (this is one mix value)
+- Viewer Fill quality vs `18-40-06` (numbers only; inspect still needs a look)
+- A mixed-family catalog (still `extrude_*_nr1` only)
+
+**Bottom line:** crease-weighted envelope at mix 75 **won** the 20-epoch match vs `15-50-05`. Keep `15-50-05` as the area-envelope baseline. This `best.pt` is the better 20-epoch surface checkpoint. Do not auto-replace `18-40-06` as the inspect default until Fill is compared; that file still has a small IoU edge from 10 extra epochs. Optional next: resume 10 epochs on `18-27-19`, or A/B mix 50 / 100 — not another mesh-token train.
+
+---
+
+## 2026-09-01 14:00 — extrude_nr1_mesh (face tokens)
+
+Fresh train. Same catalog, seed, mesh val, occupancy `h64/d4`, and Adam `lr=0.001` as `15-50-05`. The geometry signal is **face tokens**, not the envelope: `shape_encoder: mesh`, `n_faces: 256` (largest triangles by area, tiled if short). `MeshFaceEncoder` is a per-face MLP + **global max-pool** → one `z_face`; occupancy is `cat(xyz, z_face)`. Goal: does this beat the 20-epoch envelope baseline on the same holdout?
+
+Selection this run is **`checkpoint_metric: val_iou`** (surface trains used `val_acc`). Compare IoU to IoU; do not treat a `val_acc` `best.pt` as the same pick rule.
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` (from scratch; not a resume) |
+| Glob | YAML `exports/dataset/extrude_*_nr1_*.npz` |
+| `run_name` | `extrude_nr1_mesh` |
+| Files | 5000 NPZs, 2500 unique OBJs (`max_files_per_shape: 2`) |
+| Geometry | `n_faces=256`, `shape_encoder=mesh` (`n_surface=1024` is still in YAML; unused by this head) |
+| Split | **Mesh** identity (`n_train_meshes=2000` / `n_val_meshes=500`, seed 1) — same groups as `15-50-05` |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; MeshFaceEncoder `encoder_hidden=64` `encoder_depth=4` (`latent_dim` omitted → 64) |
+| Device | `cuda` / NVIDIA GeForce GTX 1080 |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+
+**Artifacts**
+
+- Run: `runs/2026-09-01_10-38-57_extrude_nr1_mesh/`
+- Weights: `models/2026-09-01_10-38-57_extrude_nr1_mesh/best.pt`
+- Wall: **2h 11m 24.65s** (`started=2026-09-01T10:36:55` → `finished=2026-09-01T12:48:19`)
+- `best_epoch: 19`, `best_metric: 0.691164` (val_iou)
+
+### Vs 20-epoch envelope (same split)
+
+Do **not** score this against `18-40-06` epoch 25 as a matched A/B. That run is 10 extra epochs on envelope `h64/d4`. The matched budget is `15-50-05`.
+
+| | envelope h64 d4 (`15-50-05`) | **mesh faces (`10-38-57`)** |
+|---|---|---|
+| best val_acc | 0.9584 @ 20 (`val_acc` pick) | 0.9463 @ 19 (`val_iou` pick) |
+| best val_iou / f1 | 0.756 / 0.861 | **0.691 / 0.817** |
+| epoch-20 val_acc | 0.9584 | 0.9399 |
+| epoch-20 val_iou / f1 | 0.756 / 0.861 | 0.662 / 0.797 |
+| epoch-20 loss | 0.098 | 0.130 |
+| wall | 2h 14m | 2h 11m |
+
+Loss falls `0.269 → 0.130`. Train and val stay together. It learns interiors (not the ~85% outside prior), but it **loses** the matched envelope train: IoU 0.691 vs 0.756, acc 0.946 vs 0.958. Epoch 20 is worse on val than 19 (IoU 0.662) while train acc and loss still improve slightly — early wobble, not a reason to resume 10 more epochs as the main bet.
+
+Viewer Fill at spacing 0.05 (qualitative, not a metric): this `best.pt` underfills vs `18-40-06` (holes, empty chimney). Do not promote it as the inspect default.
+
+**Not shown by this run**
+
+- That local query–face attention would lose (this encoder is global max-pool over 256 largest faces)
+- That more epochs on this recipe would catch `15-50-05` or `18-40-06`
+- A mixed-family catalog (still `extrude_*_nr1` only)
+
+**Bottom line:** Step 10 mesh tokens at this recipe **lost**. Keep `15-50-05` as the 20-epoch envelope baseline and `18-40-06` epoch 25 as the inspect checkpoint. Do not treat `10-38-57` as the new baseline. Next geometry work, if any, is a stronger local face encoder — not another 10 epochs of global max-pool.
 
 ---
 

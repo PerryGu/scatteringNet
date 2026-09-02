@@ -14,6 +14,7 @@ export const UI_PREF_DEFAULTS = {
   density: 71,
   inside_cut: 50,
   envelope_n: 1024,
+  envelope_mix: 100,
   faces_n: 256,
   model_id: "",
 };

@@ -50,6 +50,7 @@ class YamlKnobs(TypedDict):
     batch_size: int
     optimizer: str
     n_surface: int
+    envelope_mix: int
     n_faces: int
     encoder_hidden: int
     encoder_depth: int
@@ -103,6 +104,17 @@ def _as_positive_int(name: str, value: Any) -> int:
         raise ValueError(f"{name} must be an integer, got {value!r}") from exc
     if parsed < 1:
         raise ValueError(f"{name} must be >= 1, got {parsed}")
+    return parsed
+
+
+def _as_int_in_range(name: str, value: Any, lo: int, hi: int) -> int:
+    """Inclusive integer range (YAML ``envelope_mix`` is 0–100)."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer, got {value!r}") from exc
+    if parsed < lo or parsed > hi:
+        raise ValueError(f"{name} must be in [{lo}, {hi}], got {parsed}")
     return parsed
 
 
@@ -331,6 +343,11 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             if "n_surface" in raw
             else 1024
         ),
+        "envelope_mix": (
+            _as_int_in_range("envelope_mix", raw["envelope_mix"], 0, 100)
+            if "envelope_mix" in raw
+            else 0
+        ),
         "n_faces": (
             _as_positive_int("n_faces", raw["n_faces"])
             if "n_faces" in raw
@@ -406,6 +423,8 @@ class OccupancyConfig:
     optimizer: str = "adam"
     # Envelope sample count (YAML). Used when ``shape_encoder`` is ``surface``.
     n_surface: int = 1024
+    # 0 = area-weighted envelope, 100 = crease-hugging (viewer Mix).
+    envelope_mix: int = 0
     # Face-token length (YAML ``n_faces``).
     n_faces: int = 256
     encoder_hidden: int = 64
@@ -461,6 +480,7 @@ def load_config(
         batch_size=knobs["batch_size"],
         optimizer=knobs["optimizer"],
         n_surface=knobs["n_surface"],
+        envelope_mix=knobs["envelope_mix"],
         n_faces=knobs["n_faces"],
         encoder_hidden=knobs["encoder_hidden"],
         encoder_depth=knobs["encoder_depth"],
@@ -509,6 +529,7 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  batch_size={cfg.batch_size}\n"
         f"  optimizer={cfg.optimizer}\n"
         f"  n_surface={cfg.n_surface}\n"
+        f"  envelope_mix={cfg.envelope_mix}\n"
         f"  n_faces={cfg.n_faces}\n"
         f"  encoder_hidden={cfg.encoder_hidden}\n"
         f"  encoder_depth={cfg.encoder_depth}\n"

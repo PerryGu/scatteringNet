@@ -27,7 +27,7 @@ import {
   thresholdFromCutSlider,
 } from "./model_panel.js";
 import { fillObjOnHelper, inferObjOnHelper, spacingFromSlider } from "./obj_infer.js";
-import { clampNSurface, envelopeObjOnHelper, makeEnvelopeLayer } from "./envelope.js";
+import { clampEnvelopeMix, clampNSurface, envelopeObjOnHelper, makeEnvelopeLayer } from "./envelope.js";
 import { clampNFaces, facesObjOnHelper, makeFaceTokenGroup } from "./faces.js";
 import { fetchUiPrefs, postUiPrefs } from "./ui_prefs.js";
 
@@ -74,6 +74,8 @@ const valDensity = document.getElementById("val-density");
 const btnEnvelope = document.getElementById("btn-envelope");
 const sldEnvelope = document.getElementById("sld-envelope");
 const valEnvelope = document.getElementById("val-envelope");
+const sldEnvelopeMix = document.getElementById("sld-envelope-mix");
+const valEnvelopeMix = document.getElementById("val-envelope-mix");
 const btnFaces = document.getElementById("btn-faces");
 const sldFaces = document.getElementById("sld-faces");
 const valFaces = document.getElementById("val-faces");
@@ -187,6 +189,7 @@ function collectUiPrefs() {
     draw_cap: Number(sldCap && sldCap.value),
     density: Number(sldDensity && sldDensity.value),
     envelope_n: clampNSurface(sldEnvelope && sldEnvelope.value),
+    envelope_mix: clampEnvelopeMix(sldEnvelopeMix && sldEnvelopeMix.value),
     faces_n: clampNFaces(sldFaces && sldFaces.value),
     inside_cut: Number(sldCut && sldCut.value),
     model_id: selModel && selModel.value ? String(selModel.value) : "",
@@ -228,6 +231,9 @@ function applyUiPrefs(prefs) {
   if (sldEnvelope && prefs.envelope_n != null) {
     sldEnvelope.value = String(clampNSurface(prefs.envelope_n));
   }
+  if (sldEnvelopeMix && prefs.envelope_mix != null) {
+    sldEnvelopeMix.value = String(clampEnvelopeMix(prefs.envelope_mix));
+  }
   if (sldFaces && prefs.faces_n != null) {
     sldFaces.value = String(clampNFaces(prefs.faces_n));
   }
@@ -236,6 +242,7 @@ function applyUiPrefs(prefs) {
   }
   updateDensityLabel();
   updateEnvelopeLabel();
+  updateEnvelopeMixLabel();
   updateFacesLabel();
   updateCutLabel();
   applyInspectToMesh();
@@ -912,8 +919,17 @@ function updateEnvelopeLabel() {
   valEnvelope.textContent = String(clampNSurface(sldEnvelope.value));
 }
 
+function updateEnvelopeMixLabel() {
+  if (!valEnvelopeMix || !sldEnvelopeMix) {
+    return;
+  }
+  const mix = clampEnvelopeMix(sldEnvelopeMix.value);
+  valEnvelopeMix.textContent = mix + "% edges";
+}
+
 function scheduleEnvelopeFromSlider() {
   updateEnvelopeLabel();
+  updateEnvelopeMixLabel();
   if (!envelopeVisible || !objText) {
     return;
   }
@@ -943,20 +959,31 @@ async function runEnvelope(opts) {
   envelopeBusy = true;
   syncFillPanel();
   const nSurface = clampNSurface(sldEnvelope && sldEnvelope.value);
+  const mix = clampEnvelopeMix(sldEnvelopeMix && sldEnvelopeMix.value);
   setStatus("Sampling " + nSurface.toLocaleString() + " envelope points…");
   try {
     const sampled = await envelopeObjOnHelper({
       objText: objText,
       nSurface: nSurface,
+      mix: mix,
     });
     attachEnvelopeLayer(sampled.points);
     syncInspectEnabled();
+    const nArea = Number(sampled.nArea) || 0;
+    const nEdge = Number(sampled.nEdge) || 0;
+    const nCreases = Number(sampled.nCreases) || 0;
     setStatus(
       "Envelope “" +
         (objFileName || "mesh") +
         "”: " +
         sampled.n.toLocaleString() +
-        " purple surface points."
+        " purple points (" +
+        nArea.toLocaleString() +
+        " faces / " +
+        nEdge.toLocaleString() +
+        " edges" +
+        (nCreases > 0 ? " on " + nCreases.toLocaleString() + " creases" : "") +
+        ")."
     );
     scheduleSaveUiPrefs();
   } catch (err) {
@@ -1265,6 +1292,13 @@ if (sldEnvelope) {
     scheduleSaveUiPrefs();
   });
   updateEnvelopeLabel();
+}
+if (sldEnvelopeMix) {
+  sldEnvelopeMix.addEventListener("input", () => {
+    scheduleEnvelopeFromSlider();
+    scheduleSaveUiPrefs();
+  });
+  updateEnvelopeMixLabel();
 }
 if (btnFaces) {
   btnFaces.addEventListener("click", () => {

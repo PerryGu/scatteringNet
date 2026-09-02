@@ -24,6 +24,7 @@ DEFAULTS: dict[str, Any] = {
     "density": 71,
     "inside_cut": 50,
     "envelope_n": 1024,
+    "envelope_mix": 100,
     "faces_n": 256,
     "model_id": "",
 }
@@ -36,6 +37,7 @@ _INT_KEYS = {
     "density": (0, 100),
     "inside_cut": (0, 100),
     "envelope_n": (256, 4096),
+    "envelope_mix": (0, 100),
     "faces_n": (64, 1024),
 }
 

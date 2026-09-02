@@ -34,7 +34,7 @@ Infer on the file’s `points` (the box is not resampled). **Truth** = file labe
 
 The lower panel is titled **Create dots**. Three rows, top to bottom:
 
-1. **Envelope** — purple area-weighted surface samples (same ``sample_surface_points`` as occupancy). Count 256–4096, default 1024. Click to show/hide; drag **Count** to refresh while shown.
+1. **Envelope** — purple overlay. **Count** is the total (256–4096, default 1024). **Mix** (0–100, default 100) splits that count: left **Faces** = area-weighted darts on triangles (old envelope); right **Edges** = on/near sharp creases. Status reports how many went to each. Overlay Mix is display-only. **Run model** rebuilds the envelope with the **checkpoint** ``envelope_mix`` (missing key = 0, all face-area).
 2. **Faces** — teal triangles + cyan normal ticks. These are the occupancy mesh-encoder tokens: largest faces by area, then tiled if the mesh has fewer triangles than Count. Count 64–1024, default 256. Click to show/hide; drag **Count** to refresh while shown. The status line reports token count, unique vs tiled, and mesh triangle count. Envelope and Faces can stay on together.
 3. **Fill points** + **Density** — unlabeled AABB lattice. OBJ-only. Dragging density refills (short debounce); **Fill points** still works. The camera does not reset. Fill turns **Inside** and **Outside** on so the lattice is not hidden.
 
@@ -54,7 +54,7 @@ Right = denser (smaller step). The helper caps the lattice at **200,000** points
 
 ## UI prefs
 
-Checkboxes, sliders, density, **Envelope count**, **Faces count**, **Inside cut**, and the selected model are saved to `src/viewer/ui_prefs.json` (helper `GET`/`POST /api/ui-prefs`). Missing file uses defaults; see `ui_prefs.example.json`. Gitignored. Truth / Prediction / Errors are not saved (they depend on the loaded file).
+Checkboxes, sliders, density, **Envelope count**, **Envelope mix**, **Faces count**, **Inside cut**, and the selected model are saved to `src/viewer/ui_prefs.json` (helper `GET`/`POST /api/ui-prefs`). Missing file uses defaults; see `ui_prefs.example.json`. Gitignored. Truth / Prediction / Errors are not saved (they depend on the loaded file).
 
 ## Tests
 
@@ -74,7 +74,7 @@ src/viewer/
   mesh_access.py     OBJ path under data_dir
   model_access.py    models/<run>/best.pt
   infer_job.py       Job A / Job B forward
-  envelope_job.py    surface samples for the Envelope overlay
+  envelope_job.py    crease-hugging surface samples for the Envelope overlay
   faces_job.py       triangle + normal overlay for mesh tokens
   obj_fill.py        unlabeled AABB lattice
   ui_prefs.py        ui_prefs.json
