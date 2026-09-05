@@ -1,10 +1,10 @@
 /**
- * Last five successful loads: names in localStorage, file bytes in IndexedDB
+ * Last ten successful loads: names in localStorage, file bytes in IndexedDB
  * so a recent click can replace the current OBJ/NPZ after a refresh.
  */
 
 const STORAGE_KEY = "scatteringNet.viewer.recents";
-const MAX_RECENTS = 5;
+const MAX_RECENTS = 10;
 const IDB_NAME = "scatteringNet.viewer.files";
 const IDB_STORE = "files";
 /** Skip IndexedDB for huge catalogs so the UI stays responsive. */

@@ -16,9 +16,13 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 
 **Score** is the `best.pt` epoch: val_iou · val_acc. Splits are not all the same (see Name). xyz-only has no IoU.
 
+**Duration** in each What ran table is wall clock (`runs/<id>/config.yaml` `wall`).
+
 
 | Run id                                          | Name                                                       | Score                      |
 | ----------------------------------------------- | ---------------------------------------------------------- | -------------------------- |
+| `2026-09-04_15-52-00_prim_extruded_nr45_knn16`  | New catalog: primitives + smooth + nr1/nr4/nr5, knn16      | IoU 0.894 · acc 0.982 @ 14 |
+| `2026-09-03_15-59-37_prim_extrude_knn16_n2048`  | Mixed catalog knn16, `n_surface: 2048`                     | IoU 0.962 · acc 0.990 @ 19 |
 | `2026-09-02_15-25-10_prim_extrude_knn16`        | Mixed primitives + capped extrude, knn16 mix 75            | IoU 0.954 · acc 0.988 @ 20 |
 | `2026-09-02_11-18-13_extrude_nr1_surface_knn16` | Local k-NN k=16 + mix 75, `nr1` only                       | IoU 0.974 · acc 0.996 @ 19 |
 | `2026-09-01_23-39-04_extrude_nr1_surface_mix75` | Mix 75 look-see (epochs 29–40 from @ 28)                   | IoU 0.796 · acc 0.965 @ 30 |
@@ -32,6 +36,162 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 | `2026-08-29_19-43-15_extrude_nr1_surface`       | Envelope + xyz, file holdout                               | IoU 0.691 · acc 0.970 @ 18 |
 | `2026-08-29_09-28-54_extrude_nr1`               | Xyz-only, pooled point split                               | acc 0.853 @ 20             |
 
+
+---
+
+## 2026-09-05 08:00 — prim_extruded_nr45_knn16 (smooth + high-round catalog)
+
+Fresh train. Same occupancy head as [`2026-09-02_15-25-10_prim_extrude_knn16`](#2026-09-03-1200--prim_extrude_knn16-mixed-primitives--extrude): `knn_k: 16`, mix 75, `h64/d4`, `n_surface: 1024`, seed 1. **Not** a resume of that `best.pt` or of `15-59-37`. The change is the **catalog**: all primitives, 150 smooth `extruded_*` (`s0.08`), 40 `nr1`, 90 `nr4` (`s0.08`), 64 `nr5` (`s0.08`). No `nr3`. High-round Truth was rebuilt with the multi-ray vote. Goal: does a limb-heavy catalog put orange in thin / smooth arms? Success is **viewer Fill**, not beating 0.954 on the old val.
+
+Selection stays **`checkpoint_metric: val_iou`**. Overlay Mix/Count do not change infer; Fill must load this checkpoint.
+
+### Fill (viewer) — 5 Sep 2026
+
+Primitives hold shape with a **slight leak** past the wire (torus / gear / one helix). The other helix fills cleanly. Easy `nr1`/`nr2` extrudes are **better than `15-25-10`**. Smooth `extruded_*` is usable. `nr4`/`nr5` still leak and miss limbs. Humans / animals / giraffe still fail — a smoothed box family did not transfer to organic.
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_helix_ok.png"><img src="media/2026-09-05_nr45_helix_ok.png" alt="Helix ok" width="100%"/></a><br/>Helix (ok)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_helix_leak.png"><img src="media/2026-09-05_nr45_helix_leak.png" alt="Helix leak" width="100%"/></a><br/>Helix (leak)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_torus.png"><img src="media/2026-09-05_nr45_torus.png" alt="Torus" width="100%"/></a><br/>Torus</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_gear.png"><img src="media/2026-09-05_nr45_gear.png" alt="Gear" width="100%"/></a><br/>Gear</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_extrude_easy.png"><img src="media/2026-09-05_nr45_extrude_easy.png" alt="Easy extrude" width="100%"/></a><br/>Extrude lev 1/2</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_extrude_nr45.png"><img src="media/2026-09-05_nr45_extrude_nr45.png" alt="nr4/nr5" width="100%"/></a><br/>Extrude lev 4/5</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_extrude_nr45_b.png"><img src="media/2026-09-05_nr45_extrude_nr45_b.png" alt="nr4/nr5" width="100%"/></a><br/>Extrude lev 4/5</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_giraffe.png"><img src="media/2026-09-05_nr45_giraffe.png" alt="Giraffe" width="100%"/></a><br/>Not in that Train's Catalog</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_human.png"><img src="media/2026-09-05_nr45_human.png" alt="Human" width="100%"/></a><br/>Not in that Train's Catalog</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_smooth_1.png"><img src="media/2026-09-05_nr45_smooth_1.png" alt="Smooth extruded" width="100%"/></a><br/>Smooth extruded</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_smooth_2.png"><img src="media/2026-09-05_nr45_smooth_2.png" alt="Smooth extruded" width="100%"/></a><br/>Smooth extruded</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-05_nr45_smooth_3.png"><img src="media/2026-09-05_nr45_smooth_3.png" alt="Smooth extruded" width="100%"/></a><br/>Smooth extruded</td>
+</tr>
+</table>
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` (from scratch; not a resume) |
+| Catalog | YAML `npz_catalog`: 10 primitive globs + all `extruded_*` `s0.08` + `nr1` 40 + `nr4` 90 + all `nr5` |
+| `run_name` | `prim_extruded_nr45_knn16` |
+| Files | 2454 NPZs, 1227 unique OBJs |
+| Points | 41.99M (train 35.07M / val 6.92M) |
+| Geometry | `n_surface=1024`, `envelope_mix=75`, `knn_k=16`, `shape_encoder=surface` |
+| Split | **Mesh** identity (`n_train_meshes=982` / `n_val_meshes=245`, seed 1) |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; local pool over 16 envelope offsets |
+| Device | `cuda` / NVIDIA GeForce GTX 1080 |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **8h 04m 06.49s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-04_15-52-00_prim_extruded_nr45_knn16/`
+- Weights: `models/2026-09-04_15-52-00_prim_extruded_nr45_knn16/best.pt`
+- Wall: **8h 04m 06.49s** (`started=2026-09-04T15:49:53` → `finished=2026-09-04T23:53:59`)
+- `best_epoch: 14`, `best_metric: 0.894411` (val_iou)
+
+### Vs the previous mixed-catalog knn16
+
+| | `15-25-10` best @ 20 | `15-59-37` best @ 19 | **this run best @ 14** | this run @ 20 |
+|---|---|---|---|---|
+| val_acc | 0.988 | 0.990 | **0.982** | 0.980 |
+| val_iou / val_f1 | 0.954 / 0.976 | 0.962 / 0.981 | **0.894 / 0.944** | 0.887 / 0.940 |
+| train_acc | 0.990 | 0.992 | 0.991 | 0.991 |
+| loss | 0.026 | 0.022 | 0.023 | 0.022 |
+| meshes / NPZs | 1763 / 3526 | same | **1227 / 2454** | same |
+| val points | 5.05M | same catalog | **6.92M** | same |
+
+Do **not** read 0.894 vs 0.954 as a failed head. The val set changed: fewer easy `nr1` files, dense `s0.08` smooth / `nr4` / `nr5` clouds (often 20k–90k points) dominate the micro-average, and labels are the stricter multi-ray vote. Loss still falls `0.074 → 0.022`. Train and val stay together. Best is epoch **14**; later epochs wobble and do not replace it. Epoch 20 is worse (0.887). A resume for more epochs is not justified.
+
+**Not shown by this run**
+
+- That more smooth blobs would teach animals (this family already transferred poorly)
+- That 2048 envelope would help (already lost that A/B)
+
+**Bottom line:** catalog win is **easy extrudes + usable smooth**. Primitive leak is a small regression vs `15-25-10`. High-round arms and organics are still the same failures. Smoothed CAD did **not** become organic. Do not add more `extruded_*` hoping for humans. Next useful data is real organic meshes, or a different head — not another resume. This `best.pt` can be the inspect default for this catalog; keep `15-25-10` if primitive tightness matters more.
+
+---
+
+## 2026-09-03 21:00 — prim_extrude_knn16_n2048 (denser envelope)
+
+Fresh train. Same mixed catalog, seed, mesh val, `knn_k: 16`, mix 75, and `h64/d4` as [`2026-09-02_15-25-10_prim_extrude_knn16`](#2026-09-03-1200--prim_extrude_knn16-mixed-primitives--extrude). **Not** a resume of that `best.pt`. The only geometry change is `n_surface: 2048` (was 1024). Goal: does a denser skin put orange in thin `nr4`/`nr5` arms, or does k-NN still see the core? Success is **viewer Fill** vs the 1024 checkpoint, not a higher mixed val IoU.
+
+Selection stays **`checkpoint_metric: val_iou`**. Overlay Mix/Count do not change infer; Fill must load this checkpoint.
+
+### Fill (viewer) — 4 Sep 2026
+
+Same as `15-25-10`: primitives (gear, helix, torus) fill; holes stay empty. High-round extrudes still leak outside the mesh. Organics still ghost. Doubling envelope count did **not** change the failures.
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-04_n2048_gear.png"><img src="media/2026-09-04_n2048_gear.png" alt="Gear" width="100%"/></a><br/>Gear</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-04_n2048_helix.png"><img src="media/2026-09-04_n2048_helix.png" alt="Helix" width="100%"/></a><br/>Helix</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-04_n2048_torus.png"><img src="media/2026-09-04_n2048_torus.png" alt="Torus" width="100%"/></a><br/>Torus</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-04_n2048_tori.png"><img src="media/2026-09-04_n2048_tori.png" alt="Linked tori" width="100%"/></a><br/>Linked tori</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-04_n2048_primitive.png"><img src="media/2026-09-04_n2048_primitive.png" alt="Primitive Geo" width="100%"/></a><br/>Primitive Geo</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-04_n2048_extrude_complex.png"><img src="media/2026-09-04_n2048_extrude_complex.png" alt="Extrude Geo lev 4/5" width="100%"/></a><br/>Extrude Geo lev 4/5</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-04_n2048_extrude_leak.png"><img src="media/2026-09-04_n2048_extrude_leak.png" alt="Extrude Geo lev 4/5" width="100%"/></a><br/>Extrude Geo lev 4/5</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-04_n2048_organic.png"><img src="media/2026-09-04_n2048_organic.png" alt="Not in that Train's Catalog" width="100%"/></a><br/>Not in that Train's Catalog</td>
+<td></td>
+</tr>
+</table>
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` (from scratch; not a resume) |
+| Catalog | Same YAML `npz_catalog` as `15-25-10` (primitive globs + `nr1` 700 / `nr3` 100 / `nr4` 80) |
+| `run_name` | `prim_extrude_knn16_n2048` |
+| Files | 3526 NPZs, 1763 unique OBJs |
+| Geometry | `n_surface=2048`, `envelope_mix=75`, `knn_k=16`, `shape_encoder=surface` |
+| Split | **Mesh** identity (`n_train_meshes=1410` / `n_val_meshes=353`, seed 1) — same groups as `15-25-10` |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; local pool over 16 envelope offsets |
+| Device | `cuda` / NVIDIA GeForce GTX 1080 |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **4h 58m 14.98s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-03_15-59-37_prim_extrude_knn16_n2048/`
+- Weights: `models/2026-09-03_15-59-37_prim_extrude_knn16_n2048/best.pt`
+- Wall: **4h 58m 14.98s** (`started=2026-09-03T15:56:15` → `finished=2026-09-03T20:54:30`)
+- `best_epoch: 19`, `best_metric: 0.961828` (val_iou)
+
+### Vs the 1024 mixed catalog
+
+| | `15-25-10` best @ 20 (1024) | **this run best @ 19 (2048)** | this run @ 20 |
+|---|---|---|---|
+| val_acc | 0.9877 | **0.9898** | 0.9898 |
+| val_iou / val_f1 | 0.954 / 0.976 | **0.962 / 0.981** | 0.962 / 0.980 |
+| train_acc | 0.990 | 0.992 | 0.992 |
+| loss | 0.026 | **0.022** | 0.022 |
+
+Same 3526 files / 1763 meshes / 1410–353 split. Epoch 1 already 0.892 IoU (parent 0.888). Best is epoch **19**. Epoch 20 is tied and does not replace it. Train and val stay together. Wall is ~26 minutes longer than the 1024 run.
+
+**Not shown by this run**
+
+- That 4096 dots would fill arms (2048 already matched 1024 on Fill)
+- That dumping more cones would help (catalog is still the same mix)
+
+**Bottom line:** Step 7 **lost on Fill**. IoU 0.962 vs 0.954 is a numbers-only bump. Keep `15-25-10` as the inspect default. Next useful layer is a **more diverse / high-round catalog** (Phase 3 Step 8), not another envelope count. Do not compare 0.962 to `nr1` knn16 0.974 (different val).
 
 ---
 
@@ -82,6 +242,7 @@ Selection stays `**checkpoint_metric: val_iou**`.
 | Epochs     | 20                                                                                            |
 | Seed       | 1                                                                                             |
 | Selection  | `checkpoint_metric: val_iou`                                                                  |
+| Duration   | **4h 32m 02.66s**                                                                             |
 
 
 **Artifacts**
@@ -132,6 +293,7 @@ Orange in `nr1` sleeves. Not in that Train's Catalog: round/helix, windows, hard
 | Device     | `cuda` / NVIDIA GeForce GTX 1080                                       |
 | Epochs     | 20                                                                     |
 | Selection  | `checkpoint_metric: val_iou`                                           |
+| Duration   | **2h 16m 43.66s**                                                      |
 
 
 **Artifacts**
@@ -160,6 +322,7 @@ A second folder `2026-09-02_07-40-54_extrude_nr1_surface_mix75` is the same resu
 | Parent       | `models/2026-09-01_22-01-09_extrude_nr1_surface_mix75/best.pt` (`resume_epoch: 28`)                |
 | Extra epochs | 12 (printed 029–040). Snapshot `total: 40`                                                         |
 | Device       | `cuda` / NVIDIA GeForce GTX 1080                                                                   |
+| Duration     | **1h 21m 51.63s**                                                                                  |
 
 
 **Artifacts**
@@ -230,6 +393,7 @@ Selection stays `**checkpoint_metric: val_iou**`. Parent `best.pt` stored Adam m
 | Extra epochs | 10 (printed 021–030). Snapshot `total: 30`                                                         |
 | Device       | `cuda` / NVIDIA GeForce GTX 1080                                                                   |
 | Geometry     | `envelope_mix=75` (unchanged)                                                                      |
+| Duration     | **1h 06m 29.73s**                                                                                  |
 
 
 **Artifacts**
@@ -286,6 +450,7 @@ Selection is `**checkpoint_metric: val_iou**` (`15-50-05` used `val_acc`). Both 
 | Epochs     | 20                                                                                                 |
 | Seed       | 1                                                                                                  |
 | Selection  | `checkpoint_metric: val_iou`                                                                       |
+| Duration   | **2h 13m 22.08s**                                                                                  |
 
 
 **Artifacts**
@@ -348,6 +513,7 @@ Selection this run is `**checkpoint_metric: val_iou**` (surface trains used `val
 | Epochs     | 20                                                                                                                        |
 | Seed       | 1                                                                                                                         |
 | Selection  | `checkpoint_metric: val_iou`                                                                                              |
+| Duration   | **2h 11m 24.65s**                                                                                                         |
 
 
 **Artifacts**
@@ -421,6 +587,7 @@ Fresh train. Same catalog, seed, mesh val, and envelope as `15-50-05` and `20-31
 | Epochs     | 20                                                                                                 |
 | Seed       | 1                                                                                                  |
 | Selection  | `checkpoint_metric: val_acc`                                                                       |
+| Duration   | **2h 27m 57.54s**                                                                                  |
 
 
 **Artifacts**
@@ -495,6 +662,7 @@ Fresh train. Same catalog, seed, mesh val, envelope, and `depth: 4` as `15-50-05
 | Epochs     | 20                                                                                                 |
 | Seed       | 1                                                                                                  |
 | Selection  | `checkpoint_metric: val_acc`                                                                       |
+| Duration   | **2h 16m 57.15s**                                                                                  |
 
 
 **Artifacts**
@@ -543,6 +711,7 @@ Loss falls `0.246 → 0.092`. Train and val stay together. It learns interiors, 
 | Extra epochs | 10 (printed 021–030). Snapshot `total: 30`                                                   |
 | Device       | `cuda` / NVIDIA GeForce GTX 1080                                                             |
 | Note         | Parent `best.pt` had no Adam moments; optimizer restarted, weights did not                   |
+| Duration     | **1h 00m 37.62s**                                                                            |
 
 
 **Artifacts**
@@ -597,6 +766,7 @@ Same catalog, seed, and envelope head as `2026-08-29_19-43-15_extrude_nr1_surfac
 | Epochs     | 20                                                                                                                          |
 | Seed       | 1                                                                                                                           |
 | Selection  | `checkpoint_metric: val_acc`                                                                                                |
+| Duration   | **2h 13m 30.70s**                                                                                                           |
 
 
 **Artifacts**
@@ -656,6 +826,7 @@ Same catalog as the xyz-only `extrude_nr1` run (`exports/dataset/extrude_*_nr1_*
 | Epochs     | 20                                                                                                                                                                |
 | Seed       | 1                                                                                                                                                                 |
 | Selection  | `checkpoint_metric: test_acc` (today: `val_acc`; this split selects `best.pt`)                                                                                    |
+| Duration   | **1h 59m 31.40s**                                                                                                                                                 |
 
 
 **Artifacts**
@@ -713,6 +884,7 @@ Post-cleanup replay of the first-level extrude catalog. Same glob and seed as th
 | Epochs     | 20                                                                        |
 | Seed       | 1                                                                         |
 | Selection  | `checkpoint_metric: val_acc` (strict improve → `best.pt`)                 |
+| Duration   | **1h 21m 05.86s**                                                         |
 
 
 **Artifacts**

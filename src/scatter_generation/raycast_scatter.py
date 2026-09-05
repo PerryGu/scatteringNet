@@ -9,6 +9,9 @@ Two placement methods:
 ``random_range`` / ``jitter``: after placement, each point is offset by
 independent ``U[-r, +r]`` on X, Y, and Z. Labels are computed on the *moved*
 points. ``r = 0`` leaves the lattice unchanged.
+
+Occupancy labels are a multi-direction odd-hit vote (not Open3D winding
+number). One open face must not paint a ghost inside-slab.
 """
 
 from __future__ import annotations
@@ -27,6 +30,12 @@ AxisName = Literal["x", "y", "z"]
 ScatterMethod = Literal["raycast", "occupancy"]
 
 _AXIS_INDEX = {"x": 0, "y": 1, "z": 2}
+
+# Inside = odd triangle hits along most of these directions. Fibonacci
+# directions avoid lining up with CAD axes (vertex / edge hits flip parity).
+_OCC_N_RAYS = 24
+# 75%: a hole can spoil a few rays; a ghost slab only wins a few.
+_OCC_VOTE_MIN = 18
 
 
 @dataclass
@@ -630,14 +639,47 @@ def apply_point_jitter(
     return points + noise
 
 
+def _fibonacci_unit_dirs(n: int) -> np.ndarray:
+    """
+    Evenly spaced unit directions on the sphere (Fibonacci / golden spiral).
+
+    Parameters
+    ----------
+    n:
+        Number of directions (must be ``>= 2``).
+
+    Returns
+    -------
+    ndarray
+        ``(n, 3)`` float64 unit vectors.
+    """
+    if n < 2:
+        raise ValueError("n must be >= 2")
+    i = np.arange(n, dtype=np.float64)
+    # Even y-band spacing; golden-angle azimuth. Not axis-aligned on purpose.
+    y = 1.0 - (i / (n - 1.0)) * 2.0
+    r = np.sqrt(np.clip(1.0 - y * y, 0.0, None))
+    theta = np.pi * (3.0 - np.sqrt(5.0)) * i
+    dirs = np.stack((np.cos(theta) * r, y, np.sin(theta) * r), axis=1)
+    return dirs / np.linalg.norm(dirs, axis=1, keepdims=True)
+
+
 def _occupancy_labels(
     mesh: trimesh.Trimesh,
     points: np.ndarray,
     *,
     chunk_size: int = 250_000,
+    n_rays: int = _OCC_N_RAYS,
+    vote_min: int = _OCC_VOTE_MIN,
 ) -> np.ndarray:
     """
-    Per-point inside/outside via Open3D occupancy (1=inside, 0=outside).
+    Per-point inside/outside via multi-ray odd-hit vote (1=inside, 0=outside).
+
+    Open3D ``compute_occupancy`` is generalized winding number. On an open
+    or non-manifold shell that fills a ghost slab through the hole (the
+    nr4/nr5 Truth leaks). Here each query fires ``n_rays`` directions and
+    counts triangle hits. Odd = that ray thinks inside. The point is inside
+    only if at least ``vote_min`` rays agree.
 
     Parameters
     ----------
@@ -646,7 +688,12 @@ def _occupancy_labels(
     points:
         Query XYZ ``(N, 3)``.
     chunk_size:
-        Occupancy is evaluated in slices of this length to cap GPU/CPU memory.
+        Max query points per Open3D call before splitting (ray count is
+        ``chunk * n_rays``).
+    n_rays:
+        Directions on the sphere (``>= 2``).
+    vote_min:
+        Odd-hit rays required to label inside (``1..n_rays``).
 
     Returns
     -------
@@ -657,21 +704,36 @@ def _occupancy_labels(
     n = len(points)
     if n == 0:
         return np.zeros(0, dtype=np.uint8)
+    if n_rays < 2:
+        raise ValueError("n_rays must be >= 2")
+    if vote_min < 1 or vote_min > n_rays:
+        raise ValueError("vote_min must be in 1..n_rays")
+
     o3d_mesh = trimesh_to_open3d(mesh)
     t_mesh = o3d.t.geometry.TriangleMesh.from_legacy(o3d_mesh)
     scene = o3d.t.geometry.RaycastingScene()
     scene.add_triangles(t_mesh)
+    dirs = _fibonacci_unit_dirs(n_rays)
+    # Cap batched rays (~0.5M) so a dense lattice does not allocate a huge tensor.
+    point_chunk = max(1, min(int(chunk_size), max(1, 500_000 // int(n_rays))))
 
     def _label_chunk(pts: np.ndarray) -> np.ndarray:
-        query = o3d.core.Tensor(pts.astype(np.float32), dtype=o3d.core.Dtype.Float32)
-        return scene.compute_occupancy(query).numpy().astype(np.uint8).reshape(-1)
+        m = len(pts)
+        # (M, D, 3) origins / dirs → (M*D, 6) Open3D rays.
+        origins = np.repeat(pts[:, None, :], n_rays, axis=1)
+        directions = np.broadcast_to(dirs, (m, n_rays, 3))
+        rays = np.concatenate((origins, directions), axis=2).reshape(m * n_rays, 6)
+        ray_t = o3d.core.Tensor(rays.astype(np.float32), dtype=o3d.core.Dtype.Float32)
+        counts = scene.count_intersections(ray_t).numpy().reshape(m, n_rays)
+        odd = (counts % 2) == 1
+        return (odd.sum(axis=1) >= vote_min).astype(np.uint8)
 
-    if n <= chunk_size:
+    if n <= point_chunk:
         return _label_chunk(points)
 
     labels = np.empty(n, dtype=np.uint8)
-    for start in range(0, n, chunk_size):
-        end = min(start + chunk_size, n)
+    for start in range(0, n, point_chunk):
+        end = min(start + point_chunk, n)
         labels[start:end] = _label_chunk(points[start:end])
     return labels
 

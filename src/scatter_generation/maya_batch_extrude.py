@@ -5,9 +5,11 @@
 #   E:/Work_stuff/scatteringNet/data/meshes/Extrude
 #
 # 1) polyCube with subdivision ranges (sx/sy/sz)
-# 2) Exactly one polyExtrudeFacet round (simpler curriculum; multi-round off)
+# 2) polyExtrudeFacet rounds (default one; run() can request nr4 / nr5)
+#    - keepFacesTogether always ON (kft=0 left open shells; GWN occupancy
+#      then filled ghost slabs — the nr4/nr5 Truth leaks)
 #    - offset: sometimes 0, sometimes random in [0, OFFSET_MAX]
-#    - keepFacesTogether / thickness / face count chosen once
+#    - skip export if open edges remain after finalize
 #
 # LOADER (Maya Script Editor -> PYTHON tab, then Execute):
 #   _p = r"F:/Work_stuff/VisualStudio_cursor/scatteringNet/src/scatter_generation/maya_batch_extrude.py"
@@ -29,8 +31,10 @@ HEIGHT = 1.0
 DEPTH = 1.0
 
 # Subdivision ranges. Same value for sx/sy/sz unless flat-aspect kicks in.
+# Flat slabs (sy=1) only on nr1–nr2. High-round flats were the leak set.
 SUBDIVS = (2, 3, 4, 5)
-ASPECT_FLAT_FRAC = 0.35  # fraction with sy=1 (slab + step look)
+ASPECT_FLAT_FRAC = 0.35  # nr1/nr2 only: chance of a flat slab (sy=1)
+FLAT_MAX_ROUNDS = 2  # n_rounds above this never gets sy=1
 
 # Faces extruded per round (clamped to available count).
 N_FACES = (2, 3)
@@ -38,8 +42,8 @@ N_FACES = (2, 3)
 # Extrude thickness per round (world units along face normal).
 THICKNESSES = (0.4, 0.7, 1.0, 1.2)
 
-# keepFacesTogether on/off per round.
-KEEP_TOGETHER = (True, False)
+# keepFacesTogether always on. Off produced non-manifold open borders.
+KEEP_TOGETHER = (True,)
 
 # Exactly one extrude round per cube (simpler shapes for learning corners/steps).
 MAX_ROUNDS = 1
@@ -105,21 +109,63 @@ def _list_faces(transform):
     return cmds.ls("%s.f[*]" % transform, flatten=True) or []
 
 
+def _open_edge_count(transform):
+    """
+    Count edges that touch fewer than two faces.
+
+    Do not use ``polySelectConstraint`` (it stays on in Maya 2016 and
+    poisons later extrudes) or ``polyInfo(openEdges=)`` (flag missing).
+    ``edgeToFace`` exists in 2016.
+    """
+    if not transform or not cmds.objExists(transform):
+        return 0
+    edges = cmds.ls("%s.e[*]" % transform, flatten=True) or []
+    n_open = 0
+    for edge in edges:
+        raw = cmds.polyInfo(edge, edgeToFace=True)
+        if not raw:
+            n_open += 1
+            continue
+        text = raw[0] if isinstance(raw, (list, tuple)) else str(raw)
+        tail = text.split(":", 1)[-1]
+        n_faces = 0
+        for tok in tail.split():
+            try:
+                int(tok)
+                n_faces += 1
+            except ValueError:
+                continue
+        # Closed edge: two face ids. Border: one. Degenerate: zero.
+        if n_faces < 2:
+            n_open += 1
+    return int(n_open)
+
+
 def _finalize_solid(transform):
     """
-    Extrude stacks often leave open borders / non-manifold junk so raycast
-    + occupancy-verify fail on some axes. Merge, close borders, conform
-    normals, bake history before OBJ export.
+    Merge, close borders (retry), conform normals, bake history.
+
+    Occupancy uses Open3D winding number. An open shell gets a ghost
+    inside-volume across the hole — that was the Truth leak on nr4/nr5.
     """
     cmds.select(transform, replace=True)
     try:
         cmds.polyMergeVertex(transform, d=1e-4, am=True, ch=False)
     except Exception:
         pass
-    try:
-        cmds.polyCloseBorder(transform, ch=False)
-    except Exception:
-        pass
+    # Close, then merge again, then close once more. One pass left holes
+    # on stacked extrudes.
+    for _try in range(3):
+        try:
+            cmds.polyCloseBorder(transform, ch=False)
+        except Exception:
+            pass
+        try:
+            cmds.polyMergeVertex(transform, d=1e-4, am=True, ch=False)
+        except Exception:
+            pass
+        if _open_edge_count(transform) == 0:
+            break
     try:
         # 2 = conform / average normals outward
         cmds.polyNormal(transform, normalMode=2, userNormalMode=0, ch=False)
@@ -165,7 +211,8 @@ def _extrude_round(transform, rng, n_faces_choices, thicknesses, keep_together_l
         return False
     chosen = rng.sample(faces, take)
     thickness = float(rng.choice(list(thicknesses)))
-    kft = 1 if rng.choice(list(keep_together_list)) else 0
+    # Always together, even if a caller passes a list that includes False.
+    kft = 1
     offset = _pick_offset(rng)
 
     # keepFacesTogether must be 0/1 (Maya rejects values > 1).
@@ -222,7 +269,12 @@ def _make_one(job, width=WIDTH, height=HEIGHT, depth=DEPTH):
         if not ok:
             break
     _finalize_solid(transform)
-    return transform, name
+    n_open = _open_edge_count(transform)
+    if n_open > 0:
+        # Do not write a leaky solid. Occupancy would invent a ghost slab.
+        _delete_nodes([transform])
+        return None, name, n_open
+    return transform, name, 0
 
 
 def _iter_jobs(
@@ -245,15 +297,18 @@ def _iter_jobs(
         for variant in range(int(variants_per_subdiv)):
             v_id = v0 + int(variant)
             rng = random.Random(base_seed * 10007 + idx * 13 + v_id)
-            if rng.random() < float(aspect_flat_frac):
-                sy = 1
-                sz = int(sx)
-            else:
-                sy = int(sx)
-                sz = int(sx)
             n_rounds = _pick_n_rounds(
                 rng, max_rounds=max_rounds, weights=round_weights
             )
+            # Slabs only on short stacks. nr>=3 + sy=1 was the leak set.
+            if int(n_rounds) > int(FLAT_MAX_ROUNDS) or rng.random() >= float(
+                aspect_flat_frac
+            ):
+                sy = int(sx)
+                sz = int(sx)
+            else:
+                sy = 1
+                sz = int(sx)
             seed = base_seed + idx * 17 + v_id * 101
             yield {
                 "sx": int(sx),
@@ -305,6 +360,12 @@ def run(
     """
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
+    # A leftover constraint from an older open-edge check stays on for the
+    # whole Maya session and only lets later extrudes pick border faces.
+    try:
+        cmds.polySelectConstraint(disable=True)
+    except Exception:
+        pass
 
     jobs = list(
         _iter_jobs(
@@ -321,10 +382,11 @@ def run(
         jobs = jobs[: int(limit)]
 
     written = 0
+    skipped = 0
     print("Extrude batch -> %s" % out_dir)
     print(
-        "Writing %d OBJs (max_rounds=%d, weights=%s, offset 0 or U[0,%.2f])"
-        % (len(jobs), int(max_rounds), list(round_weights), float(OFFSET_MAX))
+        "Writing %d OBJs (max_rounds=%d, weights=%s, kft=1, skip if open)"
+        % (len(jobs), int(max_rounds), list(round_weights))
     )
 
     for i, job in enumerate(jobs, start=1):
@@ -337,7 +399,11 @@ def run(
         )
         out_path = os.path.join(out_dir, name + ".obj")
 
-        transform, name = _make_one(job)
+        transform, name, n_open = _make_one(job)
+        if transform is None:
+            skipped += 1
+            print("  [%d/%d] skip %s open_edges=%d" % (i, len(jobs), name, n_open))
+            continue
         cmds.select(transform, replace=True)
         _export_selected(out_path.replace("\\", "/"))
         _delete_nodes([transform])
@@ -345,7 +411,7 @@ def run(
         if i == 1 or i % 25 == 0 or i == len(jobs):
             print("  [%d/%d] wrote %s.obj" % (i, len(jobs), name))
 
-    print("done: wrote=%d out=%s" % (written, out_dir))
+    print("done: wrote=%d skipped=%d out=%s" % (written, skipped, out_dir))
     return written
 
 

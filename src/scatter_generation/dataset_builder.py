@@ -382,6 +382,7 @@ def build_singles_dataset(
     write_manifest: bool = True,
     limit: int | None = None,
     skip: int = 0,
+    name_glob: str | None = None,
 ) -> DatasetBuildResult:
     """
     Load every mesh under ``mesh_root`` and export one NPZ per param combo.
@@ -411,6 +412,8 @@ def build_singles_dataset(
         Max meshes to load (``None`` = all after skip).
     skip:
         Number of sorted mesh files to skip.
+    name_glob:
+        Optional filename ``fnmatch`` (e.g. ``*_nr5_*.obj``). ``None`` = all meshes.
 
     Returns
     -------
@@ -447,7 +450,7 @@ def build_singles_dataset(
     if not dry_run:
         out_dir.mkdir(parents=True, exist_ok=True)
 
-    files = iter_mesh_files(mesh_root, recursive=recursive)
+    files = iter_mesh_files(mesh_root, recursive=recursive, name_glob=name_glob)
     total_available = len(files)
     if skip:
         files = files[skip:]
@@ -644,6 +647,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cap samples per NPZ by coarsening density",
     )
     p.add_argument("--no-recursive", action="store_true")
+    p.add_argument(
+        "--glob",
+        default=None,
+        help="fnmatch on filename only (e.g. *_nr5_*.obj). Default: all meshes.",
+    )
     p.add_argument("--skip", type=int, default=0)
     p.add_argument("--limit", type=int, default=None, help="At most N meshes")
     p.add_argument("--dry-run", action="store_true")
@@ -697,6 +705,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"random_range:  {random_ranges}")
     print(f"seed:          {args.seed}")
     print(f"max-points:    {args.max_points}")
+    print(f"name glob:     {args.glob or '(all)'}")
     print(f"param combos:  {len(params)}")
 
     result = build_singles_dataset(
@@ -715,6 +724,7 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         limit=args.limit,
         skip=args.skip,
+        name_glob=args.glob,
     )
 
     if args.dry_run:

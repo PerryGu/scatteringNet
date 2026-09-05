@@ -4,6 +4,50 @@ Completed work for the occupancy MLP MVP.
 
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
+## 2026-09-05 11:00 — Viewer: Run model hides Outside
+
+Clicking **Run model** unchecks Outside, waits 150 ms so the blue cloud drops, then infers. Occupancy train code unchanged.
+
+## 2026-09-05 10:00 — Occupancy labels: multi-ray vote
+
+``_occupancy_labels`` no longer uses Open3D winding number (``compute_occupancy``). Each query casts 24 directions and must get an odd hit count on at least 18 of them. That stops a single hole from painting a ghost inside-slab. Rebuild ``nr4``/``nr5`` NPZs after this change.
+
+## 2026-09-05 8:00 — Maya extrude: do not use polySelectConstraint
+
+The 2016 ``openEdges`` workaround left a selection constraint on, so later extrudes only hit border faces and the skip check reported closed. Open edges are counted with ``polyInfo(edgeToFace=)`` now. Reload the ``.py`` before a new dump.
+
+## 2026-09-04 20:00 — Maya extrude: open-edge check on 2016
+
+``_open_edge_count`` no longer calls ``polyInfo(openEdges=)`` (that flag does not exist in Maya 2016). It uses ``polySelectConstraint`` border edges instead.
+
+## 2026-09-04 18:00 — Deleted leaky nr4/nr5 OBJ and NPZ
+
+Removed all ``extrude_*_nr4_*`` / ``nr5_*`` meshes and occupancy files (open-shell Truth leaks). YAML catalog no longer globs them. Primitives, ``extruded_*`` s0.08, and capped ``nr1`` stay.
+
+## 2026-09-04 17:00 — Maya extrude: close the occupancy leak
+
+``maya_batch_extrude.py`` always uses ``keepFacesTogether=1``, never flats ``sy=1`` on ``nr>=3``, retries ``polyCloseBorder``, and skips export if open edges remain. Reload in Maya before re-dumping ``nr4``/``nr5``.
+
+## 2026-09-04 16:00 — dataset_builder --glob
+
+``dataset_builder.py --glob`` matches filenames only so an Extrude folder dump can emit ``nr5`` NPZs without rewriting the other 2500 meshes.
+
+## 2026-09-04 14:00 — Maya extruded-smooth: multi-direction recipes
+
+Limb faces come from down / up / forward / back (lying uses +X as forward). Star recipe extrudes several axes separately. Cap scale is ``localScale``, not inset offset. ``run(limit=10)`` interleaves stand and lie.
+
+## 2026-09-04 12:00 — Maya extruded-smooth: clamp cap offset
+
+Mid-step shrink is bounded by the shortest cap edge so limb tips stay a usable width. Reload the Maya script from disk and re-run ``run(limit=10)``.
+
+## 2026-09-04 11:00 — Maya extruded box + two extrudes + smooth
+
+New Script Editor batch [`src/scatter_generation/maya_batch_extruded_smooth.py`](src/scatter_generation/maya_batch_extruded_smooth.py). Rectangular standing/lying box, limb faces, extrude, cap offset, extrude again, ``polySmooth`` once. OBJs go to ``meshes/ExtrudedSmooth/`` as ``extruded_*`` (not ``extrude_*``). Live ``maya_batch_extrude.py`` unchanged.
+
+## 2026-09-04 10:00 — Viewer: recents list of 10
+
+Hover Open keeps the last 10 successful loads (was 5). Occupancy train code unchanged.
+
 ## 2026-09-03 13:00 — Training log Fill gallery
 
 Fill stills in [`docs/training_log.md`](docs/training_log.md) sit in a 3-column grid; click a thumbnail to open the PNG. Occupancy train code unchanged.

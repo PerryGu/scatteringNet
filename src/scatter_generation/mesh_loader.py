@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -171,6 +172,7 @@ def iter_mesh_files(
     *,
     recursive: bool = True,
     extensions: Iterable[str] | None = None,
+    name_glob: str | None = None,
 ) -> list[Path]:
     """
     List mesh files under ``root``, sorted by path.
@@ -184,6 +186,9 @@ def iter_mesh_files(
     extensions:
         Suffixes to keep (with or without a leading dot). Default is
         :data:`MESH_EXTENSIONS`.
+    name_glob:
+        Optional ``fnmatch`` pattern on the filename only (e.g. ``*_nr5_*.obj``).
+        ``None`` keeps every mesh suffix.
 
     Returns
     -------
@@ -203,8 +208,12 @@ def iter_mesh_files(
         for e in (extensions or MESH_EXTENSIONS)
     }
     pattern = "**/*" if recursive else "*"
-    return [
-        p
-        for p in sorted(root.glob(pattern))
-        if p.is_file() and p.suffix.lower() in exts
-    ]
+    needle = str(name_glob).strip() if name_glob else ""
+    out = []
+    for p in sorted(root.glob(pattern)):
+        if not p.is_file() or p.suffix.lower() not in exts:
+            continue
+        if needle and not fnmatch.fnmatch(p.name, needle):
+            continue
+        out.append(p)
+    return out

@@ -15,7 +15,7 @@ Put checkpoints at `models/<run_id>/best.pt`. The Model list is that folder.
 ## Open / recents
 
 - **Open** or drop an `.obj` or `.npz`
-- Hover Open for the last **five** files (names in `localStorage`; bytes in IndexedDB)
+- Hover Open for the last **ten** files (names in `localStorage`; bytes in IndexedDB)
 - **Clear view** is at the bottom of that recents menu
 - An NPZ with `mesh_path` auto-fetches that OBJ from `data_dir` (`GET /api/mesh`). Paths stay under `data_dir`; checkpoints stay under `models/`
 

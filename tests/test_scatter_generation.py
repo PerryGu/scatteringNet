@@ -15,8 +15,12 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from data_npz import load_points_labels
-from scatter_generation.mesh_loader import load_mesh, to_data_relative
-from scatter_generation.raycast_scatter import export_occupancy_npz, scatter_volume
+from scatter_generation.mesh_loader import iter_mesh_files, load_mesh, to_data_relative
+from scatter_generation.raycast_scatter import (
+    _occupancy_labels,
+    export_occupancy_npz,
+    scatter_volume,
+)
 
 
 def _write_box_obj(folder: Path, extents: tuple[float, float, float] = (2.0, 2.0, 2.0)) -> Path:
@@ -112,6 +116,37 @@ class OccupancyNpzGenerationTests(unittest.TestCase):
                 mesh, method="occupancy", point_spacing=0.35, random_range=0.2, seed=99, max_points=2500
             )
             self.assertFalse(np.allclose(noisy.points, other.points, atol=1e-8))
+
+    def test_holed_box_does_not_fill_ghost_slab(self) -> None:
+        # Closed box: center in, point past +Z out.
+        closed = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
+        queries = np.array(
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 1.6], [3.0, 0.0, 0.0]],
+            dtype=np.float64,
+        )
+        closed_lab = _occupancy_labels(closed, queries)
+        self.assertEqual(closed_lab.tolist(), [1, 0, 0])
+        # Drop the +Z face. Winding number paints a ghost column through
+        # the hole; the vote must keep the exterior point outside.
+        keep = closed.face_normals[:, 2] < 0.5
+        holed = closed.copy()
+        holed.update_faces(keep)
+        holed.remove_unreferenced_vertices()
+        holed_lab = _occupancy_labels(holed, queries)
+        self.assertEqual(int(holed_lab[0]), 1)
+        self.assertEqual(int(holed_lab[1]), 0)
+        self.assertEqual(int(holed_lab[2]), 0)
+
+    def test_iter_mesh_files_name_glob(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "extrude_sx2_sy2_sz2_nr5_v0.obj").write_text("x", encoding="utf-8")
+            (root / "extrude_sx2_sy2_sz2_nr1_v0.obj").write_text("x", encoding="utf-8")
+            (root / "extruded_stand_sx4_sy4_sz4_v0.obj").write_text("x", encoding="utf-8")
+            nr5 = iter_mesh_files(root, recursive=False, name_glob="*_nr5_*.obj")
+            self.assertEqual([p.name for p in nr5], ["extrude_sx2_sy2_sz2_nr5_v0.obj"])
+            all_obj = iter_mesh_files(root, recursive=False)
+            self.assertEqual(len(all_obj), 3)
 
 
 if __name__ == "__main__":

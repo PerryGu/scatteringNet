@@ -1,6 +1,6 @@
 # Maya batch OBJ scripts
 
-These three scripts create meshes in **Maya** and export **OBJ** files (no `.mtl`). They do not write occupancy NPZ files and they do not run in conda.
+These scripts create meshes in **Maya** and export **OBJ** files (no `.mtl`). They do not write occupancy NPZ files and they do not run in conda.
 
 Open Maya → Script Editor → **Python** tab. Load a script with `exec(open(...).read())`, then call `run(...)`.
 
@@ -24,6 +24,7 @@ Mesh root (same as `config.yaml` `data_dir`):
 |---|---|---|
 | `maya_batch_primitives.py` | Catalog primitives (sphere, cube, cylinder, …) | `.../meshes/Primitives/<Family>/` |
 | `maya_batch_extrude.py` | Subdivided cubes with face extrusions | `.../meshes/Extrude/` |
+| `maya_batch_extruded_smooth.py` | Rectangular box, two extrudes, one smooth | `.../meshes/ExtrudedSmooth/` |
 | `maya_batch_helix.py` | Helix tubes only | `.../meshes/Helix/` |
 
 ---
@@ -79,7 +80,7 @@ run(families="cube", out_root=r"E:\Work_stuff\scatteringNet\data\meshes\Primitiv
 
 ## `maya_batch_extrude.py`
 
-Starts from a subdivided cube, then extrudes a few faces (steps / corners). Default is **one** extrude round. Thickness, face count, keep-faces-together, and a small offset are chosen at random (reproducible via seed). Before export it tries to merge verts, close borders, and fix normals.
+Starts from a subdivided cube, then extrudes a few faces (steps / corners). Default is **one** extrude round. Thickness and face count are random (reproducible via seed). **`keepFacesTogether` is always on.** Flat slabs (`sy=1`) only on `nr1`/`nr2`. After finalize, a mesh with leftover open edges is **skipped** (not written) — those open shells were the occupancy Truth leaks on `nr4`/`nr5`.
 
 ### Arguments (`run`)
 
@@ -124,6 +125,41 @@ run(
     variant_offset=500,
     base_seed=2,
 )
+```
+
+---
+
+## `maya_batch_extruded_smooth.py`
+
+Separate from `maya_batch_extrude.py`. Starts from a **rectangle** (standing 1×2×1 or lying 2×1×1, 4×4×4 faces). Recipes pick faces on several sides — legs on **-Y**, neck on **+Y** (biased to the forward end) or the forward cap, tail on the back — not only four bottom corners. Standing forward is **+Z**; lying forward is **+X** so the long box gets a head and tail. A **star** recipe extrudes 3–5 cardinal sides separately. Cap scale is Maya **localScale** (about 0.88–1.45, offset 0). Then **one** `polySmooth`. Jobs **interleave** stand/lie so `limit=10` is 5 of each. Files are `extruded_*` under `meshes/ExtrudedSmooth/`.
+
+### Arguments (`run`)
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `out_dir` | `E:\Work_stuff\scatteringNet\data\meshes\ExtrudedSmooth` | Where OBJs go |
+| `subdivs` | `4` | Box subdivisions on each axis |
+| `variants_per_pose` | `8` | Random variants for standing and for lying (16 files if `limit` is 0) |
+| `base_seed` | `1` | RNG seed |
+| `variant_offset` | `0` | Shift filename `v` so a second batch does not overwrite |
+| `limit` | `0` | If `> 0`, stop after that many files |
+
+### Output
+
+- Files: `{out_dir}/extruded_{stand|lie}_sx4_sy4_sz4_v{N}.obj`
+- Return value: number of OBJs written.
+
+### Examples
+
+```python
+_p = r"F:/Work_stuff/VisualStudio_cursor/scatteringNet/src/scatter_generation/maya_batch_extruded_smooth.py"
+exec(compile(open(_p, "r").read(), _p, "exec"))
+
+# Smoke: 10 files
+run(limit=10)
+
+# Default 16 (8 stand + 8 lie)
+run()
 ```
 
 ---
@@ -174,4 +210,5 @@ run(coils=(2,), heights=(3.5,), widths=(2.0,), radii=(0.4,))
 |---|---|---|
 | primitives | `run(families=("sphere",))` | `data/meshes/Primitives/Sphere/` |
 | extrude | `run(limit=10)` | `data/meshes/Extrude/` |
+| extruded smooth | `run(limit=10)` | `data/meshes/ExtrudedSmooth/` |
 | helix | `run(dry_run=True)` then `run()` | `data/meshes/Helix/` |

@@ -50,9 +50,11 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertEqual(knobs["knn_k"], int(disk["knn_k"]))
         self.assertEqual(len(knobs["npz_catalog"]), len(disk["npz_catalog"]))
         self.assertEqual(knobs["npz_catalog"][-1][0], disk["npz_catalog"][-1]["glob"])
-        self.assertEqual(
-            knobs["npz_catalog"][-1][1], int(disk["npz_catalog"][-1]["max_shapes"])
-        )
+        last_cap = disk["npz_catalog"][-1].get("max_shapes")
+        if last_cap is None:
+            self.assertIsNone(knobs["npz_catalog"][-1][1])
+        else:
+            self.assertEqual(knobs["npz_catalog"][-1][1], int(last_cap))
         self.assertEqual(knobs["n_faces"], int(disk["n_faces"]))
         self.assertEqual(knobs["encoder_hidden"], int(disk["encoder_hidden"]))
         self.assertEqual(knobs["encoder_depth"], int(disk["encoder_depth"]))

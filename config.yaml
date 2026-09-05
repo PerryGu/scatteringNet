@@ -38,6 +38,8 @@ encoder_depth: 4         # MeshFaceEncoder depth
 # max_shapes is set (unique OBJs, sampled with seed; still max_files_per_shape NPZs).
 # Varied/organic and combo* are omitted on purpose.
 # Fallback glob is unused while npz_catalog is set.
+# Smooth extruded_* and high-round extrude_* use s0.08. Primitives and nr1
+# stay s0.15. nr3 is omitted. max_files_per_shape keeps lattice + one jitter.
 npz_glob: "exports/dataset/*.npz"
 npz_catalog:
   - glob: "exports/dataset/cone_*.npz"
@@ -50,18 +52,17 @@ npz_catalog:
   - glob: "exports/dataset/prism_*.npz"
   - glob: "exports/dataset/sphere_*.npz"
   - glob: "exports/dataset/torus_*.npz"
+  - glob: "exports/dataset/extruded_*occupancy_s0.08*.npz"
   - glob: "exports/dataset/extrude_*_nr1_*.npz"
-    max_shapes: 700
-  # No nr2 NPZs on disk. Next extrude rounds are nr3 / nr4.
-  - glob: "exports/dataset/extrude_*_nr3_*.npz"
-    max_shapes: 100
-  - glob: "exports/dataset/extrude_*_nr4_*.npz"
-    max_shapes: 80
+    max_shapes: 40
+  - glob: "exports/dataset/extrude_*_nr4_*occupancy_s0.08*.npz"
+    max_shapes: 90
+  - glob: "exports/dataset/extrude_*_nr5_*occupancy_s0.08*.npz"
 max_files_per_shape: 2
 
 # --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
-run_name: prim_extrude_knn16
+run_name: prim_extruded_nr45_knn16
 
 # --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.

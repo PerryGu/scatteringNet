@@ -109,6 +109,8 @@ let gridHelper = null;
 let axesHelper = null;
 let prefsReady = false;
 let prefsTimer = 0;
+// Let the Outside layer hide before infer paints Prediction.
+const RUN_HIDE_OUTSIDE_MS = 150;
 
 function cancelPendingFill() {
   window.clearTimeout(fillTimer);
@@ -1133,6 +1135,23 @@ function setViewMode(mode) {
   syncModelPanel();
 }
 
+function hideOutsideForRun() {
+  // Run model is about inside occupancy; hide the outside cloud so it
+  // does not sit on top of the prediction.
+  if (!togOutside) {
+    return;
+  }
+  togOutside.checked = false;
+  applyInspectToPoints();
+  scheduleSaveUiPrefs();
+}
+
+function delayMs(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 async function runInfer() {
   if (!npzState || inferBusy) {
     return;
@@ -1144,6 +1163,8 @@ async function runInfer() {
   }
   inferBusy = true;
   syncModelPanel();
+  hideOutsideForRun();
+  await delayMs(RUN_HIDE_OUTSIDE_MS);
   setStatus("Running “" + checkpoint + "” on " + npzState.n.toLocaleString() + " points…");
   try {
     if (isFillJob()) {
