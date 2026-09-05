@@ -75,13 +75,6 @@
           </div>
         </div>
         <div class="fill-row">
-          <button type="button" id="btn-faces" disabled title="Show largest-area triangles + normals (display only, not used by the occupancy head).">Faces</button>
-          <div class="slider-row">
-            <span title="How many overlay triangles. Default 256.">Count <span id="val-faces">256</span></span>
-            <input type="range" id="sld-faces" min="64" max="1024" step="16" value="256" title="64–1024 tokens. Drag refreshes if Faces is on.">
-          </div>
-        </div>
-        <div class="fill-row">
           <button type="button" id="btn-fill" disabled>Fill points</button>
           <div class="slider-row">
             <span title="Lattice spacing in the mesh box. Right = denser (smaller step). Drag refills; camera stays put.">Density <span id="val-density">0.15</span></span>
@@ -131,6 +124,6 @@
       }
     }, 2500);
   </script>
-    <script type="module" src="js/main.js?v=35"></script>
+    <script type="module" src="js/main.js?v=36"></script>
 </body>
 </html>

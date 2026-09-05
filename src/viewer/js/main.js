@@ -28,7 +28,6 @@ import {
 } from "./model_panel.js";
 import { fillObjOnHelper, inferObjOnHelper, spacingFromSlider } from "./obj_infer.js";
 import { clampEnvelopeMix, clampNSurface, envelopeObjOnHelper, makeEnvelopeLayer } from "./envelope.js";
-import { clampNFaces, facesObjOnHelper, makeFaceTokenGroup } from "./faces.js";
 import { fetchUiPrefs, postUiPrefs } from "./ui_prefs.js";
 
 const container = document.getElementById("canvas-container");
@@ -76,9 +75,6 @@ const sldEnvelope = document.getElementById("sld-envelope");
 const valEnvelope = document.getElementById("val-envelope");
 const sldEnvelopeMix = document.getElementById("sld-envelope-mix");
 const valEnvelopeMix = document.getElementById("val-envelope-mix");
-const btnFaces = document.getElementById("btn-faces");
-const sldFaces = document.getElementById("sld-faces");
-const valFaces = document.getElementById("val-faces");
 const sldCut = document.getElementById("sld-cut");
 const valCut = document.getElementById("val-cut");
 
@@ -98,9 +94,6 @@ let fillPending = false;
 let envelopeBusy = false;
 let envelopeTimer = 0;
 let envelopeVisible = false;
-let facesBusy = false;
-let facesTimer = 0;
-let facesVisible = false;
 let objText = "";
 let objFileName = "";
 let basePointSize = 0.05;
@@ -157,10 +150,6 @@ function syncFillPanel() {
     btnEnvelope.disabled = !hasMesh || envelopeBusy || inferBusy;
     btnEnvelope.classList.toggle("on", envelopeVisible);
   }
-  if (btnFaces) {
-    btnFaces.disabled = !hasMesh || facesBusy || inferBusy;
-    btnFaces.classList.toggle("on", facesVisible);
-  }
 }
 
 function syncModelPanel() {
@@ -192,7 +181,6 @@ function collectUiPrefs() {
     density: Number(sldDensity && sldDensity.value),
     envelope_n: clampNSurface(sldEnvelope && sldEnvelope.value),
     envelope_mix: clampEnvelopeMix(sldEnvelopeMix && sldEnvelopeMix.value),
-    faces_n: clampNFaces(sldFaces && sldFaces.value),
     inside_cut: Number(sldCut && sldCut.value),
     model_id: selModel && selModel.value ? String(selModel.value) : "",
   };
@@ -236,16 +224,12 @@ function applyUiPrefs(prefs) {
   if (sldEnvelopeMix && prefs.envelope_mix != null) {
     sldEnvelopeMix.value = String(clampEnvelopeMix(prefs.envelope_mix));
   }
-  if (sldFaces && prefs.faces_n != null) {
-    sldFaces.value = String(clampNFaces(prefs.faces_n));
-  }
   if (sldCut && prefs.inside_cut != null) {
     sldCut.value = String(prefs.inside_cut);
   }
   updateDensityLabel();
   updateEnvelopeLabel();
   updateEnvelopeMixLabel();
-  updateFacesLabel();
   updateCutLabel();
   applyInspectToMesh();
   applyInspectToPoints();
@@ -506,27 +490,6 @@ function attachEnvelopeLayer(xyz) {
   applyInspectToPoints();
 }
 
-function removeFaceTokenLayer() {
-  if (!loadedRoot) {
-    facesVisible = false;
-    return;
-  }
-  const old = loadedRoot.getObjectByName("face-tokens");
-  if (old) {
-    loadedRoot.remove(old);
-    disposeObject3d(old);
-  }
-}
-
-function attachFaceTokenLayer(tokens, n, tick) {
-  if (!loadedRoot) {
-    return;
-  }
-  removeFaceTokenLayer();
-  loadedRoot.add(makeFaceTokenGroup(tokens, n, tick));
-  facesVisible = true;
-}
-
 function rebuildNpzLayers() {
   if (!npzState || !loadedRoot) {
     return;
@@ -647,7 +610,6 @@ function replaceContent(group) {
   loadedRoot = group;
   shownMesh = null;
   envelopeVisible = false;
-  facesVisible = false;
   scene.add(loadedRoot);
   const framed = fitCameraToObject(camera, controls, loadedRoot);
   setHelpers(framed.radius, framed.yMin, framed.center);
@@ -701,8 +663,6 @@ function clearView() {
   fillBusy = false;
   envelopeBusy = false;
   envelopeVisible = false;
-  facesBusy = false;
-  facesVisible = false;
   cancelPendingFill();
   resetViewMode();
   hideNpzPanel();
@@ -845,73 +805,6 @@ function updateDensityLabel() {
     return;
   }
   valDensity.textContent = spacingFromSlider(sldDensity.value).toFixed(2);
-}
-
-function updateFacesLabel() {
-  if (!valFaces || !sldFaces) {
-    return;
-  }
-  valFaces.textContent = String(clampNFaces(sldFaces.value));
-}
-
-function scheduleFacesFromSlider() {
-  updateFacesLabel();
-  if (!facesVisible || !objText) {
-    return;
-  }
-  window.clearTimeout(facesTimer);
-  facesTimer = window.setTimeout(() => {
-    facesTimer = 0;
-    runFaces({ refresh: true });
-  }, 180);
-}
-
-async function runFaces(opts) {
-  const refresh = !!(opts && opts.refresh);
-  if (!objText) {
-    return;
-  }
-  if (!refresh && facesVisible) {
-    removeFaceTokenLayer();
-    facesVisible = false;
-    syncFillPanel();
-    setStatus("Faces hidden.");
-    return;
-  }
-  if (facesBusy || inferBusy) {
-    return;
-  }
-  facesBusy = true;
-  syncFillPanel();
-  const nFaces = clampNFaces(sldFaces && sldFaces.value);
-  setStatus("Building " + nFaces.toLocaleString() + " face tokens…");
-  try {
-    const overlay = await facesObjOnHelper({
-      objText: objText,
-      nFaces: nFaces,
-    });
-    attachFaceTokenLayer(overlay.tokens, overlay.n, overlay.tick);
-    const tiled =
-      overlay.nUnique < overlay.n
-        ? " (" + overlay.nUnique.toLocaleString() + " unique, tiled)"
-        : "";
-    setStatus(
-      "Faces “" +
-        (objFileName || "mesh") +
-        "”: " +
-        overlay.n.toLocaleString() +
-        " tokens" +
-        tiled +
-        " of " +
-        overlay.nMesh.toLocaleString() +
-        " mesh triangles."
-    );
-    scheduleSaveUiPrefs();
-  } catch (err) {
-    setStatus("Faces failed: " + err);
-  }
-  facesBusy = false;
-  syncFillPanel();
 }
 
 function updateEnvelopeLabel() {
@@ -1320,20 +1213,6 @@ if (sldEnvelopeMix) {
     scheduleSaveUiPrefs();
   });
   updateEnvelopeMixLabel();
-}
-if (btnFaces) {
-  btnFaces.addEventListener("click", () => {
-    window.clearTimeout(facesTimer);
-    facesTimer = 0;
-    runFaces();
-  });
-}
-if (sldFaces) {
-  sldFaces.addEventListener("input", () => {
-    scheduleFacesFromSlider();
-    scheduleSaveUiPrefs();
-  });
-  updateFacesLabel();
 }
 if (sldDensity) {
   sldDensity.addEventListener("input", () => {

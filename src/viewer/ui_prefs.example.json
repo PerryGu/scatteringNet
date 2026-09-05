@@ -2,7 +2,6 @@
   "density": 71,
   "envelope_n": 1024,
   "envelope_mix": 100,
-  "faces_n": 256,
   "inside_cut": 50,
   "draw_cap": 200000,
   "inside": true,

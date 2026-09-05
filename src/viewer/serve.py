@@ -161,9 +161,6 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/envelope-obj":
             self._envelope_obj()
             return
-        if parsed.path == "/api/faces-obj":
-            self._faces_obj()
-            return
         if parsed.path == "/api/infer-obj":
             self._infer_obj()
             return
@@ -345,35 +342,6 @@ class Handler(SimpleHTTPRequestHandler):
         except ImportError as exc:
             self._send_json(
                 503, {"error": "envelope helper import failed: " + str(exc)}
-            )
-            return
-        except ValueError as exc:
-            self._send_json(400, {"error": str(exc)})
-            return
-        except Exception as exc:
-            self._send_json(500, {"error": str(exc)})
-            return
-        self._send_json(200, {"ok": True, **result})
-
-    def _faces_obj(self) -> None:
-        try:
-            payload = self._read_json_body()
-        except ValueError as exc:
-            self._send_json(400, {"error": str(exc)})
-            return
-        except json.JSONDecodeError as exc:
-            self._send_json(400, {"error": "invalid JSON: " + str(exc)})
-            return
-        try:
-            from faces_job import faces_overlay_from_obj_text
-
-            n_faces = int(payload.get("n_faces") or 0)
-            result = faces_overlay_from_obj_text(
-                str(payload.get("obj_text") or ""), n_faces
-            )
-        except ImportError as exc:
-            self._send_json(
-                503, {"error": "faces helper import failed: " + str(exc)}
             )
             return
         except ValueError as exc:

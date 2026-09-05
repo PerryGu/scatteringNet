@@ -374,8 +374,7 @@ canvas {
 }
 
 #btn-fill,
-#btn-envelope,
-#btn-faces {
+#btn-envelope {
   width: 100%;
   box-sizing: border-box;
   padding: 7px 8px;
@@ -421,29 +420,6 @@ canvas {
 }
 
 #btn-envelope:disabled {
-  color: #707070;
-  border-color: #404040;
-  cursor: not-allowed;
-}
-
-#btn-faces {
-  color: #c8f4ee;
-  background: rgba(20, 48, 48, 0.95);
-  border: 1px solid #2ec4b6;
-}
-
-#btn-faces:hover:not(:disabled) {
-  background: rgba(28, 64, 62, 0.95);
-  border-color: #7ef0e4;
-}
-
-#btn-faces.on {
-  color: #e8fffb;
-  background: rgba(36, 80, 76, 0.95);
-  border-color: #7ef0e4;
-}
-
-#btn-faces:disabled {
   color: #707070;
   border-color: #404040;
   cursor: not-allowed;

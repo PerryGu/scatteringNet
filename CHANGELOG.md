@@ -4,6 +4,12 @@ Completed work for the occupancy MLP MVP.
 
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
+## 2026-09-05 14:00 — Viewer: drop Faces overlay
+
+Removed the teal **Faces** button, its Count slider, ``/api/faces-obj``, ``faces.js``, and ``faces_job.py``.
+Deleted ``src/geometry/face_tokens.py`` (the ``[v0, v1, v2, n]`` builder). Occupancy train/infer already unused it.
+Envelope Mix still has a **Faces / Edges** split; that is area vs crease samples, not the old token overlay.
+
 ## 2026-09-05 13:00 — Envelope: cap crease budget
 
 Crease share is now ``2 ×`` (sharp interior-edge length / all interior edges, dihedral ≥ 20°), then never above Mix. Leftover dots go to faces; ``n_surface`` stays 1024.

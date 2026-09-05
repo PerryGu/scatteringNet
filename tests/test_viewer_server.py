@@ -357,35 +357,6 @@ class EnvelopeOverlayTests(unittest.TestCase):
         self.assertLess(float(np.median(near)), 0.25)
 
 
-class FaceTokenOverlayTests(unittest.TestCase):
-    """Teal triangle + normal overlay: occupancy face tokens, no torch."""
-
-    def test_faces_job_does_not_import_torch(self) -> None:
-        src = Path(__file__).resolve().parents[1] / "src" / "viewer" / "faces_job.py"
-        text = src.read_text(encoding="utf-8")
-        self.assertNotRegex(text, r"(?m)^(import torch|from torch\b)")
-
-    def test_clamp_n_faces(self) -> None:
-        from faces_job import clamp_n_faces
-
-        self.assertEqual(clamp_n_faces(256), 256)
-        with self.assertRaises(ValueError):
-            clamp_n_faces(8)
-        with self.assertRaises(ValueError):
-            clamp_n_faces(99_000)
-
-    def test_faces_cube_tiles_to_count(self) -> None:
-        from faces_job import faces_overlay_from_obj_text
-
-        out = faces_overlay_from_obj_text(_CUBE_OBJ, 64)
-        self.assertEqual(out["n"], 64)
-        self.assertEqual(out["n_mesh"], 12)
-        self.assertEqual(out["n_unique"], 12)
-        raw = base64.b64decode(out["tokens_b64"])
-        self.assertEqual(len(raw), 64 * 12 * 4)
-        self.assertGreater(out["tick"], 0.0)
-
-
 class UiPrefsTests(unittest.TestCase):
     def test_missing_file_is_defaults(self) -> None:
         from ui_prefs import DEFAULTS, load_ui_prefs
@@ -439,13 +410,6 @@ class UiPrefsTests(unittest.TestCase):
         self.assertEqual(clamp_ui_prefs({"envelope_mix": 999})["envelope_mix"], 100)
         self.assertEqual(clamp_ui_prefs({"envelope_mix": -3})["envelope_mix"], 0)
         self.assertEqual(clamp_ui_prefs({})["envelope_mix"], 100)
-
-    def test_clamp_faces_n(self) -> None:
-        from ui_prefs import clamp_ui_prefs
-
-        self.assertEqual(clamp_ui_prefs({"faces_n": 99999})["faces_n"], 1024)
-        self.assertEqual(clamp_ui_prefs({"faces_n": 8})["faces_n"], 64)
-        self.assertEqual(clamp_ui_prefs({})["faces_n"], 256)
 
     def test_rejects_unsafe_model_id(self) -> None:
         from ui_prefs import clamp_ui_prefs

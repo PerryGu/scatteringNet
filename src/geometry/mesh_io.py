@@ -1,7 +1,7 @@
 """Load OBJ triangle meshes for the NPZ ↔ mesh join.
 
 This module only returns ``vertices (V, 3)`` and ``faces (T, 3)``.
-It does **not** sample the envelope (Step 8) or build face tokens (Step 9).
+It does **not** sample the envelope.
 """
 
 from __future__ import annotations

@@ -22,7 +22,7 @@ Put checkpoints at `models/<run_id>/best.pt`. The Model list is that folder.
 ## Inspect
 
 - **Mesh / Wireframe** (left), **Inside / Outside** (right)
-- **Opacity**, **Point size**, **Max points drawn** (display subsample only). **Point size** scales occupancy dots and envelope (purple) dots, not the Faces triangles
+- **Opacity**, **Point size**, **Max points drawn** (display subsample only). **Point size** scales occupancy dots and envelope (purple) dots
 - **Inside cut** (0.00–1.00, default 0.50): after **Run model**, inside if sigmoid *p* ≥ this value. Lower = more orange. Dragging re-cuts the last Run in the browser (no extra GPU pass). Status acc/IoU follow this cut (training metrics stay at 0.5)
 - Infer and Fill use every query point, not the draw cap
 
@@ -32,13 +32,12 @@ Infer on the file’s `points` (the box is not resampled). **Truth** = file labe
 
 ## Job B (OBJ)
 
-The lower panel is titled **Create dots**. Three rows, top to bottom:
+The lower panel is titled **Create dots**. Two rows, top to bottom:
 
 1. **Envelope** — purple overlay. **Count** is the total (256–4096, default 1024). **Mix** (0–100, default 100) splits that count: left **Faces** = area-weighted darts on triangles (old envelope); right **Edges** = on/near sharp creases. Status reports how many went to each. Overlay Mix is display-only. **Run model** rebuilds the envelope with the **checkpoint** ``envelope_mix`` (missing key = 0, all face-area).
-2. **Faces** — teal triangles + cyan normal ticks (display only; not fed to the occupancy head). Largest faces by area, then tiled if the mesh has fewer triangles than Count. Count 64–1024, default 256. Click to show/hide; drag **Count** to refresh while shown. The status line reports token count, unique vs tiled, and mesh triangle count. Envelope and Faces can stay on together.
-3. **Fill points** + **Density** — unlabeled AABB lattice. OBJ-only. Dragging density refills (short debounce); **Fill points** still works. The camera does not reset. Fill turns **Inside** and **Outside** on so the lattice is not hidden.
+2. **Fill points** + **Density** — unlabeled AABB lattice. OBJ-only. Dragging density refills (short debounce); **Fill points** still works. The camera does not reset. Fill turns **Inside** and **Outside** on so the lattice is not hidden.
 
-Envelope and Faces also work when an NPZ has loaded its OBJ (not only a direct OBJ open).
+Envelope also works when an NPZ has loaded its OBJ (not only a direct OBJ open).
 
 Then **Run model**. Envelope checkpoints rebuild the surface cloud from the **uploaded** OBJ. The Model list labels envelope runs ``(envelope)``. No **Errors** view (no file labels). Until you run, fill points are unlabeled and show as outside.
 
@@ -54,7 +53,7 @@ Right = denser (smaller step). The helper caps the lattice at **200,000** points
 
 ## UI prefs
 
-Checkboxes, sliders, density, **Envelope count**, **Envelope mix**, **Faces count**, **Inside cut**, and the selected model are saved to `src/viewer/ui_prefs.json` (helper `GET`/`POST /api/ui-prefs`). Missing file uses defaults; see `ui_prefs.example.json`. Gitignored. Truth / Prediction / Errors are not saved (they depend on the loaded file).
+Checkboxes, sliders, density, **Envelope count**, **Envelope mix**, **Inside cut**, and the selected model are saved to `src/viewer/ui_prefs.json` (helper `GET`/`POST /api/ui-prefs`). Missing file uses defaults; see `ui_prefs.example.json`. Gitignored. Truth / Prediction / Errors are not saved (they depend on the loaded file).
 
 ## Tests
 
@@ -75,7 +74,6 @@ src/viewer/
   model_access.py    models/<run>/best.pt
   infer_job.py       Job A / Job B forward
   envelope_job.py    crease-hugging surface samples for the Envelope overlay
-  faces_job.py       triangle + normal overlay (display only)
   obj_fill.py        unlabeled AABB lattice
   ui_prefs.py        ui_prefs.json
   js/                page modules (not occupancy Python)
