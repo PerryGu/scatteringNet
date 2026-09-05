@@ -55,9 +55,6 @@ class OccupancyConfigTests(unittest.TestCase):
             self.assertIsNone(knobs["npz_catalog"][-1][1])
         else:
             self.assertEqual(knobs["npz_catalog"][-1][1], int(last_cap))
-        self.assertEqual(knobs["n_faces"], int(disk["n_faces"]))
-        self.assertEqual(knobs["encoder_hidden"], int(disk["encoder_hidden"]))
-        self.assertEqual(knobs["encoder_depth"], int(disk["encoder_depth"]))
         self.assertEqual(
             knobs["shape_encoder"], str(disk["shape_encoder"]).strip().lower()
         )
@@ -87,9 +84,6 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn("n_surface=", rendered)
         self.assertIn("envelope_mix=", rendered)
         self.assertIn("knn_k=", rendered)
-        self.assertIn("n_faces=", rendered)
-        self.assertIn("encoder_hidden=", rendered)
-        self.assertIn("encoder_depth=", rendered)
         self.assertIn("shape_encoder=", rendered)
         self.assertIsNone(gpu_name(torch.device("cpu")))
         name = gpu_name(cfg.device)
@@ -159,6 +153,27 @@ class OccupancyConfigTests(unittest.TestCase):
                         "lr: 0.001",
                         "test_fraction: 0.2",
                         "optimizer: human",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                load_yaml_knobs(yaml_path)
+
+    def test_shape_encoder_mesh_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            yaml_path = Path(tmp) / "config.yaml"
+            yaml_path.write_text(
+                "\n".join(
+                    [
+                        "hidden: 64",
+                        "depth: 4",
+                        "seed: 1",
+                        f'data_dir: "{Path(tmp).as_posix()}"',
+                        "epochs: 30",
+                        "lr: 0.001",
+                        "shape_encoder: mesh",
                         "",
                     ]
                 ),

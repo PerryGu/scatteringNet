@@ -336,10 +336,15 @@ class EnvelopeOverlayTests(unittest.TestCase):
 
     def test_flap_points_hug_the_fold(self) -> None:
         from envelope_job import sample_crease_surface
+        from geometry.surface import crease_length_fraction, plan_envelope_counts
 
         verts, faces = _floor_and_flap_mesh()
         pts, _idx, n_creases = sample_crease_surface(verts, faces, 512, seed=1)
         self.assertGreaterEqual(n_creases, 1)
+        # One 90° fold on a large floor: Mix 100 is capped; leftover is area.
+        frac = crease_length_fraction(verts, faces)
+        _n_area, n_edge = plan_envelope_counts(512, 100, frac)
+        self.assertLess(n_edge, 512)
         # Only sharp shared edge is the 90° fold along x=0, y in [0,4], z=0.
         a = np.array([0.0, 0.0, 0.0])
         b = np.array([0.0, 4.0, 0.0])
@@ -348,7 +353,8 @@ class EnvelopeOverlayTests(unittest.TestCase):
         t = np.clip(((xyz - a) @ ab) / (float(np.dot(ab, ab)) + 1e-12), 0.0, 1.0)
         proj = a + t[:, None] * ab
         dist = np.linalg.norm(xyz - proj, axis=1)
-        self.assertLess(float(np.median(dist)), 0.25)
+        near = np.sort(dist)[: max(1, n_edge)]
+        self.assertLess(float(np.median(near)), 0.25)
 
 
 class FaceTokenOverlayTests(unittest.TestCase):
@@ -477,9 +483,6 @@ def _viewer_cpu_cfg(data_dir: Path):
         val_fraction=0.2,
         batch_size=16,
         n_surface=16,
-        n_faces=8,
-        encoder_hidden=8,
-        encoder_depth=2,
         latent_dim=4,
     )
 
@@ -502,8 +505,6 @@ def _save_encoder_ckpt(models: Path, run_id: str, *, shape_encoder: str) -> None
         depth=1,
         latent_dim=4,
         shape_encoder=shape_encoder,
-        encoder_hidden=8,
-        encoder_depth=2,
     )
     ckpt = {
         "kind": CHECKPOINT_KIND,
@@ -513,9 +514,6 @@ def _save_encoder_ckpt(models: Path, run_id: str, *, shape_encoder: str) -> None
         "latent_dim": 4,
         "shape_encoder": shape_encoder,
         "n_surface": 16,
-        "n_faces": 8,
-        "encoder_hidden": 8,
-        "encoder_depth": 2,
         "seed": 1,
         "parts": [
             {
@@ -530,9 +528,9 @@ def _save_encoder_ckpt(models: Path, run_id: str, *, shape_encoder: str) -> None
 
 
 class ViewerInferBothEncodersTests(unittest.TestCase):
-    """Job A / B must rebuild envelope or face tokens from the checkpoint."""
+    """Job A / B rebuild the envelope from the checkpoint."""
 
-    def test_infer_npz_surface_and_mesh(self) -> None:
+    def test_infer_npz_surface(self) -> None:
         import numpy as np
         from infer_job import infer_uploaded_npz
 
@@ -544,37 +542,35 @@ class ViewerInferBothEncodersTests(unittest.TestCase):
             points = rng.uniform(0.0, 1.0, size=(24, 3)).astype(np.float32)
             labels = (points[:, 0] > 0.5).astype(np.uint8)
             cfg = _viewer_cpu_cfg(root)
-            for enc in ("surface", "mesh"):
-                run = f"run_{enc}"
-                _save_encoder_ckpt(models, run, shape_encoder=enc)
-                out = infer_uploaded_npz(
-                    run_id=run,
-                    models_root=models,
-                    data_dir=root,
-                    npz_name="box.npz",
-                    mesh_path="box.obj",
-                    points=points,
-                    labels=labels,
-                    cfg=cfg,
-                )
-                self.assertEqual(out["n"], 24)
-                self.assertEqual(out["shape_encoder"], enc)
-                raw = base64.b64decode(out["pred_b64"])
-                self.assertEqual(len(raw), 24)
+            _save_encoder_ckpt(models, "run_surface", shape_encoder="surface")
+            out = infer_uploaded_npz(
+                run_id="run_surface",
+                models_root=models,
+                data_dir=root,
+                npz_name="box.npz",
+                mesh_path="box.obj",
+                points=points,
+                labels=labels,
+                cfg=cfg,
+            )
+            self.assertEqual(out["n"], 24)
+            self.assertEqual(out["shape_encoder"], "surface")
+            raw = base64.b64decode(out["pred_b64"])
+            self.assertEqual(len(raw), 24)
 
-    def test_infer_obj_mesh_uses_face_tokens(self) -> None:
+    def test_infer_obj_surface(self) -> None:
         import numpy as np
         from infer_job import infer_uploaded_obj
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             models = root / "models"
-            _save_encoder_ckpt(models, "mesh_job", shape_encoder="mesh")
+            _save_encoder_ckpt(models, "surf_job", shape_encoder="surface")
             points = np.array(
                 [[0.5, 0.5, 0.5], [1.5, 1.5, 1.5]], dtype=np.float32
             )
             out = infer_uploaded_obj(
-                run_id="mesh_job",
+                run_id="surf_job",
                 models_root=models,
                 data_dir=root,
                 obj_name="cube.obj",
@@ -582,9 +578,53 @@ class ViewerInferBothEncodersTests(unittest.TestCase):
                 points=points,
                 cfg=_viewer_cpu_cfg(root),
             )
-            self.assertEqual(out["shape_encoder"], "mesh")
+            self.assertEqual(out["shape_encoder"], "surface")
             self.assertEqual(out["n"], 2)
             self.assertEqual(out["n_inside"] + out["n_outside"], 2)
+
+    def test_infer_rejects_mesh_checkpoint(self) -> None:
+        import numpy as np
+        import torch
+        from infer_job import infer_uploaded_npz
+
+        src = Path(__file__).resolve().parents[1] / "src"
+        if str(src) not in sys.path:
+            sys.path.insert(0, str(src))
+        from occupancy_encoder import CHECKPOINT_KIND
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "box.obj").write_text(_CUBE_OBJ, encoding="utf-8")
+            models = root / "models"
+            folder = models / "mesh_job"
+            folder.mkdir(parents=True)
+            torch.save(
+                {
+                    "kind": CHECKPOINT_KIND,
+                    "state_dict": {},
+                    "hidden": 8,
+                    "depth": 1,
+                    "latent_dim": 4,
+                    "shape_encoder": "mesh",
+                    "n_surface": 16,
+                    "seed": 1,
+                    "parts": [],
+                },
+                folder / "best.pt",
+            )
+            points = np.zeros((4, 3), dtype=np.float32)
+            labels = np.zeros((4,), dtype=np.uint8)
+            with self.assertRaises(ValueError):
+                infer_uploaded_npz(
+                    run_id="mesh_job",
+                    models_root=models,
+                    data_dir=root,
+                    npz_name="box.npz",
+                    mesh_path="box.obj",
+                    points=points,
+                    labels=labels,
+                    cfg=_viewer_cpu_cfg(root),
+                )
 
 
 if __name__ == "__main__":

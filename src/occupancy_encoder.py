@@ -1,8 +1,8 @@
 """Geometry-conditioned occupancy: query XYZ plus a shape latent.
 
-``OccupancyMLP`` stays xyz-only. ``shape_encoder: surface`` is the Step 8
-envelope PointNet. ``shape_encoder: mesh`` is Step 10 ``MeshFaceEncoder``.
-``knn_k > 0`` (surface only) adds per-query nearest envelope offsets.
+``OccupancyMLP`` stays xyz-only. ``shape_encoder: surface`` is the
+envelope PointNet. ``knn_k > 0`` adds per-query nearest envelope offsets.
+The face-token head (``shape_encoder: mesh``) was removed.
 """
 
 from __future__ import annotations
@@ -11,8 +11,6 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from geometry.encoder import MeshFaceEncoder
-from geometry.face_tokens import FACE_FEAT_DIM
 from occupancy_mlp import build_mlp
 
 # Distinct from OccupancyMLP so infer can tell the checkpoint apart.
@@ -85,17 +83,15 @@ def knn_offsets(xyz: Tensor, envelope: Tensor, k: int) -> Tensor:
 
 class OccupancyEncoder(nn.Module):
     """
-    Occupancy logits from query XYZ and a geometry code.
+    Occupancy logits from query XYZ and an envelope code.
 
     Unique ``shape_id`` values are encoded **once** per batch, then
-    broadcast. ``surface`` uses envelope XYZ ``(B, N, 3)``;
-    ``mesh`` uses face tokens ``(B, F, 12)``.
-    ``knn_k > 0`` (surface) concatenates a local envelope code.
+    broadcast. ``knn_k > 0`` concatenates a local envelope code.
 
     Shapes
     ------
     xyz:      ``(B, 3)``
-    geom:     ``(B, N, 3)`` or ``(B, F, 12)``
+    geom:     ``(B, N, 3)`` envelope XYZ
     shape_id: ``(B,)`` long
     output:   ``(B, 1)`` logits
     """
@@ -107,8 +103,6 @@ class OccupancyEncoder(nn.Module):
         latent_dim: int = 64,
         *,
         shape_encoder: str = "surface",
-        encoder_hidden: int | None = None,
-        encoder_depth: int = 4,
         knn_k: int = 0,
         knn_local_dim: int | None = None,
     ) -> None:
@@ -120,15 +114,14 @@ class OccupancyEncoder(nn.Module):
         if latent_dim < 1:
             raise ValueError(f"latent_dim must be >= 1, got {latent_dim}")
         kind = str(shape_encoder).strip().lower()
-        if kind not in ("surface", "mesh"):
+        if kind != "surface":
             raise ValueError(
-                f"shape_encoder must be 'surface' or 'mesh', got {shape_encoder!r}"
+                "OccupancyEncoder only supports shape_encoder='surface' "
+                f"(face-token 'mesh' was removed), got {shape_encoder!r}"
             )
         k = int(knn_k)
         if k < 0:
             raise ValueError(f"knn_k must be >= 0, got {k}")
-        if k > 0 and kind != "surface":
-            raise ValueError("knn_k > 0 requires shape_encoder='surface'")
         local_dim = int(knn_local_dim) if knn_local_dim is not None else int(latent_dim)
         if k > 0 and local_dim < 1:
             raise ValueError(f"knn_local_dim must be >= 1, got {local_dim}")
@@ -138,32 +131,15 @@ class OccupancyEncoder(nn.Module):
         self.shape_encoder = kind
         self.knn_k = k
         self.knn_local_dim = local_dim if k > 0 else 0
-        eh = int(encoder_hidden) if encoder_hidden is not None else int(hidden)
-        ed = int(encoder_depth)
-        if eh < 1:
-            raise ValueError(f"encoder_hidden must be >= 1, got {eh}")
-        if ed < 1:
-            raise ValueError(f"encoder_depth must be >= 1, got {ed}")
-        self.encoder_hidden = eh
-        self.encoder_depth = ed
-        # Keep ``surface`` as the module name so existing envelope checkpoints load.
-        if kind == "surface":
-            self.surface = SurfaceEncoder(latent_dim=latent_dim, hidden=hidden)
-            self.token_dim = 3
-        else:
-            self.mesh = MeshFaceEncoder(
-                latent_dim=latent_dim, hidden=eh, depth=ed, in_dim=FACE_FEAT_DIM
-            )
-            self.token_dim = FACE_FEAT_DIM
+        # Name ``surface`` is load-stable for existing envelope checkpoints.
+        self.surface = SurfaceEncoder(latent_dim=latent_dim, hidden=hidden)
+        self.token_dim = 3
         head_in = 3 + latent_dim
         if k > 0:
             # Same PointNet block as the global envelope, over k neighbor offsets.
             self.local = SurfaceEncoder(latent_dim=local_dim, hidden=hidden)
             head_in += local_dim
         self.head = build_mlp(head_in, hidden, depth)
-
-    def _geom_module(self) -> nn.Module:
-        return self.surface if self.shape_encoder == "surface" else self.mesh
 
     def encode_unique(self, geom: Tensor, shape_id: Tensor) -> Tensor:
         """
@@ -172,7 +148,7 @@ class OccupancyEncoder(nn.Module):
         Parameters
         ----------
         geom, shape_id:
-            Batched tokens and integer mesh ids (same length B).
+            Batched envelope clouds and integer mesh ids (same length B).
         """
         if shape_id.ndim != 1 or int(shape_id.shape[0]) != int(geom.shape[0]):
             raise ValueError(
@@ -182,7 +158,7 @@ class OccupancyEncoder(nn.Module):
         unique_ids, inverse = torch.unique(shape_id, sorted=True, return_inverse=True)
         hits = shape_id.unsqueeze(0) == unique_ids.unsqueeze(1)
         first = hits.to(dtype=torch.int64).argmax(dim=1)
-        z_unique = self._geom_module()(geom[first])
+        z_unique = self.surface(geom[first])
         return z_unique[inverse]
 
     def forward(

@@ -13,7 +13,14 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from geometry.surface import _ENVELOPE_CACHE, clear_envelope_cache, sample_surface_points
+from geometry.surface import (
+    _ENVELOPE_CACHE,
+    clear_envelope_cache,
+    crease_length_fraction,
+    plan_envelope_counts,
+    sample_surface_points,
+    split_envelope_counts,
+)
 
 
 class SurfaceSampleTests(unittest.TestCase):
@@ -92,6 +99,35 @@ class SurfaceSampleTests(unittest.TestCase):
         mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
         with self.assertRaises(ValueError):
             sample_surface_points(mesh.vertices, mesh.faces, 8, mix=101)
+
+    def test_plan_caps_sparse_creases_and_spills_to_area(self) -> None:
+        # Mix 75 wants 768 crease dots; 10% sharp edges may take only 20%.
+        self.assertEqual(split_envelope_counts(1024, 75), (256, 768))
+        self.assertEqual(plan_envelope_counts(1024, 75, 0.10), (819, 205))
+        self.assertEqual(plan_envelope_counts(1024, 75, 0.0), (1024, 0))
+        # CAD box: almost every interior edge is sharp → Mix budget stands.
+        self.assertEqual(plan_envelope_counts(1024, 75, 1.0), (256, 768))
+        n_area, n_crease = plan_envelope_counts(1024, 75, 0.10)
+        self.assertEqual(n_area + n_crease, 1024)
+
+    def test_box_crease_fraction_keeps_mix_budget(self) -> None:
+        mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
+        # Face diagonals are coplanar, so frac is ~0.59, not 1. 2× still ≥ Mix 75.
+        frac = crease_length_fraction(mesh.vertices, mesh.faces)
+        self.assertGreater(frac, 0.5)
+        n_area, n_crease = plan_envelope_counts(1024, 75, frac)
+        self.assertEqual((n_area, n_crease), (256, 768))
+
+    def test_sphere_mix_keeps_full_count(self) -> None:
+        mesh = trimesh.creation.icosphere(subdivisions=3, radius=1.0)
+        frac = crease_length_fraction(mesh.vertices, mesh.faces)
+        n_area, n_crease = plan_envelope_counts(512, 75, frac)
+        self.assertEqual(n_area + n_crease, 512)
+        self.assertLess(n_crease, int(round(512 * 0.75)))
+        pts = sample_surface_points(
+            mesh.vertices, mesh.faces, 512, seed=2, mix=75
+        )
+        self.assertEqual(pts.shape, (512, 3))
 
 
 if __name__ == "__main__":

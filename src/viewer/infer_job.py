@@ -1,8 +1,8 @@
 """Job A / B: classify uploaded points with a ``models/*/best.pt``.
 
-Reuses ``load_occupancy_model`` and AABB helpers. Geometry tokens follow
-the **checkpoint** (envelope vs face tokens), not live ``config.yaml``.
-Does not modify occupancy train/infer modules.
+Reuses ``load_occupancy_model`` and AABB helpers. Envelope tokens follow
+the **checkpoint**, not live ``config.yaml``. Face-token checkpoints
+are rejected. Does not modify occupancy train/infer modules.
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from infer_multi_npz import load_occupancy_model  # noqa: E402
-from geometry.face_tokens import apply_face_aabb, face_tokens_from_triangles  # noqa: E402
 from geometry.mesh_io import load_obj_triangles  # noqa: E402
 from geometry.surface import sample_surface_points  # noqa: E402
 from metrics import occupancy_metrics  # noqa: E402
@@ -103,8 +102,13 @@ def _ckpt_shape_encoder(ckpt: dict[str, Any]) -> str:
     original envelope head.
     """
     raw = str(ckpt.get("shape_encoder") or "").strip().lower()
-    if raw in ("surface", "mesh", "none"):
+    if raw in ("surface", "none"):
         return raw
+    if raw == "mesh":
+        raise ValueError(
+            "face-token occupancy checkpoints (shape_encoder='mesh') "
+            "are no longer supported"
+        )
     kind = str(ckpt.get("kind") or "")
     if kind == ENCODER_KIND:
         return "surface"
@@ -121,7 +125,7 @@ def _runtime_cfg(cfg: OccupancyConfig | None):
 
 
 def _forward_logits(model, cfg, xyz, geom, shape_id):
-    """Batched occupancy logits. ``geom`` is envelope ``(1,N,3)`` or faces ``(1,F,12)``."""
+    """Batched occupancy logits. ``geom`` is envelope ``(1, N, 3)`` or ``None``."""
     import torch
 
     n = int(xyz.shape[0])
@@ -142,13 +146,11 @@ def _forward_logits(model, cfg, xyz, geom, shape_id):
 
 def _geom_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
     """
-    Build the shape tensor this checkpoint was trained with.
+    Build the envelope this checkpoint was trained with.
 
     ``surface`` → ``(1, n_surface, 3)`` envelope XYZ.
-    ``mesh`` → ``(1, n_faces, 12)`` triangle tokens.
     ``none`` → no geometry (xyz-only MLP).
-    Counts and kind come from the checkpoint so a mesh ``best.pt`` still
-    infers after YAML is switched back to envelope (and the reverse).
+    Count and mix come from the checkpoint, not live YAML.
     """
     import torch
 
@@ -169,15 +171,6 @@ def _geom_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
         )
         env = apply_normalization(world, center, scale)
         geom = torch.from_numpy(env).unsqueeze(0)
-        shape_id = torch.zeros(1, dtype=torch.long)
-        return geom, shape_id
-    if enc == "mesh":
-        n_tok = int(ckpt["n_faces"]) if ckpt.get("n_faces") is not None else 256
-        world_tok = face_tokens_from_triangles(
-            vertices, faces, n_tok, cache_key=cache_key
-        )
-        tok = apply_face_aabb(world_tok, center, scale)
-        geom = torch.from_numpy(tok).unsqueeze(0)
         shape_id = torch.zeros(1, dtype=torch.long)
         return geom, shape_id
     return None, None
@@ -217,7 +210,7 @@ def infer_uploaded_npz(
     """
     Classify ``points`` with ``best.pt``. Returns pred bytes (base64) and scores.
 
-    Envelope vs face tokens follow ``ckpt['shape_encoder']``.
+    Envelope rebuild follows ``ckpt['shape_encoder']``.
     """
     import torch
 
@@ -297,9 +290,8 @@ def infer_uploaded_obj(
     """
     Classify fill-lattice XYZ with ``best.pt``.
 
-    Shape tokens are built from the uploaded OBJ: envelope when the
-    checkpoint is ``surface``, face tokens when it is ``mesh``.
-    No file labels (Job B): metrics are omitted.
+    Envelope tokens are built from the uploaded OBJ when the
+    checkpoint is ``surface``. No file labels (Job B): metrics are omitted.
     """
     import torch
 

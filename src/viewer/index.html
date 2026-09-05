@@ -75,9 +75,9 @@
           </div>
         </div>
         <div class="fill-row">
-          <button type="button" id="btn-faces" disabled title="Show the triangles + normals the mesh encoder uses (largest faces by area, then tile).">Faces</button>
+          <button type="button" id="btn-faces" disabled title="Show largest-area triangles + normals (display only, not used by the occupancy head).">Faces</button>
           <div class="slider-row">
-            <span title="How many face tokens. Training default is 256.">Count <span id="val-faces">256</span></span>
+            <span title="How many overlay triangles. Default 256.">Count <span id="val-faces">256</span></span>
             <input type="range" id="sld-faces" min="64" max="1024" step="16" value="256" title="64–1024 tokens. Drag refreshes if Faces is on.">
           </div>
         </div>

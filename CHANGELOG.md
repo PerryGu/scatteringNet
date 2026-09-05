@@ -4,6 +4,18 @@ Completed work for the occupancy MLP MVP.
 
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 
+## 2026-09-05 13:00 — Envelope: cap crease budget
+
+Crease share is now ``2 ×`` (sharp interior-edge length / all interior edges, dihedral ≥ 20°), then never above Mix. Leftover dots go to faces; ``n_surface`` stays 1024.
+At mix 75: a cube still gets 768 crease dots; a hull with ~10% folds gets 205 crease / 819 area; no creases → all 1024 area.
+Viewer Envelope ``n_area`` / ``n_edge`` follow that plan. Infer already uses it, so an old ``mix=75`` ``best.pt`` sees a different cloud until a retrain.
+
+## 2026-09-05 12:00 — Drop face-token occupancy encoder
+
+Deleted ``src/geometry/encoder.py``. Face tokens never beat the envelope, so train/infer are ``surface`` or ``none`` only; ``shape_encoder: mesh`` raises.
+Dataset no longer builds ``(F, 12)`` tokens. YAML dropped ``n_faces`` / ``encoder_hidden`` / ``encoder_depth``. Envelope ``best.pt`` still loads; mesh checkpoints do not.
+Viewer **Faces** is display-only (largest triangles + normals) and is not fed to the occupancy head. The failed run stays in ``docs/training_log.md``.
+
 ## 2026-09-05 11:00 — Viewer: Run model hides Outside
 
 Clicking **Run model** unchecks Outside, waits 150 ms so the blue cloud drops, then infers. Occupancy train code unchanged.

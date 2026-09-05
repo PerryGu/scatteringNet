@@ -1,6 +1,7 @@
-"""Face-token overlay: largest-area triangles + normals (same as occupancy mesh).
+"""Face-token overlay: largest-area triangles + normals.
 
-Does not import torch. Tokens stay in world XYZ (no AABB). Overlay only.
+Does not import torch. Tokens stay in world XYZ (no AABB). Overlay only;
+not used by occupancy train or infer.
 """
 
 from __future__ import annotations
@@ -37,8 +38,7 @@ def faces_overlay_from_obj_text(obj_text: str, n_faces: int) -> dict:
     """
     World-space ``(n_faces, 12)`` tokens plus a normal-tick length.
 
-    Same ``face_tokens_from_triangles`` as mesh occupancy (largest faces,
-    then tile if the mesh is short).
+    Largest faces by area, then tile if the mesh is short.
     """
     count = clamp_n_faces(n_faces)
     vertices, faces = triangles_from_obj_text(obj_text)

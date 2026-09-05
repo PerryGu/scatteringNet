@@ -1,8 +1,7 @@
 """Train occupancy on a catalog of NPZs, one shape (file) at a time.
 
 Each file keeps its own NPZ occupancy queries. Envelope points are
-sampled on the OBJ when ``shape_encoder`` is ``surface``. Face tokens
-are the batch geometry when ``shape_encoder`` is ``mesh``. Mini-batches
+sampled on the OBJ when ``shape_encoder`` is ``surface``. Mini-batches
 never mix two files. ``val_fraction`` of **meshes** is the val set
 (all NPZs of one OBJ stay on one side; used to select ``best.pt``).
 Logs in ``runs/<id>/``, weights in ``models/<id>/best.pt``.
@@ -61,14 +60,9 @@ def _uses_surface(cfg: OccupancyConfig) -> bool:
     return str(cfg.shape_encoder).strip().lower() == "surface"
 
 
-def _uses_mesh(cfg: OccupancyConfig) -> bool:
-    """True when YAML selected the face-token head."""
-    return str(cfg.shape_encoder).strip().lower() == "mesh"
-
-
 def _uses_encoder(cfg: OccupancyConfig) -> bool:
-    """True when the occupancy head takes a geometry tensor."""
-    return _uses_surface(cfg) or _uses_mesh(cfg)
+    """True when the occupancy head takes an envelope tensor."""
+    return _uses_surface(cfg)
 
 
 def _forward_batch(
@@ -214,9 +208,6 @@ def _checkpoint_payload(
         "envelope_mix": int(cfg.envelope_mix),
         "knn_k": int(cfg.knn_k),
         "knn_local_dim": encoder_knn_local_dim(cfg) if int(cfg.knn_k) > 0 else 0,
-        "n_faces": int(cfg.n_faces),
-        "encoder_hidden": int(cfg.encoder_hidden),
-        "encoder_depth": int(cfg.encoder_depth),
         "latent_dim": encoder_latent_dim(cfg),
         "npz_paths": [as_data_relative(p, cfg.data_dir) for p in dataset.npz_paths],
         "parts": parts,
@@ -285,8 +276,6 @@ def train_multi_npz(
     t0 = time.perf_counter()
     print(f"started={clock_start.isoformat(timespec='seconds')}")
     n_surface = int(cfg.n_surface) if _uses_encoder(cfg) else None
-    n_faces = int(cfg.n_faces)
-    item_geom = "mesh" if _uses_mesh(cfg) else "surface"
     if npz_paths is None:
         dataset = OccupancyMultiNpzDataset.from_catalog(
             cfg.data_dir,
@@ -296,8 +285,6 @@ def train_multi_npz(
             max_files_per_shape=cfg.max_files_per_shape,
             n_surface=n_surface,
             seed=cfg.seed,
-            n_faces=n_faces,
-            item_geom=item_geom,
             envelope_mix=int(cfg.envelope_mix),
         )
     else:
@@ -306,8 +293,6 @@ def train_multi_npz(
             data_dir=cfg.data_dir,
             n_surface=n_surface,
             seed=cfg.seed,
-            n_faces=n_faces,
-            item_geom=item_geom,
             envelope_mix=int(cfg.envelope_mix),
         )
 
@@ -348,8 +333,6 @@ def train_multi_npz(
             depth=cfg.depth,
             latent_dim=encoder_latent_dim(cfg),
             shape_encoder=str(cfg.shape_encoder),
-            encoder_hidden=int(cfg.encoder_hidden),
-            encoder_depth=int(cfg.encoder_depth),
             knn_k=int(cfg.knn_k),
             knn_local_dim=encoder_knn_local_dim(cfg) if int(cfg.knn_k) > 0 else None,
         ).to(cfg.device)
@@ -380,8 +363,6 @@ def train_multi_npz(
         f"shape_encoder={cfg.shape_encoder} n_surface={cfg.n_surface} "
         f"envelope_mix={cfg.envelope_mix} "
         f"knn_k={cfg.knn_k} "
-        f"n_faces={cfg.n_faces} "
-        f"encoder_hidden={cfg.encoder_hidden} encoder_depth={cfg.encoder_depth} "
         f"latent_dim={encoder_latent_dim(cfg)}"
     )
     last_epoch = start_epoch + n_epochs - 1

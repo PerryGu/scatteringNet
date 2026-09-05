@@ -21,16 +21,13 @@ optimizer: adam   # adam | adamw | sgd
 val_fraction: 0.20
 
 # --- Geometry ---
-# none = xyz-only OccupancyMLP. surface = envelope cloud. mesh = triangle tokens.
+# none = xyz-only OccupancyMLP. surface = envelope cloud + OccupancyEncoder.
 # Occupancy labels stay in the NPZ.
-shape_encoder: surface   # surface / mesh
-n_surface: 1024          # Envelope samples (kept on the dataset for A/B; head uses faces when mesh)
+shape_encoder: surface   # none / surface
+n_surface: 1024          # Envelope samples on the joined OBJ
 envelope_mix: 75         # 0 = face-area darts (old envelope), 100 = creases. Same split as the viewer Mix slider.
 knn_k: 16                # 0 = global z only. 16 = nearest envelope dots per query (local occupancy).
 # knn_local_dim: 64      # z_local width; omit to use latent_dim / hidden
-n_faces: 256             # Triangle tokens per mesh
-encoder_hidden: 64       # MeshFaceEncoder width
-encoder_depth: 4         # MeshFaceEncoder depth
 # latent_dim: 64         # OccupancyEncoder z width; omit to use hidden
 
 # --- Catalog ---

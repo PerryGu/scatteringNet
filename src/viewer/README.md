@@ -28,19 +28,19 @@ Put checkpoints at `models/<run_id>/best.pt`. The Model list is that folder.
 
 ## Job A (NPZ)
 
-Infer on the file’s `points` (the box is not resampled). **Truth** = file labels. **Run model** then **Prediction** / **Errors** (missed inside vs false inside). Envelope and face-token checkpoints both work; the helper rebuilds the tokens that checkpoint was trained with from the NPZ `mesh_path` OBJ.
+Infer on the file’s `points` (the box is not resampled). **Truth** = file labels. **Run model** then **Prediction** / **Errors** (missed inside vs false inside). Envelope checkpoints rebuild the surface cloud from the NPZ `mesh_path` OBJ. Face-token occupancy checkpoints are no longer loaded.
 
 ## Job B (OBJ)
 
 The lower panel is titled **Create dots**. Three rows, top to bottom:
 
 1. **Envelope** — purple overlay. **Count** is the total (256–4096, default 1024). **Mix** (0–100, default 100) splits that count: left **Faces** = area-weighted darts on triangles (old envelope); right **Edges** = on/near sharp creases. Status reports how many went to each. Overlay Mix is display-only. **Run model** rebuilds the envelope with the **checkpoint** ``envelope_mix`` (missing key = 0, all face-area).
-2. **Faces** — teal triangles + cyan normal ticks. These are the occupancy mesh-encoder tokens: largest faces by area, then tiled if the mesh has fewer triangles than Count. Count 64–1024, default 256. Click to show/hide; drag **Count** to refresh while shown. The status line reports token count, unique vs tiled, and mesh triangle count. Envelope and Faces can stay on together.
+2. **Faces** — teal triangles + cyan normal ticks (display only; not fed to the occupancy head). Largest faces by area, then tiled if the mesh has fewer triangles than Count. Count 64–1024, default 256. Click to show/hide; drag **Count** to refresh while shown. The status line reports token count, unique vs tiled, and mesh triangle count. Envelope and Faces can stay on together.
 3. **Fill points** + **Density** — unlabeled AABB lattice. OBJ-only. Dragging density refills (short debounce); **Fill points** still works. The camera does not reset. Fill turns **Inside** and **Outside** on so the lattice is not hidden.
 
 Envelope and Faces also work when an NPZ has loaded its OBJ (not only a direct OBJ open).
 
-Then **Run model**. Shape tokens come from the **uploaded** OBJ, matching the selected checkpoint: envelope cloud if it was trained with ``shape_encoder: surface``, face tokens if ``mesh``. The Model list labels each run ``(envelope)`` or ``(faces)``. No **Errors** view (no file labels). Until you run, fill points are unlabeled and show as outside.
+Then **Run model**. Envelope checkpoints rebuild the surface cloud from the **uploaded** OBJ. The Model list labels envelope runs ``(envelope)``. No **Errors** view (no file labels). Until you run, fill points are unlabeled and show as outside.
 
 Density slider 0–100 maps to lattice **spacing** (pad = spacing):
 
@@ -75,7 +75,7 @@ src/viewer/
   model_access.py    models/<run>/best.pt
   infer_job.py       Job A / Job B forward
   envelope_job.py    crease-hugging surface samples for the Envelope overlay
-  faces_job.py       triangle + normal overlay for mesh tokens
+  faces_job.py       triangle + normal overlay (display only)
   obj_fill.py        unlabeled AABB lattice
   ui_prefs.py        ui_prefs.json
   js/                page modules (not occupancy Python)

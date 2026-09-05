@@ -205,12 +205,10 @@ class MultiNpzCatalogTests(unittest.TestCase):
             self.assertAlmostEqual(float(ds.parts[0].scale), float(expect_s))
             self.assertIsNotNone(ds.parts[0].envelope)
             self.assertIsNotNone(ds.parts[1].envelope)
-            self.assertIsNotNone(ds.parts[0].face_tokens)
-            self.assertEqual(tuple(ds.parts[0].face_tokens.shape), (256, 12))
             self.assertTrue(
                 np.allclose(
-                    ds.parts[0].face_tokens.numpy(),
-                    ds.parts[1].face_tokens.numpy(),
+                    ds.parts[0].envelope.numpy(),
+                    ds.parts[1].envelope.numpy(),
                 )
             )
 

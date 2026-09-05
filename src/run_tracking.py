@@ -117,9 +117,6 @@ def occupancy_config_snapshot(
         "envelope_mix": int(cfg.envelope_mix),
         "knn_k": int(cfg.knn_k),
         "knn_local_dim": cfg.knn_local_dim,
-        "n_faces": int(cfg.n_faces),
-        "encoder_hidden": int(cfg.encoder_hidden),
-        "encoder_depth": int(cfg.encoder_depth),
         "shape_encoder": str(cfg.shape_encoder),
     }
     # Explicit list knob: only snapshot it when it actually replaced the glob.

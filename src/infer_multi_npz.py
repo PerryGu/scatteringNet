@@ -1,8 +1,8 @@
 """Classify occupancy NPZs from ``models/<run_id>/best.pt``.
 
 Rebuilds ``OccupancyMLP`` or ``OccupancyEncoder`` from the checkpoint
-``kind``. Query XYZ (and envelope or face tokens, when conditioned) use
-the stored per-mesh AABB, not a fresh map.
+``kind``. Query XYZ (and envelope, when conditioned) use the stored
+per-mesh AABB, not a fresh map. Face-token checkpoints are rejected.
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import torch
 
 from config import OccupancyConfig, as_data_relative, load_config, repo_root
 from data_npz import load_points_labels, load_points_labels_mesh
-from geometry.face_tokens import apply_face_aabb, face_tokens_from_triangles
 from geometry.mesh_io import load_obj_triangles
 from geometry.surface import sample_surface_points
 from metrics import occupancy_metrics
@@ -69,12 +68,11 @@ def load_occupancy_model(
     elif kind == ENCODER_KIND:
         latent = int(ckpt["latent_dim"]) if ckpt.get("latent_dim") is not None else hidden
         enc = str(ckpt.get("shape_encoder") or "surface").strip().lower()
-        eh = (
-            int(ckpt["encoder_hidden"])
-            if ckpt.get("encoder_hidden") is not None
-            else None
-        )
-        ed = int(ckpt["encoder_depth"]) if ckpt.get("encoder_depth") is not None else 4
+        if enc == "mesh":
+            raise ValueError(
+                "face-token occupancy checkpoints (shape_encoder='mesh') "
+                "are no longer supported"
+            )
         knn_k = int(ckpt["knn_k"]) if ckpt.get("knn_k") is not None else 0
         knn_local = None
         if knn_k > 0 and ckpt.get("knn_local_dim") is not None:
@@ -84,8 +82,6 @@ def load_occupancy_model(
             depth=depth,
             latent_dim=latent,
             shape_encoder=enc,
-            encoder_hidden=eh,
-            encoder_depth=ed,
             knn_k=knn_k,
             knn_local_dim=knn_local,
         )
@@ -134,28 +130,26 @@ def infer_npz(
     geom = None
     shape_id = None
     enc = str(ckpt.get("shape_encoder", "none")).strip().lower()
-    if enc in ("surface", "mesh"):
+    if enc == "mesh":
+        raise ValueError(
+            "face-token occupancy checkpoints (shape_encoder='mesh') "
+            "are no longer supported"
+        )
+    if enc == "surface":
         points, labels, mesh_path = load_points_labels_mesh(npz, cfg.data_dir)
         vertices, faces = load_obj_triangles(mesh_path)
         cache_key = str(mesh_path.resolve())
-        if enc == "surface":
-            n_surface = int(ckpt.get("n_surface") or cfg.n_surface)
-            mix = int(ckpt["envelope_mix"]) if ckpt.get("envelope_mix") is not None else 0
-            world = sample_surface_points(
-                vertices,
-                faces,
-                n_surface,
-                seed=int(cfg.seed),
-                mix=mix,
-                cache_key=cache_key,
-            )
-            arr = apply_normalization(world, center, scale)
-        else:
-            n_tok = int(ckpt.get("n_faces") or cfg.n_faces)
-            world_tok = face_tokens_from_triangles(
-                vertices, faces, n_tok, cache_key=cache_key
-            )
-            arr = apply_face_aabb(world_tok, center, scale)
+        n_surface = int(ckpt.get("n_surface") or cfg.n_surface)
+        mix = int(ckpt["envelope_mix"]) if ckpt.get("envelope_mix") is not None else 0
+        world = sample_surface_points(
+            vertices,
+            faces,
+            n_surface,
+            seed=int(cfg.seed),
+            mix=mix,
+            cache_key=cache_key,
+        )
+        arr = apply_normalization(world, center, scale)
         geom = torch.from_numpy(arr).unsqueeze(0)
         shape_id = torch.zeros((), dtype=torch.long)
     else:

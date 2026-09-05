@@ -21,7 +21,9 @@ if str(_SRC) not in sys.path:
 
 from geometry.surface import (  # noqa: E402
     clamp_envelope_mix,
+    crease_length_fraction,
     n_sharp_edges,
+    plan_envelope_counts,
     sample_surface_points,
     split_envelope_counts,
 )
@@ -71,7 +73,9 @@ def envelope_from_obj_text(
     count = clamp_n_surface(n_surface)
     mix_v = clamp_envelope_mix(mix)
     vertices, faces = triangles_from_obj_text(obj_text)
-    n_area, n_edge = split_envelope_counts(count, mix_v)
+    # Same cap-and-spill as occupancy so the status line matches the cloud.
+    frac = crease_length_fraction(vertices, faces) if mix_v > 0 else 0.0
+    n_area, n_edge = plan_envelope_counts(count, mix_v, frac)
     points = sample_surface_points(
         vertices, faces, count, seed=int(seed), mix=mix_v
     )

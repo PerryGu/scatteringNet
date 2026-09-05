@@ -2,7 +2,9 @@
 
 ``mix`` 0 is area-weighted (Step 8). ``mix`` 100 is crease-hugging (same
 lottery as the viewer Mix slider). Values in between split ``n_surface``.
-World clouds are cached per ``(mesh_key, n_surface, seed, mix)``.
+If sharp edges are only a small fraction of the mesh, unused crease
+slots spill back to face-area samples so a few folds cannot take most
+of the cloud. World clouds are cached per ``(mesh_key, n_surface, seed, mix)``.
 AABB normalization is applied by the caller.
 """
 
@@ -19,6 +21,8 @@ PointsArray = NDArray[np.float32]
 _SHARP_RAD = float(np.deg2rad(20.0))
 _FALLOFF_FRAC = 0.02
 _ON_EDGE_FRAC = 0.65
+# A fold that is 10% of interior edges may take at most 20% of the envelope.
+_CREASE_OVERREP = 2.0
 
 # Same OBJ + count + seed + mix → same world samples.
 _ENVELOPE_CACHE: dict[tuple[str, int, int, int], PointsArray] = {}
@@ -38,12 +42,58 @@ def clamp_envelope_mix(mix: int) -> int:
 
 
 def split_envelope_counts(n_surface: int, mix: int) -> tuple[int, int]:
-    """Return ``(n_area, n_crease)`` summing to ``n_surface``."""
+    """Return Mix-only ``(n_area, n_crease)`` summing to ``n_surface``."""
     count = int(n_surface)
     m = clamp_envelope_mix(mix)
     n_crease = int(round(count * m / 100.0))
     n_crease = min(count, max(0, n_crease))
     return count - n_crease, n_crease
+
+
+def plan_envelope_counts(
+    n_surface: int, mix: int, crease_frac: float
+) -> tuple[int, int]:
+    """
+    Mix split, then cap crease dots by how much of the mesh is sharp.
+
+    ``crease_frac`` is sharp-edge length / interior-edge length (0–1).
+    Leftover crease slots spill to area so ``n_surface`` stays exact.
+    """
+    count = int(n_surface)
+    n_area, n_crease = split_envelope_counts(count, mix)
+    if n_crease < 1:
+        return n_area, 0
+    frac = float(crease_frac)
+    if frac < 0.0:
+        frac = 0.0
+    mix_frac = float(clamp_envelope_mix(mix)) / 100.0
+    # Do not let Mix request more crease share than 2× the sharp-edge fraction.
+    cap_frac = min(mix_frac, _CREASE_OVERREP * frac)
+    n_crease_cap = int(round(count * cap_frac))
+    n_crease_cap = min(n_crease, max(0, n_crease_cap))
+    return n_area + (n_crease - n_crease_cap), n_crease_cap
+
+
+def crease_length_fraction(vertices: np.ndarray, faces: np.ndarray) -> float:
+    """Sharp interior-edge length / all interior-edge length after weld."""
+    verts, tris = weld_vertices(vertices, faces)
+    edge_map = _edge_map(tris)
+    interior = 0.0
+    sharp = 0.0
+    normals = _triangle_normals(verts, tris)
+    for (i0, i1), incident in edge_map.items():
+        # Border edges have one face; they are not folds.
+        if len(incident) != 2:
+            continue
+        elen = float(np.linalg.norm(verts[i1] - verts[i0]))
+        interior += elen
+        a, b = incident[0], incident[1]
+        dot = float(np.clip(np.dot(normals[a], normals[b]), -1.0, 1.0))
+        if float(np.arccos(dot)) >= _SHARP_RAD:
+            sharp += elen
+    if interior <= 1e-12:
+        return 0.0
+    return float(sharp / interior)
 
 
 def weld_vertices(
@@ -199,7 +249,9 @@ def sample_surface_points(
     Sample ``n_surface`` envelope points.
 
     ``mix`` 0 is the original area-weighted cloud (old checkpoints).
-    ``mix`` 100 is crease-hugging. In between, Count is split like the viewer Mix slider.
+    ``mix`` 100 is crease-hugging, then capped by crease length fraction.
+    In between, Count is split like the viewer Mix slider, then spilled
+    to faces when the mesh has few sharp edges.
     """
     count = int(n_surface)
     if count < 1:
@@ -222,7 +274,9 @@ def sample_surface_points(
     if mix_v == 0:
         out = _sample_area(verts, tris, count, int(seed))
     else:
-        n_area, n_crease = split_envelope_counts(count, mix_v)
+        # Cap crease dots so a few folds cannot consume the Mix budget.
+        frac = crease_length_fraction(verts, tris)
+        n_area, n_crease = plan_envelope_counts(count, mix_v, frac)
         chunks: list[np.ndarray] = []
         if n_area > 0:
             chunks.append(_sample_area(verts, tris, n_area, int(seed)))

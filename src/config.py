@@ -54,9 +54,6 @@ class YamlKnobs(TypedDict):
     envelope_mix: int
     knn_k: int
     knn_local_dim: int | None
-    n_faces: int
-    encoder_hidden: int
-    encoder_depth: int
     shape_encoder: str
 
 
@@ -201,7 +198,7 @@ def _as_optional_latent_dim(raw: Mapping[str, Any]) -> int | None:
 # Names accepted in config.yaml ``optimizer``. Used by train_multi_npz.
 _ALLOWED_OPTIMIZERS = ("adam", "adamw", "sgd")
 # ``none`` = OccupancyMLP (xyz only). ``surface`` = envelope encoder.
-_ALLOWED_SHAPE_ENCODERS = ("none", "surface", "mesh")
+_ALLOWED_SHAPE_ENCODERS = ("none", "surface")
 
 
 def _as_optimizer(value: Any) -> str:
@@ -393,21 +390,6 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             if "knn_local_dim" in raw
             else None
         ),
-        "n_faces": (
-            _as_positive_int("n_faces", raw["n_faces"])
-            if "n_faces" in raw
-            else 256
-        ),
-        "encoder_hidden": (
-            _as_positive_int("encoder_hidden", raw["encoder_hidden"])
-            if "encoder_hidden" in raw
-            else 64
-        ),
-        "encoder_depth": (
-            _as_positive_int("encoder_depth", raw["encoder_depth"])
-            if "encoder_depth" in raw
-            else 4
-        ),
         "shape_encoder": (
             _as_shape_encoder(raw["shape_encoder"])
             if "shape_encoder" in raw
@@ -477,11 +459,7 @@ class OccupancyConfig:
     knn_k: int = 0
     # Width of z_local; None → same as occupancy latent_dim / hidden.
     knn_local_dim: int | None = None
-    # Face-token length (YAML ``n_faces``).
-    n_faces: int = 256
-    encoder_hidden: int = 64
-    encoder_depth: int = 4
-    # ``none`` keeps OccupancyMLP; ``surface`` envelope; ``mesh`` face tokens.
+    # ``none`` keeps OccupancyMLP; ``surface`` uses the envelope PointNet.
     shape_encoder: str = "none"
 
 
@@ -536,9 +514,6 @@ def load_config(
         envelope_mix=knobs["envelope_mix"],
         knn_k=knobs["knn_k"],
         knn_local_dim=knobs["knn_local_dim"],
-        n_faces=knobs["n_faces"],
-        encoder_hidden=knobs["encoder_hidden"],
-        encoder_depth=knobs["encoder_depth"],
         shape_encoder=knobs["shape_encoder"],
     )
 
@@ -595,9 +570,6 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  envelope_mix={cfg.envelope_mix}\n"
         f"  knn_k={cfg.knn_k}\n"
         f"  knn_local_dim={cfg.knn_local_dim}\n"
-        f"  n_faces={cfg.n_faces}\n"
-        f"  encoder_hidden={cfg.encoder_hidden}\n"
-        f"  encoder_depth={cfg.encoder_depth}\n"
         f"  shape_encoder={cfg.shape_encoder}\n"
         f")"
     )

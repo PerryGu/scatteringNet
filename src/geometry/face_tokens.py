@@ -1,8 +1,9 @@
 """Triangle face tokens: three corners plus a unit normal.
 
+Used by the viewer Faces overlay, not by occupancy train/infer.
 ``FACE_FEAT_DIM = 12``: ``[v0(3), v1(3), v2(3), n(3)]`` in the mesh frame.
 Too many faces → keep the largest by area. Too few → repeat rows so the
-length is YAML ``n_faces``. World-space arrays are cached per mesh key.
+length matches the requested count. World-space arrays are cached per mesh key.
 AABB is applied to the three corners only; normals stay unit directions.
 """
 
