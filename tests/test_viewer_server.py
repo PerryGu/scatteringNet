@@ -274,6 +274,10 @@ class EnvelopeOverlayTests(unittest.TestCase):
         self.assertEqual(out["n_area"], 0)
         raw = base64.b64decode(out["points_b64"])
         self.assertEqual(len(raw), 256 * 3 * 4)
+        nrm = base64.b64decode(out["normals_b64"])
+        self.assertEqual(len(nrm), 256 * 3 * 4)
+        vecs = np.frombuffer(nrm, dtype=np.float32).reshape(256, 3)
+        self.assertTrue(np.allclose(np.linalg.norm(vecs, axis=1), 1.0, atol=1e-5))
 
     def test_split_envelope_counts(self) -> None:
         from envelope_job import split_envelope_counts

@@ -209,6 +209,9 @@ def _checkpoint_payload(
         "knn_k": int(cfg.knn_k),
         "knn_local_dim": encoder_knn_local_dim(cfg) if int(cfg.knn_k) > 0 else 0,
         "latent_dim": encoder_latent_dim(cfg),
+        "envelope_dim": (
+            int(model.envelope_dim) if isinstance(model, OccupancyEncoder) else None
+        ),
         "npz_paths": [as_data_relative(p, cfg.data_dir) for p in dataset.npz_paths],
         "parts": parts,
         "optimizer": None if optimizer is None else optimizer.state_dict(),

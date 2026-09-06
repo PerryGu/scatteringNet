@@ -21,6 +21,7 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 
 | Run id                                          | Name                                                       | Score                      |
 | ----------------------------------------------- | ---------------------------------------------------------- | -------------------------- |
+| `2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6` | Same catalog, crease cap + envelope normals (`envelope_dim=6`) | IoU 0.965 · acc 0.994 @ 20 |
 | `2026-09-04_15-52-00_prim_extruded_nr45_knn16`  | New catalog: primitives + smooth + nr1/nr4/nr5, knn16      | IoU 0.894 · acc 0.982 @ 14 |
 | `2026-09-03_15-59-37_prim_extrude_knn16_n2048`  | Mixed catalog knn16, `n_surface: 2048`                     | IoU 0.962 · acc 0.990 @ 19 |
 | `2026-09-02_15-25-10_prim_extrude_knn16`        | Mixed primitives + capped extrude, knn16 mix 75            | IoU 0.954 · acc 0.988 @ 20 |
@@ -36,6 +37,83 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 | `2026-08-29_19-43-15_extrude_nr1_surface`       | Envelope + xyz, file holdout                               | IoU 0.691 · acc 0.970 @ 18 |
 | `2026-08-29_09-28-54_extrude_nr1`               | Xyz-only, pooled point split                               | acc 0.853 @ 20             |
 
+
+---
+
+## 2026-09-05 23:00 — prim_extruded_nr45_knn16_n6 (XYZ + face normal)
+
+Fresh train. Same catalog, seed, mesh val, `knn_k: 16`, mix 75, `h64/d4`, `n_surface: 1024` as [`2026-09-04_15-52-00_prim_extruded_nr45_knn16`](#2026-09-05-0800--prim_extruded_nr45_knn16-smooth--high-round-catalog). **Not** a resume of that `best.pt`. Two geometry changes at once: crease-budget cap (already in the sampler) and envelope samples as `(x,y,z,nx,ny,nz)`. k-NN is still XYZ; each neighbor is offset + that face normal. Goal: does a facing on each skin dot tighten this catalog? Success is **viewer Fill** vs the XYZ checkpoint, not the val jump alone.
+
+### Fill (viewer) — 6 Sep 2026
+
+Primitives and easy frames stay inside the wire. Horse, human, giraffe, and shark **fill** — last catalog run said organics fail and a smoothed box family would not transfer. `nr4`/`nr5` still miss or leak only in very thin / dense limbs. Overlay Mix/Count in the shots do not change infer (checkpoint is still 1024 / mix 75).
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-06_n6_helix.png"><img src="media/2026-09-06_n6_helix.png" alt="Helix" width="100%"/></a><br/>Helix</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-06_n6_torus.png"><img src="media/2026-09-06_n6_torus.png" alt="Torus" width="100%"/></a><br/>Torus</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-06_n6_frame.png"><img src="media/2026-09-06_n6_frame.png" alt="Easy frame" width="100%"/></a><br/>Easy extrude frame</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-06_n6_nr45.png"><img src="media/2026-09-06_n6_nr45.png" alt="nr4/nr5" width="100%"/></a><br/>Extrude lev 4/5</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-06_n6_nr45_narrow.png"><img src="media/2026-09-06_n6_nr45_narrow.png" alt="nr4/nr5 narrow" width="100%"/></a><br/>Extrude lev 4/5 (narrow)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-06_n6_giraffe.png"><img src="media/2026-09-06_n6_giraffe.png" alt="Giraffe" width="100%"/></a><br/>Giraffe (not in catalog)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-06_n6_horse.png"><img src="media/2026-09-06_n6_horse.png" alt="Horse" width="100%"/></a><br/>Horse (not in catalog)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-06_n6_human.png"><img src="media/2026-09-06_n6_human.png" alt="Human" width="100%"/></a><br/>Human (not in catalog)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-06_n6_shark.png"><img src="media/2026-09-06_n6_shark.png" alt="Shark" width="100%"/></a><br/>Shark (not in catalog)</td>
+</tr>
+</table>
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` (from scratch; not a resume) |
+| Catalog | Same YAML `npz_catalog` as `15-52-00` |
+| `run_name` | `prim_extruded_nr45_knn16_n6` |
+| Files | 2454 NPZs, 1227 unique OBJs |
+| Points | 41.99M (train 35.07M / val 6.92M) |
+| Geometry | `n_surface=1024`, `envelope_mix=75`, `knn_k=16`, `shape_encoder=surface`, `envelope_dim=6` |
+| Split | **Mesh** identity (`n_train_meshes=982` / `n_val_meshes=245`, seed 1) |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; local pool over 16 offsets + neighbor normals |
+| Device | `cuda` / NVIDIA GeForce GTX 1080 |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **10h 09m 57.20s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6/`
+- Weights: `models/2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6/best.pt`
+- Wall: **10h 09m 57.20s** (`started=2026-09-05T12:15:44` → `finished=2026-09-05T22:25:41`)
+- `best_epoch: 20`, `best_metric: 0.964512` (val_iou)
+
+### Vs the XYZ run on this catalog
+
+| | `15-52-00` best @ 14 | `15-52-00` @ 20 | **this run best @ 20** | this run @ 10 |
+|---|---|---|---|---|
+| val_acc | 0.982 | 0.980 | **0.994** | 0.994 |
+| val_iou / val_f1 | 0.894 / 0.944 | 0.887 / 0.940 | **0.965 / 0.982** | 0.963 / 0.981 |
+| train_acc | 0.991 | 0.991 | 0.997 | 0.996 |
+| loss | 0.023 | 0.022 | **0.0087** | 0.0097 |
+| meshes / NPZs | 1227 / 2454 | same | same | same |
+| val points | 6.92M | same | same | same |
+
+Do **not** give +0.069 IoU to normals alone. The crease cap also changed the 1024-dot cloud. Epoch 1 was already 0.907 (old finished best was 0.894). Epochs 10–19 sat at 0.963 and did not replace `best.pt`; epoch 20 added +0.0013. That last tick is real under the strict rule and is still noise-sized. Train and val stay together. A resume is not justified. Wider/deeper already failed on this head family.
+
+This hard catalog now sits in the easier mixed-catalog band (`15-25-10` 0.954, `15-59-37` 0.962). Fill is the real win: organics that were empty on `15-52-00` now fill. `nr4`/`nr5` leftover is thin / dense corridors only.
+
+**Not shown by this run**
+
+- How much of the Fill jump is crease cap vs normals (needs a 3-D train with the cap on)
+- That more Linear layers would use the extra 3 channels (train/val already together)
+
+**Bottom line:** this `best.pt` is the inspect default. Organics transferred; do not add more `extruded_*` hoping for humans — that already happened. Do not resume. Do not stack width/depth. Next useful work is the remaining thin `nr4`/`nr5` corridors, not another catalog dump.
 
 ---
 

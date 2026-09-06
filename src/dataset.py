@@ -27,6 +27,7 @@ from data_npz import (
     shape_key,
 )
 from geometry.mesh_io import load_obj_triangles
+from geometry.surface import apply_envelope_aabb, undo_envelope_aabb
 from normalize import apply_normalization, compute_center_scale
 
 DEFAULT_BATCH_SIZE = 1024
@@ -302,11 +303,12 @@ def apply_shared_mesh_aabb(parts: Sequence[OccupancyPointDataset]) -> None:
             if part.envelope is not None:
                 env = np.asarray(part.envelope.numpy(), dtype=np.float32)
                 old_c = np.asarray(part.center, dtype=np.float32).reshape(3)
-                world_env = env * np.float32(part.scale) + old_c
+                # Undo/remap XYZ only; unit normals stay directions.
+                world_env = undo_envelope_aabb(env, old_c, float(part.scale))
             part.xyz = torch.from_numpy(apply_normalization(world_xyz, center, scale))
             if world_env is not None:
                 part.envelope = torch.from_numpy(
-                    apply_normalization(world_env, center, scale)
+                    apply_envelope_aabb(world_env, center, scale)
                 )
             part.center = center
             part.scale = scale

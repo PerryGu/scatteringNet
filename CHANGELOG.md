@@ -3,6 +3,18 @@
 Completed work for the occupancy MLP MVP.  
 
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
+Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
+
+## 2026-09-05 23:00 — Viewer: envelope normal ticks
+
+``/api/envelope-obj`` now also returns ``normals_b64`` (same unit face normals occupancy uses). Envelope still sends XYZ in ``points_b64``.
+The purple overlay draws a short tick along each normal. Run model already fed 6-D envelopes to ``envelope_dim=6`` checkpoints; this is display only.
+``main.js?v=37``. Old XYZ ``best.pt`` infer is unchanged.
+
+## 2026-09-05 15:00 — Envelope: XYZ + face normal
+
+Each envelope sample is now ``(x, y, z, nx, ny, nz)``: the unit normal of the triangle the dot sits on. k-NN still picks neighbors by XYZ; each of the ``k`` slots is offset plus that neighbor's normal.
+AABB remaps positions only. New ``best.pt`` stores ``envelope_dim=6``. Old XYZ checkpoints still load (first Linear in-features = 3). Viewer overlay still draws XYZ.
 
 ## 2026-09-05 14:00 — Viewer: drop Faces overlay
 
@@ -15,6 +27,12 @@ Envelope Mix still has a **Faces / Edges** split; that is area vs crease samples
 Crease share is now ``2 ×`` (sharp interior-edge length / all interior edges, dihedral ≥ 20°), then never above Mix. Leftover dots go to faces; ``n_surface`` stays 1024.
 At mix 75: a cube still gets 768 crease dots; a hull with ~10% folds gets 205 crease / 819 area; no creases → all 1024 area.
 Viewer Envelope ``n_area`` / ``n_edge`` follow that plan. Infer already uses it, so an old ``mix=75`` ``best.pt`` sees a different cloud until a retrain.
+
+## 2026-09-05 12:00 — Train: prim_extruded_nr45_knn16_n6
+
+Catalog train ``2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6`` (from scratch). Same catalog as ``15-52-00``, crease cap + ``envelope_dim=6``.
+``best.pt`` epoch 20, val_iou 0.965 / acc 0.994, wall 10h 10m. Fill: organics transferred; thin ``nr4``/``nr5`` corridors still leak.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-05-2300--prim_extruded_nr45_knn16_n6-xyz--face-normal).
 
 ## 2026-09-05 12:00 — Drop face-token occupancy encoder
 
@@ -50,6 +68,12 @@ Removed all ``extrude_*_nr4_*`` / ``nr5_*`` meshes and occupancy files (open-she
 
 ``dataset_builder.py --glob`` matches filenames only so an Extrude folder dump can emit ``nr5`` NPZs without rewriting the other 2500 meshes.
 
+## 2026-09-04 15:00 — Train: prim_extruded_nr45_knn16
+
+Catalog train ``2026-09-04_15-52-00_prim_extruded_nr45_knn16`` (from scratch). Primitives + smooth ``extruded_*`` + capped ``nr1``/``nr4``/``nr5``, knn16 mix 75.
+``best.pt`` epoch 14, val_iou 0.894 / acc 0.982, wall 8h 04m. Fill: easy extrudes + smooth usable; high-round arms and organics still failed.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-05-0800--prim_extruded_nr45_knn16-smooth--high-round-catalog).
+
 ## 2026-09-04 14:00 — Maya extruded-smooth: multi-direction recipes
 
 Limb faces come from down / up / forward / back (lying uses +X as forward). Star recipe extrudes several axes separately. Cap scale is ``localScale``, not inset offset. ``run(limit=10)`` interleaves stand and lie.
@@ -66,13 +90,31 @@ New Script Editor batch [`src/scatter_generation/maya_batch_extruded_smooth.py`]
 
 Hover Open keeps the last 10 successful loads (was 5). Occupancy train code unchanged.
 
+## 2026-09-03 16:00 — Train: prim_extrude_knn16_n2048
+
+Catalog train ``2026-09-03_15-59-37_prim_extrude_knn16_n2048`` (from scratch). Same mixed catalog as ``15-25-10``, ``n_surface: 2048``.
+``best.pt`` epoch 19, val_iou 0.962 / acc 0.990, wall 4h 58m. Fill did not beat 1024; keep ``15-25-10``.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-03-2100--prim_extrude_knn16_n2048-denser-envelope).
+
 ## 2026-09-03 13:00 — Training log Fill gallery
 
 Fill stills in [`docs/training_log.md`](docs/training_log.md) sit in a 3-column grid; click a thumbnail to open the PNG. Occupancy train code unchanged.
 
+## 2026-09-02 15:00 — Train: prim_extrude_knn16
+
+Catalog train ``2026-09-02_15-25-10_prim_extrude_knn16`` (from scratch). Mixed primitives + capped extrude, knn16 mix 75.
+``best.pt`` epoch 20, val_iou 0.954 / acc 0.988, wall 4h 32m. Fill won holes + simple CAD; high-round arms later.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-03-1200--prim_extrude_knn16-mixed-primitives--extrude).
+
 ## 2026-09-02 15:00 — Catalog union + per-glob mesh cap
 
 YAML ``npz_catalog`` unions several globs. Optional ``max_shapes`` keeps that many unique meshes per glob (sampled with ``seed``) so a mixed primitives + extrude train is not 2500 ``nr1`` files. Explicit ``npz_paths`` still wins. Live YAML is all primitive families plus 700 ``nr1``, 100 ``nr3``, and 80 ``nr4`` meshes (no ``nr2`` NPZs on disk), ``knn_k: 16``, mix 75, ``run_name: prim_extrude_knn16``.
+
+## 2026-09-02 11:00 — Train: extrude_nr1_surface_knn16
+
+Catalog train ``2026-09-02_11-18-13_extrude_nr1_surface_knn16`` (from scratch). ``nr1`` only, local k-NN 16 + mix 75.
+``best.pt`` epoch 19, val_iou 0.974 / acc 0.996, wall 2h 17m. Local k-NN won on this val vs 40-epoch global mix 75.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-03-1200--extrude_nr1_surface-knn16-nr1-only).
 
 ## 2026-09-02 10:00 — Local k-NN envelope occupancy
 
@@ -85,7 +127,23 @@ Occupancy continuation after Phase 2 exhaustion (global envelope could not fill 
 
 ## ================= END OF PHASE 2 =================
 
+## 2026-09-01 23:00 — Train: extrude_nr1_surface_mix75 look-see
 
+Resume ``2026-09-01_23-39-04_extrude_nr1_surface_mix75`` (epochs 29–40 from ``22-01-09``).
+``best.pt`` epoch 30, val_iou 0.796 / acc 0.965, wall 1h 22m. Nothing after 30 replaced best; do not resume again.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-02-0800--extrude_nr1_surface-mix75-look-see-epochs-2940).
+
+## 2026-09-01 22:00 — Train: extrude_nr1_surface_mix75 continuation
+
+Resume ``2026-09-01_22-01-09_extrude_nr1_surface_mix75`` (epochs 21–30 from ``18-27-19``).
+``best.pt`` epoch 28, val_iou 0.780 / acc 0.963, wall 1h 06m. Small real gain vs the 20-epoch mix-75 parent.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-01-2300--extrude_nr1_surface-mix75-continuation-epochs-2130).
+
+## 2026-09-01 18:00 — Train: extrude_nr1_surface_mix75
+
+Catalog train ``2026-09-01_18-27-19_extrude_nr1_surface_mix75`` (from scratch). Crease-weighted envelope mix 75, ``nr1``, ``h64/d4``.
+``best.pt`` epoch 20, val_iou 0.771 / acc 0.961, wall 2h 13m. Beat the area-envelope 20-epoch match.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-01-2100--extrude_nr1_surface-mix75-crease-weighted-envelope).
 
 ## 2026-09-01 17:00 — Envelope mix in occupancy train
 
@@ -114,6 +172,12 @@ Create dots uses a two-column grid so Mix lines up with Count and Density. Occup
 ## 2026-09-01 13:00 — Viewer: envelope and face-token checkpoints
 
 Job A / Job B rebuild shape tokens from the **selected** ``best.pt`` (envelope ``(N,3)`` or faces ``(F,12)``), not from live YAML. Model list labels ``(envelope)`` / ``(faces)``. Occupancy train code unchanged.
+
+## 2026-09-01 10:00 — Train: extrude_nr1_mesh
+
+Catalog train ``2026-09-01_10-38-57_extrude_nr1_mesh`` (from scratch). Face tokens + xyz, ``shape_encoder: mesh``.
+``best.pt`` epoch 19, val_iou 0.691 / acc 0.946, wall 2h 11m. Lost to the envelope baseline; do not treat as the new default.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-01-1400--extrude_nr1_mesh-face-tokens).
 
 ## 2026-09-01 09:00 — Step 10: MeshFaceEncoder
 
@@ -167,9 +231,33 @@ Open, drop, and recent-click load a Wavefront OBJ (local ``OBJLoader``, camera f
 
 ``src/viewer/``: dark Three.js page (orbit, grid, Open, recents stub). ``serve.py`` / ``open_viewer.bat`` (local Three.js, free port, ``.js`` as ``text/javascript``, ``no-store``). Plans: Job A = NPZ points; Job B = OBJ fill + envelope; Gradio optional. Occupancy train code unchanged.
 
+## 2026-08-30 23:00 — Train: extrude_nr1_surface hidden 128 depth 6
+
+Catalog train ``2026-08-30_22-59-57_extrude_nr1_surface`` (from scratch). Width+depth A/B: ``hidden: 128`` ``depth: 6``.
+``best.pt`` epoch 19, val_acc 0.959 / IoU 0.754, wall 2h 28m. Tied with ``h64/d4``; not the new baseline.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-08-31-0900--extrude_nr1_surface-hidden-128-depth-6-widthdepth-ab).
+
+## 2026-08-30 20:00 — Train: extrude_nr1_surface hidden 128
+
+Catalog train ``2026-08-30_20-31-00_extrude_nr1_surface`` (from scratch). Width A/B: ``hidden: 128``.
+``best.pt`` epoch 18, val_acc 0.959 / IoU 0.757, wall 2h 17m. Neutral vs ``h64/d4`` at 20 epochs.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-08-30-2200--extrude_nr1_surface-hidden-128-width-ab).
+
+## 2026-08-30 19:00 — Train: extrude_nr1_surface continuation
+
+Resume ``2026-08-30_18-40-06_extrude_nr1_surface`` (epochs 21–30 from ``15-50-05``).
+``best.pt`` epoch 25, val_acc 0.962 / IoU 0.775, wall 1h 01m. Small gain; another resume not justified.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-08-30-2000--extrude_nr1_surface-continuation-epochs-2130).
+
 ## 2026-08-30 18:00 — Resume catalog train from best.pt
 
 ``train_multi_npz`` accepts ``--resume-run-id`` / ``--resume``. It loads that ``best.pt``, keeps the stored selection score, and runs YAML ``epochs`` more (printed as 21…). New ``runs/`` + ``models/``; Adam state is restored only if the checkpoint stored it.
+
+## 2026-08-30 16:00 — Train: extrude_nr1_surface (mesh-identity val)
+
+Catalog train ``2026-08-30_15-50-05_extrude_nr1_surface`` (from scratch). Envelope + xyz, mesh-identity val.
+``best.pt`` epoch 20, val_acc 0.958 / IoU 0.756, wall 2h 14m. Envelope path survived a real mesh holdout.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-08-30-1800--extrude_nr1_surface-mesh-identity-val-hygiene-replay).
 
 ## 2026-08-30 15:00 — Collate: pin_memory on expanded envelopes
 
@@ -199,6 +287,12 @@ Catalog ``shape_id`` is a stable integer per ``mesh_split_key`` (sorted unique O
 
 ``test_fraction`` now holds out unique OBJs, not NPZ files. ``mesh_split_key`` / ``split_train_test_by_mesh`` keep every file of one mesh on the same side. Snapshot uses ``split: mesh`` plus ``n_train_meshes`` / ``n_test_meshes``.
 
+## 2026-08-29 20:00 — Train: extrude_nr1_surface (file holdout)
+
+Catalog train ``2026-08-29_19-43-15_extrude_nr1_surface`` (from scratch). First envelope + xyz on ``nr1``.
+``best.pt`` epoch 18, val_acc 0.970 / IoU 0.691, wall 1h 59m. Envelope pairing helped a lot vs xyz-only.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-08-29-2100--extrude_nr1_surface-level-1-extrudes-envelope--xyz).
+
 ## 2026-08-29 18:00 — Train/test 80/20 file split
 
 Catalog train holds out whole files as a **test** set (``test_fraction: 0.20``). Terminal and snapshot use ``test_acc`` / ``n_test_files``.
@@ -218,6 +312,12 @@ Added ``load_points_labels_mesh`` (``load_points_labels`` unchanged) and ``src/g
 ## 2026-08-29 11:00 — Run snapshot records file and point counts
 
 ``runs/<id>/config.yaml`` now stamps ``n_files``, ``n_points``, ``n_train``, and ``n_val`` after the catalog is loaded. ``gpu`` (card name) was already in the snapshot next to ``device``.
+
+## 2026-08-29 09:00 — Train: extrude_nr1 (xyz-only)
+
+Catalog train ``2026-08-29_09-28-54_extrude_nr1`` (from scratch). Xyz-only OccupancyMLP, pooled point split.
+``best.pt`` epoch 20, acc 0.853 (no IoU), wall 1h 21m. Loop works; still too weak / xyz-only to beat “guess outside.”
+Write-up: [docs/training_log.md](docs/training_log.md#2026-08-29-1000--extrude_nr1-first-level-cubes-xyz-only).
 
 ## 2026-08-29 09:00 — Single-file infer and leftover YAML knobs removed
 

@@ -167,11 +167,11 @@ class OccupancyPointDatasetTests(unittest.TestCase):
             loader = make_dataloader(ds, batch_size=4, shuffle=False, pin_memory=True)
             b_xyz, b_y, b_env, b_id = next(iter(loader))
         self.assertEqual(tuple(xyz.shape), (3,))
-        self.assertEqual(tuple(envelope.shape), (64, 3))
+        self.assertEqual(tuple(envelope.shape), (64, 6))
         self.assertEqual(len(ds[0]), 4)
         self.assertEqual(int(shape_id.item()), 3)
         self.assertEqual(tuple(b_xyz.shape), (4, 3))
-        self.assertEqual(tuple(b_env.shape), (4, 64, 3))
+        self.assertEqual(tuple(b_env.shape), (4, 64, 6))
         self.assertEqual(tuple(b_id.shape), (4,))
         self.assertTrue(torch.equal(b_id, torch.tensor([3, 3, 3, 3])))
 
@@ -193,11 +193,11 @@ class OccupancyPointDatasetTests(unittest.TestCase):
             ds = OccupancyEncoderDataset(path, data_dir=root, n_surface=50, seed=1)
             _xyz, _y, envelope, _sid = ds[0]
         self.assertEqual(len(ds), 8)
-        self.assertEqual(tuple(envelope.shape), (50, 3))
+        self.assertEqual(tuple(envelope.shape), (50, 6))
 
     def test_collate_mixed_shape_ids_keeps_one_envelope_per_id(self) -> None:
-        env_a = torch.arange(12, dtype=torch.float32).reshape(4, 3)
-        env_b = torch.ones(4, 3)
+        env_a = torch.arange(24, dtype=torch.float32).reshape(4, 6)
+        env_b = torch.ones(4, 6)
         batch = [
             (torch.zeros(3), torch.zeros(1), env_a, torch.tensor(0)),
             (torch.ones(3), torch.ones(1), env_a, torch.tensor(0)),
@@ -206,14 +206,14 @@ class OccupancyPointDatasetTests(unittest.TestCase):
         xyz, y, envelope, shape_id = occupancy_collate(batch)
         self.assertEqual(tuple(xyz.shape), (3, 3))
         self.assertEqual(tuple(y.shape), (3, 1))
-        self.assertEqual(tuple(envelope.shape), (3, 4, 3))
+        self.assertEqual(tuple(envelope.shape), (3, 4, 6))
         self.assertTrue(torch.equal(shape_id, torch.tensor([0, 0, 1])))
         self.assertTrue(torch.equal(envelope[0], env_a))
         self.assertTrue(torch.equal(envelope[1], env_a))
         self.assertTrue(torch.equal(envelope[2], env_b))
 
     def test_same_id_collate_envelope_is_pinnable(self) -> None:
-        env = torch.arange(12, dtype=torch.float32).reshape(4, 3)
+        env = torch.arange(24, dtype=torch.float32).reshape(4, 6)
         batch = [
             (torch.zeros(3), torch.zeros(1), env, torch.tensor(0)),
             (torch.ones(3), torch.ones(1), env, torch.tensor(0)),

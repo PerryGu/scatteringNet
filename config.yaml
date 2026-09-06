@@ -21,12 +21,12 @@ optimizer: adam   # adam | adamw | sgd
 val_fraction: 0.20
 
 # --- Geometry ---
-# none = xyz-only OccupancyMLP. surface = envelope cloud + OccupancyEncoder.
-# Occupancy labels stay in the NPZ.
+# none = xyz-only OccupancyMLP. surface = envelope (XYZ + face normal) + OccupancyEncoder.
+# Occupancy labels stay in the NPZ. New trains write envelope_dim=6 on best.pt.
 shape_encoder: surface   # none / surface
 n_surface: 1024          # Envelope samples on the joined OBJ
-envelope_mix: 75         # 0 = face-area darts (old envelope), 100 = creases. Same split as the viewer Mix slider.
-knn_k: 16                # 0 = global z only. 16 = nearest envelope dots per query (local occupancy).
+envelope_mix: 75         # 0 = area-weighted samples, 100 = creases. Same split as the viewer Mix slider.
+knn_k: 16                # 0 = global z only. 16 = nearest envelope dots per query (offset + neighbor normal).
 # knn_local_dim: 64      # z_local width; omit to use latent_dim / hidden
 # latent_dim: 64         # OccupancyEncoder z width; omit to use hidden
 
@@ -59,7 +59,7 @@ max_files_per_shape: 2
 
 # --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
-run_name: prim_extruded_nr45_knn16
+run_name: prim_extruded_nr45_knn16_n6
 
 # --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.

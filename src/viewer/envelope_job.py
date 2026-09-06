@@ -54,9 +54,11 @@ def sample_crease_surface(
 ) -> tuple[PointsArray, NDArray[np.int64], int]:
     """``mix=100`` occupancy envelope plus crease count (overlay tests)."""
     count = int(n_surface)
-    points = sample_surface_points(
+    cloud = sample_surface_points(
         vertices, faces, count, seed=int(seed), mix=100
     )
+    # Overlay / hug tests use XYZ only; normals stay on the occupancy path.
+    points = np.ascontiguousarray(cloud[:, :3])
     n_creases = n_sharp_edges(vertices, faces)
     face_idx = np.zeros((int(points.shape[0]),), dtype=np.int64)
     return points, face_idx, n_creases
@@ -76,9 +78,11 @@ def envelope_from_obj_text(
     # Same cap-and-spill as occupancy so the status line matches the cloud.
     frac = crease_length_fraction(vertices, faces) if mix_v > 0 else 0.0
     n_area, n_edge = plan_envelope_counts(count, mix_v, frac)
-    points = sample_surface_points(
+    cloud = sample_surface_points(
         vertices, faces, count, seed=int(seed), mix=mix_v
     )
+    points = np.ascontiguousarray(cloud[:, :3])
+    normals = np.ascontiguousarray(cloud[:, 3:])
     n_creases = n_sharp_edges(vertices, faces) if n_edge > 0 else 0
     return {
         "n": int(points.shape[0]),
@@ -86,5 +90,6 @@ def envelope_from_obj_text(
         "n_edge": int(n_edge),
         "n_creases": int(n_creases),
         "mix": int(mix_v),
-        "points_b64": base64.b64encode(np.ascontiguousarray(points)).decode("ascii"),
+        "points_b64": base64.b64encode(points).decode("ascii"),
+        "normals_b64": base64.b64encode(normals).decode("ascii"),
     }

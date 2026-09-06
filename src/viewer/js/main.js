@@ -473,19 +473,21 @@ function removeEnvelopeLayer() {
     envelopeVisible = false;
     return;
   }
-  const old = loadedRoot.getObjectByName("envelope-points");
+  const old =
+    loadedRoot.getObjectByName("envelope-overlay") ||
+    loadedRoot.getObjectByName("envelope-points");
   if (old) {
     loadedRoot.remove(old);
     disposeObject3d(old);
   }
 }
 
-function attachEnvelopeLayer(xyz) {
+function attachEnvelopeLayer(xyz, nrm) {
   if (!loadedRoot) {
     return;
   }
   removeEnvelopeLayer();
-  loadedRoot.add(makeEnvelopeLayer(xyz, currentPointSize()));
+  loadedRoot.add(makeEnvelopeLayer(xyz, currentPointSize(), nrm));
   envelopeVisible = true;
   applyInspectToPoints();
 }
@@ -862,7 +864,7 @@ async function runEnvelope(opts) {
       nSurface: nSurface,
       mix: mix,
     });
-    attachEnvelopeLayer(sampled.points);
+    attachEnvelopeLayer(sampled.points, sampled.normals);
     syncInspectEnabled();
     const nArea = Number(sampled.nArea) || 0;
     const nEdge = Number(sampled.nEdge) || 0;
@@ -872,7 +874,7 @@ async function runEnvelope(opts) {
         (objFileName || "mesh") +
         "”: " +
         sampled.n.toLocaleString() +
-        " purple points (" +
+        " purple points + normals (" +
         nArea.toLocaleString() +
         " faces / " +
         nEdge.toLocaleString() +

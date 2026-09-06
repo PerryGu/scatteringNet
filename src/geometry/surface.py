@@ -4,8 +4,9 @@
 lottery as the viewer Mix slider). Values in between split ``n_surface``.
 If sharp edges are only a small fraction of the mesh, unused crease
 slots spill back to face-area samples so a few folds cannot take most
-of the cloud. World clouds are cached per ``(mesh_key, n_surface, seed, mix)``.
-AABB normalization is applied by the caller.
+of the cloud. Each sample is ``(x, y, z, nx, ny, nz)``: position plus
+the unit normal of the triangle it sits on. World clouds are cached per
+``(mesh_key, n_surface, seed, mix)``. AABB is applied to XYZ only.
 """
 
 from __future__ import annotations
@@ -15,7 +16,11 @@ import trimesh
 from numpy.typing import NDArray
 from trimesh.sample import sample_surface
 
+from normalize import apply_normalization
+
 PointsArray = NDArray[np.float32]
+ENVELOPE_XYZ_DIM = 3
+ENVELOPE_FEAT_DIM = 6
 
 # Shared-edge dihedral at or above this is a crease (cube walls are 90°).
 _SHARP_RAD = float(np.deg2rad(20.0))
@@ -24,7 +29,7 @@ _ON_EDGE_FRAC = 0.65
 # A fold that is 10% of interior edges may take at most 20% of the envelope.
 _CREASE_OVERREP = 2.0
 
-# Same OBJ + count + seed + mix → same world samples.
+# Same OBJ + count + seed + mix → same world samples (always 6-D).
 _ENVELOPE_CACHE: dict[tuple[str, int, int, int], PointsArray] = {}
 
 
@@ -182,14 +187,76 @@ def _offset_into_triangle(
     return p + inward * step
 
 
+def _pack_xyz_normal(xyz: np.ndarray, normals: np.ndarray) -> PointsArray:
+    """Concatenate XYZ with unit face normals → ``(N, 6)``."""
+    pos = np.asarray(xyz, dtype=np.float32)
+    nrm = np.asarray(normals, dtype=np.float32)
+    if pos.shape != nrm.shape or pos.ndim != 2 or pos.shape[1] != 3:
+        raise ValueError(
+            f"xyz/normals must be (N, 3), got {tuple(pos.shape)} / {tuple(nrm.shape)}"
+        )
+    length = np.linalg.norm(nrm, axis=1, keepdims=True)
+    ok = length[:, 0] > 1e-12
+    unit = np.zeros_like(nrm)
+    unit[ok] = nrm[ok] / length[ok]
+    return np.concatenate([pos, unit], axis=1)
+
+
+def apply_envelope_aabb(
+    env: np.ndarray, center: np.ndarray, scale: float
+) -> PointsArray:
+    """AABB-normalize XYZ; leave normals as unit directions."""
+    arr = np.asarray(env, dtype=np.float32)
+    if arr.ndim != 2 or arr.shape[1] not in (ENVELOPE_XYZ_DIM, ENVELOPE_FEAT_DIM):
+        raise ValueError(
+            f"envelope must be (N, 3) or (N, 6), got {tuple(arr.shape)}"
+        )
+    out = arr.copy()
+    out[:, :3] = apply_normalization(out[:, :3], center, scale)
+    return out
+
+
+def undo_envelope_aabb(
+    env: np.ndarray, center: np.ndarray, scale: float
+) -> PointsArray:
+    """Undo AABB on XYZ only."""
+    arr = np.asarray(env, dtype=np.float32)
+    if arr.ndim != 2 or arr.shape[1] not in (ENVELOPE_XYZ_DIM, ENVELOPE_FEAT_DIM):
+        raise ValueError(
+            f"envelope must be (N, 3) or (N, 6), got {tuple(arr.shape)}"
+        )
+    out = arr.copy()
+    c = np.asarray(center, dtype=np.float32).reshape(3)
+    out[:, :3] = out[:, :3] * np.float32(scale) + c
+    return out
+
+
+def project_envelope_dim(env: np.ndarray, dim: int) -> PointsArray:
+    """Keep XYZ+normal or drop to XYZ for an older checkpoint."""
+    arr = np.asarray(env, dtype=np.float32)
+    want = int(dim)
+    if want == ENVELOPE_FEAT_DIM:
+        if arr.ndim != 2 or arr.shape[1] != ENVELOPE_FEAT_DIM:
+            raise ValueError(f"expected (N, 6) envelope, got {tuple(arr.shape)}")
+        return arr
+    if want == ENVELOPE_XYZ_DIM:
+        if arr.ndim != 2 or arr.shape[1] not in (ENVELOPE_XYZ_DIM, ENVELOPE_FEAT_DIM):
+            raise ValueError(f"expected (N, 3|6) envelope, got {tuple(arr.shape)}")
+        return arr[:, :3]
+    raise ValueError(f"envelope dim must be 3 or 6, got {want}")
+
+
 def _sample_area(
     verts: np.ndarray, tris: np.ndarray, count: int, seed: int
 ) -> PointsArray:
     mesh = trimesh.Trimesh(vertices=verts, faces=tris, process=False)
-    points, _face_idx = sample_surface(mesh, count, seed=int(seed))
-    out = np.asarray(points, dtype=np.float32)
-    if out.shape != (count, 3):
-        raise ValueError(f"expected envelope shape {(count, 3)}, got {tuple(out.shape)}")
+    points, face_idx = sample_surface(mesh, count, seed=int(seed))
+    nrm = _triangle_normals(verts, tris)[np.asarray(face_idx, dtype=np.int64)]
+    out = _pack_xyz_normal(points, nrm)
+    if out.shape != (count, ENVELOPE_FEAT_DIM):
+        raise ValueError(
+            f"expected envelope shape {(count, ENVELOPE_FEAT_DIM)}, got {tuple(out.shape)}"
+        )
     return out
 
 
@@ -222,7 +289,10 @@ def _sample_crease(
         -sigma * np.log(np.clip(rng.random(count), 1e-12, 1.0)),
     )
     side = rng.integers(0, 2, size=count)
-    out = np.empty((count, 3), dtype=np.float32)
+    # One incident face per crease sample — not both sides.
+    face_nrms = _triangle_normals(welded_v, welded_f)
+    xyz = np.empty((count, 3), dtype=np.float32)
+    nrm = np.empty((count, 3), dtype=np.float32)
     for k in range(count):
         i0, i1, incident = sharp[int(picks[k])]
         a = welded_v[i0]
@@ -232,8 +302,9 @@ def _sample_crease(
         tri = welded_f[fi]
         c_idx = int(tri[0] + tri[1] + tri[2] - i0 - i1)
         q = _offset_into_triangle(p, a, b, welded_v[c_idx], float(dists[k]))
-        out[k] = q.astype(np.float32)
-    return out
+        xyz[k] = q.astype(np.float32)
+        nrm[k] = face_nrms[fi].astype(np.float32)
+    return _pack_xyz_normal(xyz, nrm)
 
 
 def sample_surface_points(
@@ -246,7 +317,7 @@ def sample_surface_points(
     cache_key: str | None = None,
 ) -> PointsArray:
     """
-    Sample ``n_surface`` envelope points.
+    Sample ``n_surface`` envelope points as ``(N, 6)`` XYZ + unit normal.
 
     ``mix`` 0 is the original area-weighted cloud (old checkpoints).
     ``mix`` 100 is crease-hugging, then capped by crease length fraction.
@@ -283,9 +354,9 @@ def sample_surface_points(
         if n_crease > 0:
             chunks.append(_sample_crease(verts, tris, n_crease, int(seed) + 1))
         out = np.concatenate(chunks, axis=0).astype(np.float32, copy=False)
-    if out.shape != (count, 3):
+    if out.shape != (count, ENVELOPE_FEAT_DIM):
         raise ValueError(
-            f"expected envelope shape {(count, 3)}, got {tuple(out.shape)}"
+            f"expected envelope shape {(count, ENVELOPE_FEAT_DIM)}, got {tuple(out.shape)}"
         )
     if key is not None:
         _ENVELOPE_CACHE[key] = out

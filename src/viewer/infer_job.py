@@ -23,10 +23,15 @@ if str(_SRC) not in sys.path:
 
 from infer_multi_npz import load_occupancy_model  # noqa: E402
 from geometry.mesh_io import load_obj_triangles  # noqa: E402
-from geometry.surface import sample_surface_points  # noqa: E402
+from geometry.surface import (  # noqa: E402
+    apply_envelope_aabb,
+    project_envelope_dim,
+    sample_surface_points,
+)
 from metrics import occupancy_metrics  # noqa: E402
 from normalize import apply_normalization, compute_center_scale  # noqa: E402
 from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND  # noqa: E402
+from occupancy_encoder import envelope_dim_from_ckpt  # noqa: E402
 
 from mesh_access import resolve_viewer_mesh  # noqa: E402
 from model_access import match_checkpoint_part, resolve_viewer_checkpoint  # noqa: E402
@@ -148,7 +153,7 @@ def _geom_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
     """
     Build the envelope this checkpoint was trained with.
 
-    ``surface`` → ``(1, n_surface, 3)`` envelope XYZ.
+    ``surface`` → ``(1, n_surface, C)`` envelope (C from checkpoint).
     ``none`` → no geometry (xyz-only MLP).
     Count and mix come from the checkpoint, not live YAML.
     """
@@ -169,7 +174,8 @@ def _geom_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
             mix=mix,
             cache_key=cache_key,
         )
-        env = apply_normalization(world, center, scale)
+        env = apply_envelope_aabb(world, center, scale)
+        env = project_envelope_dim(env, envelope_dim_from_ckpt(ckpt))
         geom = torch.from_numpy(env).unsqueeze(0)
         shape_id = torch.zeros(1, dtype=torch.long)
         return geom, shape_id

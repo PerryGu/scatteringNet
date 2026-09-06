@@ -1,6 +1,6 @@
 /**
- * Envelope overlay: purple dots hug sharp edges (helper).
- * Does not classify occupancy and does not import occupancy Python.
+ * Envelope overlay: purple dots plus a short tick along each face normal.
+ * Same samples as occupancy (XYZ + unit normal). Does not classify.
  */
 
 import * as THREE from "../vendor/three.module.js";
@@ -41,11 +41,75 @@ export function clampNSurface(raw) {
 }
 
 /**
+ * Tick length from the cloud's AABB diagonal (visible, not mesh-scale locked).
  * @param {Float32Array} xyz
- * @param {number} pointSize
- * @returns {THREE.Points}
+ * @returns {number}
  */
-export function makeEnvelopeLayer(xyz, pointSize) {
+export function envelopeTickLength(xyz) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i < xyz.length; i += 3) {
+    const x = xyz[i];
+    const y = xyz[i + 1];
+    const z = xyz[i + 2];
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (z < minZ) minZ = z;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+    if (z > maxZ) maxZ = z;
+  }
+  const diag = Math.hypot(maxX - minX, maxY - minY, maxZ - minZ);
+  return Math.max(diag * 0.04, 1e-4);
+}
+
+/**
+ * Short segment from each sample along its stored face normal.
+ * @param {Float32Array} xyz
+ * @param {Float32Array} nrm
+ * @param {number} length
+ * @returns {THREE.LineSegments}
+ */
+export function makeEnvelopeNormalTicks(xyz, nrm, length) {
+  const n = xyz.length / 3;
+  const segs = new Float32Array(n * 6);
+  const len = Number(length);
+  for (let i = 0; i < n; i += 1) {
+    const i3 = i * 3;
+    const o = i * 6;
+    segs[o] = xyz[i3];
+    segs[o + 1] = xyz[i3 + 1];
+    segs[o + 2] = xyz[i3 + 2];
+    segs[o + 3] = xyz[i3] + nrm[i3] * len;
+    segs[o + 4] = xyz[i3 + 1] + nrm[i3 + 1] * len;
+    segs[o + 5] = xyz[i3 + 2] + nrm[i3 + 2] * len;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(segs, 3));
+  const material = new THREE.LineBasicMaterial({
+    color: COLOR_ENVELOPE,
+    transparent: true,
+    opacity: 0.75,
+  });
+  const lines = new THREE.LineSegments(geometry, material);
+  lines.name = "envelope-normals";
+  return lines;
+}
+
+/**
+ * Purple dots plus normal ticks in one group (``envelope-overlay``).
+ * @param {Float32Array} xyz
+ * @param {Float32Array|null} nrm
+ * @param {number} pointSize
+ * @returns {THREE.Group}
+ */
+export function makeEnvelopeLayer(xyz, pointSize, nrm) {
+  const group = new THREE.Group();
+  group.name = "envelope-overlay";
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(xyz, 3));
   const material = new THREE.PointsMaterial({
@@ -55,12 +119,16 @@ export function makeEnvelopeLayer(xyz, pointSize) {
   });
   const pts = new THREE.Points(geometry, material);
   pts.name = "envelope-points";
-  return pts;
+  group.add(pts);
+  if (nrm && nrm.length === xyz.length) {
+    group.add(makeEnvelopeNormalTicks(xyz, nrm, envelopeTickLength(xyz)));
+  }
+  return group;
 }
 
 /**
  * @param {{objText: string, nSurface: number, mix: number}} payload
- * @returns {Promise<{points: Float32Array, n: number, nCreases: number, nArea: number, nEdge: number}>}
+ * @returns {Promise<{points: Float32Array, normals: Float32Array|null, n: number, nCreases: number, nArea: number, nEdge: number}>}
  */
 export async function envelopeObjOnHelper(payload) {
   const res = await fetch("/api/envelope-obj", {
@@ -81,8 +149,16 @@ export async function envelopeObjOnHelper(payload) {
   if (xyz.length !== n * 3) {
     throw new Error("envelope buffer length does not match n");
   }
+  let normals = null;
+  if (body.normals_b64) {
+    normals = base64ToFloat32(body.normals_b64);
+    if (normals.length !== n * 3) {
+      throw new Error("envelope normal buffer length does not match n");
+    }
+  }
   return {
     points: xyz,
+    normals: normals,
     n: n,
     nCreases: Number(body.n_creases) || 0,
     nArea: Number(body.n_area) || 0,

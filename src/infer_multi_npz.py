@@ -16,10 +16,10 @@ import torch
 from config import OccupancyConfig, as_data_relative, load_config, repo_root
 from data_npz import load_points_labels, load_points_labels_mesh
 from geometry.mesh_io import load_obj_triangles
-from geometry.surface import sample_surface_points
+from geometry.surface import apply_envelope_aabb, project_envelope_dim, sample_surface_points
 from metrics import occupancy_metrics
 from normalize import apply_normalization
-from occupancy_encoder import OccupancyEncoder
+from occupancy_encoder import OccupancyEncoder, envelope_dim_from_ckpt
 from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND
 from occupancy_mlp import OccupancyMLP
 from occupancy_mlp import CHECKPOINT_KIND as MLP_KIND
@@ -84,6 +84,7 @@ def load_occupancy_model(
             shape_encoder=enc,
             knn_k=knn_k,
             knn_local_dim=knn_local,
+            envelope_dim=envelope_dim_from_ckpt(ckpt),
         )
     else:
         raise ValueError(f"unsupported checkpoint kind {kind!r}")
@@ -149,7 +150,8 @@ def infer_npz(
             mix=mix,
             cache_key=cache_key,
         )
-        arr = apply_normalization(world, center, scale)
+        arr = apply_envelope_aabb(world, center, scale)
+        arr = project_envelope_dim(arr, envelope_dim_from_ckpt(ckpt))
         geom = torch.from_numpy(arr).unsqueeze(0)
         shape_id = torch.zeros((), dtype=torch.long)
     else:

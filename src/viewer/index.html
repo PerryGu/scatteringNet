@@ -58,7 +58,7 @@
       <div id="fill-panel" hidden>
         <div class="fill-title">Create dots</div>
         <div class="fill-row">
-          <button type="button" id="btn-envelope" disabled title="Purple overlay. Mix slider splits Count between face-area samples and crease samples (viewer only, not occupancy train).">Envelope</button>
+          <button type="button" id="btn-envelope" disabled title="Purple overlay: surface samples plus a short tick along each face normal. Mix splits Count between area and crease samples.">Envelope</button>
           <div class="slider-row">
             <span title="How many surface samples. Training often uses 1024.">Count <span id="val-envelope">1024</span></span>
             <input type="range" id="sld-envelope" min="256" max="4096" step="64" value="1024" title="256–4096 surface points. Drag refreshes if Envelope is on.">
@@ -124,6 +124,6 @@
       }
     }, 2500);
   </script>
-    <script type="module" src="js/main.js?v=36"></script>
+    <script type="module" src="js/main.js?v=37"></script>
 </body>
 </html>

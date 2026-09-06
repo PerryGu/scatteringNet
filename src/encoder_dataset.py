@@ -12,8 +12,7 @@ from pathlib import Path
 import torch
 
 from dataset import OccupancyEncoderItem, OccupancyPointDataset
-from geometry.surface import sample_surface_points
-from normalize import apply_normalization
+from geometry.surface import apply_envelope_aabb, sample_surface_points
 
 
 class OccupancyEncoderDataset(OccupancyPointDataset):
@@ -48,7 +47,7 @@ class OccupancyEncoderDataset(OccupancyPointDataset):
             mix=int(envelope_mix),
             cache_key=cache_key,
         )
-        env = apply_normalization(world, self.center, self.scale)
+        env = apply_envelope_aabb(world, self.center, self.scale)
         self.n_surface = count
         self.envelope = torch.from_numpy(env)
 
