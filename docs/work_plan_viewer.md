@@ -1,8 +1,8 @@
 # Occupancy viewer — work plan
 
-**Status:** Step 7 is done (Fill points on OBJ, then Run model). Occupancy training code was not changed. Approve **Step 8** (Gradio, optional) or skip it.
+**Status:** Steps 1–7 **done**. Step 8 (Gradio, optional) was **skipped**. Occupancy training code was not changed. Viewer track is closed unless you reopen Gradio.
 
-**How work will go:** one step at a time. After each step we stop, look at it, and only then go on. Training the AI model is a separate track. This viewer does not replace that work; it helps us **see** whether the numbers from training actually mean a filled shape.
+**How work will go:** one step at a time. After each step we stop, look at it, and only then go on. Training the occupancy model is a separate track. This viewer does not replace that work; it helps us **see** whether the numbers from training actually mean a filled shape.
 
 ---
 
@@ -144,7 +144,7 @@ We will **not** add Node.js just to avoid Python. Node would not run the trained
 | **5** | Mesh look + point toggles | Transparency slider, **Wireframe** on/off, hide outside, counts |
 | **6** | **Select a model**; run on an **NPZ** | **Truth** (file labels) / **Prediction** / **Errors** — same NPZ points |
 | **7** | **Fill points** on an **OBJ** (density slider) then run the model | Predicted fill in the box; no file truth |
-| **8** | Gradio launcher (optional) | One command opens the same viewer, if we still want that |
+| **8** | Gradio launcher (optional) | **Skipped.** `open_viewer.bat` is the launcher |
 
 OBJ load stays in Step 2. NPZ load stays in Step 3. Step 7 is the extra complexity you described; it is not a replacement for opening either file type.
 
@@ -227,6 +227,8 @@ No **Errors** view (no labels in the OBJ).
 
 ## Step 8 — Gradio (optional)
 
+**Status:** skipped. Use `open_viewer.bat` / `serve.py`. CHANGELOG: Gradio skipped.
+
 If the helper plus the page is already easy to start, we can skip this. Gradio starts the **same** 3D page. We will not build a second viewer inside Gradio.
 
 ---
@@ -258,3 +260,7 @@ GitHub-as-a-website may only show files you provide; it cannot run the model or 
 Building the viewer does **not** mean we are doing the next geometry step of Phase 2 (face details). Those stay paused until we choose to resume them.
 
 ---
+
+## Next action
+
+**Steps 1–7 are done. Step 8 skipped.** Occupancy work is [`work_plan_phase3.md`](work_plan_phase3.md).

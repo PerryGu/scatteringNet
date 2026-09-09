@@ -10,7 +10,7 @@ We might get good enough results without moving on. Some layers may not help at 
 
 This is still **Phase 2**. Occupancy continuation after the global envelope (local k-NN, mixed catalog, denser envelope) lives in [`work_plan_phase3.md`](work_plan_phase3.md). The numbered items below remain *steps inside Phase 2*.
 
-**Current rung (2026-09-03):** Steps **1–10 are done** in code (envelope, then face tokens, then `MeshFaceEncoder`). Envelope Fill still left thin arms empty; that reading problem is Phase 3, not another Phase 2 face rung. Hygiene already holds out whole meshes as **val** (selection split for `best.pt`). That is not Step 11. Step 11 is still a locked / new-family test. Infer is `src/infer_multi_npz.py` (do not restore `infer_one_npz.py`).
+**Current rung (2026-09-09):** Steps **1–10 are done**. Face tokens + `MeshFaceEncoder` were measured and lost vs the envelope; that encoder was removed. Occupancy continuation is **Phase 3** ([`work_plan_phase3.md`](work_plan_phase3.md)). Hygiene val is not Step 11. Step 11 (locked holdout) is still **pending**. Infer is `src/infer_multi_npz.py`.
 
 ---
 
@@ -187,7 +187,7 @@ We still are not claiming “unseen OBJ.” We are claiming: xyz + mesh faces tr
 
 ## Step 11 — Hold out whole shapes
 
-Catalog train already holds out **unique OBJs** as val (hygiene, 2026-08-30). That split is scored every epoch to pick `best.pt`. Do not redo “add a mesh split” here.
+Catalog train already holds out **unique OBJs** as val (hygiene, 2026-08-30). That split is scored every epoch to pick `best.pt`. This step is not another train/val split.
 
 This step is the **locked** test: a mesh (or a new family) that was **never** a training identity, not used to select the checkpoint every epoch.
 
@@ -224,10 +224,9 @@ torus holes, and stacked parts will remain hard even if holdout looks promising.
 | How to build NPZs | [`npz_dataset_generation.md`](npz_dataset_generation.md) |
 | Phase 1 | [`work_plan_phase1.md`](work_plan_phase1.md) |
 | Occupancy after global envelope | [`work_plan_phase3.md`](work_plan_phase3.md) |
-| Implementation protocol | [`work_plan_phase2_AI.md`](work_plan_phase2_AI.md) |
 
 ---
 
 ## Next action
 
-**Steps 1–10 are done** (face tokens + mesh encoder measured; envelope won on `nr1`). Occupancy continuation is **Phase 3**: [`work_plan_phase3.md`](work_plan_phase3.md). Do not start Phase 2 Step 11 as “add a train/val split.”
+**Steps 1–10 are done** (face tokens + mesh encoder measured; envelope won on `nr1`; face encoder later removed). Occupancy work continues in **Phase 3**: [`work_plan_phase3.md`](work_plan_phase3.md). Step 11 (locked holdout) is still pending.

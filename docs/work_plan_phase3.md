@@ -12,6 +12,8 @@ We might get good enough results without moving on. Some layers may not help at 
 
 Empty sleeves, or a window that should be a hole, still mean the layer failed, even if the average score looks better.
 
+**Current rung (2026-09-09):** Steps **1–11 are done** (see table). Inspect default is `2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6` (`knn_k: 16`, `envelope_dim=6`). Extra A/B `knn_k: 8` lost on OOD hands — keep n6. Step **12** (locked holdout) is still **pending**. Training hardware: [`sagemaker.md`](sagemaker.md) (`ml.g5.xlarge`).
+
 ---
 
 ## How to read this plan
@@ -31,20 +33,20 @@ Progress is visible in:
 
 ## The twelve steps at a glance
 
-| Step | Theme | What we learn |
-|---|---|---|
-| 1 | Local neighbors (the idea) | Empty sleeves were a *reading* problem, not “need more crease dots” |
-| 2 | k-NN inside `OccupancyEncoder` | Each query can keep 16 envelope offsets without a new sampler |
-| 3 | Knob, checkpoint, infer, viewer | `knn_k` on `best.pt`; old global heads still load (`knn_k` missing = 0) |
-| 4 | First k-NN catalog (`nr1` only) | Fill on simple extrudes: orange in the arms |
-| 5 | Mixed catalog infrastructure | Several globs + a mesh cap so 2500 `nr1` files do not drown torus/pipe |
-| 6 | Mixed primitives + capped extrude train | One head can eat boxes **and** leave holes empty (viewer Fill) |
-| 7 | Denser envelope | Does `n_surface: 2048` fill thin `nr4`/`nr5` arms? |
-| 8 | High-round extrudes in the mix | All `nr4` / `nr5` we have, still balanced vs primitives |
-| 9 | Envelope normals | Face `n` on each skin dot — leaks between towers, thin windows |
-| 10 | Rounded extrudes (Maya) | Same extrude limbs, then smooth — a generated organic-like bank |
-| 11 | Train on that rounded bank | Fill on rounded chimneys / blobs, not on 20 varied animals |
-| 12 | Locked holdout | A family that never selected `best.pt` (Phase 2 Step 11, still open) |
+| Step | Theme | Status | What we learn |
+|---|---|---|---|
+| 1 | Local neighbors (the idea) | done | Empty sleeves were a *reading* problem, not “need more crease dots” |
+| 2 | k-NN inside `OccupancyEncoder` | done | Each query can keep 16 envelope offsets without a new sampler |
+| 3 | Knob, checkpoint, infer, viewer | done | `knn_k` on `best.pt`; old global heads still load (`knn_k` missing = 0) |
+| 4 | First k-NN catalog (`nr1` only) | done | Fill on simple extrudes: orange in the arms |
+| 5 | Mixed catalog infrastructure | done | Several globs + a mesh cap so 2500 `nr1` files do not drown torus/pipe |
+| 6 | Mixed primitives + capped extrude train | done | One head can eat boxes **and** leave holes empty (viewer Fill) |
+| 7 | Denser envelope | done (lost on Fill) | `n_surface: 2048` did not fill thin `nr4`/`nr5` arms vs 1024 |
+| 8 | High-round extrudes in the mix | done | `nr4` / `nr5` in the mixed catalog, still balanced vs primitives |
+| 9 | Envelope normals | done | Face `n` on each skin dart (`envelope_dim=6`); organics transferred on n6 |
+| 10 | Rounded extrudes (Maya) | done | `maya_batch_extruded_smooth.py` → `extruded_*` (not `extrude_*`) |
+| 11 | Train on that rounded bank | done (mixed catalog) | Rounded meshes trained with primitives + nr4/nr5, not a rounded-only glob |
+| 12 | Locked holdout | pending | A family that never selected `best.pt` (Phase 2 Step 11, still open) |
 
 
 ---
@@ -121,11 +123,13 @@ Fresh `knn_k=16`, mix 75, all primitive families (including torus/pipe holes) pl
 
 Success is **viewer Fill**: torus/pipe **holes empty**, simple extrudes still eaten. Val IoU is **not** comparable to the `nr1`-only 0.974.
 
-**Done when:** `runs/` + `best.pt` + training log, and Fill on holes/simple CAD looks right. Run `2026-09-02_15-25-10_prim_extrude_knn16` (best @ 20, val IoU ~0.954 on the **mixed** val). Inspect default for holes and simple CAD. High-round extrudes (`nr4`/`nr5`) and organic Fill still fail on this checkpoint — that is what later steps are for, if we need them. Do not throw this checkpoint away.
+**Done when:** `runs/` + `best.pt` + training log, and Fill on holes/simple CAD looks right. Run `2026-09-02_15-25-10_prim_extrude_knn16` (best @ 20, val IoU ~0.954 on the **mixed** val). Inspect default for holes and simple CAD. High-round extrudes (`nr4`/`nr5`) and organic Fill still fail on this checkpoint — that is what later steps are for, if we need them. Keep this checkpoint.
 
 ---
 
 ## Step 7 — Denser envelope (`n_surface: 2048`)
+
+**Status:** done (lost on Fill). Run `2026-09-03_15-59-37_prim_extrude_knn16_n2048`. Thin arms stayed empty vs Step 6; keep `n_surface: 1024`.
 
 A 5-round extrude still gets **1024** skin dots, same as a cube. k-NN in a thin arm then often sees the **core**. Same head (`knn_k=16`, mix 75), **same mixed catalog**, fresh train. One YAML knob. Overlay Count still does not change infer.
 
@@ -135,6 +139,8 @@ A 5-round extrude still gets **1024** skin dots, same as a cube. k-NN in a thin 
 
 ## Step 8 — More high-round extrudes, still balanced
 
+**Status:** done. High-round `nr4`/`nr5` (and smooth `extruded_*`) sit in the mixed catalog used by the n6 train.
+
 Use all `nr4` we have; add `nr5` if NPZs exist. Keep primitive count in the same ballpark so holes are not drowned. Do not dump thousands of near-duplicate cones instead.
 
 **Done when:** Fill on high-round extrudes is re-checked vs Step 7. Catalog still excludes `combo*` and varied organics.
@@ -142,6 +148,8 @@ Use all `nr4` we have; add `nr5` if NPZs exist. Keep primitive count in the same
 ---
 
 ## Step 9 — Face normals on envelope dots
+
+**Status:** done. Envelope is `(x,y,z,nx,ny,nz)`. Inspect checkpoint: `2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6`. Thin `nr4`/`nr5` corridors still leak.
 
 Each skin dart carries the **outward** normal of the face it sits on (crease darts need a written rule: source face or average of the two). Local features can use offsets and `(p − q) · n`. New first Linear: **cannot** resume Step 6/7 weights.
 
@@ -152,6 +160,8 @@ This is for **leaks between towers** and thin windows, not a substitute for a st
 ---
 
 ## Step 10 — Rounded extrudes (Maya)
+
+**Status:** done. Script [`src/scatter_generation/maya_batch_extruded_smooth.py`](../src/scatter_generation/maya_batch_extruded_smooth.py); OBJs `meshes/ExtrudedSmooth/` as `extruded_*`.
 
 We do not have a large animal/human mesh bank. We already have a Maya batch that builds cubes, extrudes faces, closes the solid, and writes OBJs (`maya_batch_extrude.py`: polyCube → `polyExtrudeFacet` rounds → `_finalize_solid` → OBJ). The next generation step is the same pipeline plus a **smooth** after the extrudes, so chimneys and limbs stay, but corners round off.
 
@@ -165,6 +175,8 @@ Keep this out of the existing `Extrude/` folder and `extrude_*` filenames, or th
 
 ## Step 11 — Train on the rounded bank
 
+**Status:** done as a **mixed** catalog (not rounded-only). `prim_extruded_nr45_*` trains include `extruded_*` with primitives + nr4/nr5. n6 Fill: organics transferred; leftover is thin corridors. Extra `knn_k: 8` A/B lost on OOD hands — keep n6.
+
 A dedicated catalog of the Step 10 meshes (order of a primitive family, not 20 files from `meshes/varied/`). Do **not** sprinkle Human2 into the CAD glob as a 1% regularizer. Prefer mix nearer 0. Judge Fill on rounded limbs and blobs, not on CAD val IoU. A real animal/human dump, if we ever get one, is still a later set — this step does not wait for it.
 
 **Done when:** a catalog train exists and Fill is judged on the rounded family.
@@ -173,9 +185,11 @@ A dedicated catalog of the Step 10 meshes (order of a primitive family, not 20 f
 
 ## Step 12 — Locked holdout
 
+**Status:** pending. Hygiene val is not this step.
+
 Catalog val already holds out unique OBJs to pick `best.pt`. This step is a mesh or family that **never** selected the checkpoint. Same question as Phase 2 Step 11, now with the Phase 3 head.
 
-**Done when:** we can say whether local k-NN (and later normals) beat a control on a never-trained identity. Do not start this as “add a train/val split.”
+**Done when:** we can say whether local k-NN (and later normals) beat a control on a never-trained identity. This is not another train/val split.
 
 ---
 
@@ -198,5 +212,10 @@ Phase 3 is still not a finished CAD+organic product. High-round extrudes, thin w
 | Weights to load | `models/<id>/best.pt` |
 | Phase 1 | [`work_plan_phase1.md`](work_plan_phase1.md) |
 | Phase 2 | [`work_plan_phase2.md`](work_plan_phase2.md) |
+| SageMaker (training GPU / jobs) | [`sagemaker.md`](sagemaker.md) |
 
 ---
+
+## Next action
+
+**Steps 1–11 are done.** Inspect default: `2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6`. Step 12 (locked holdout) is still pending. Next training machine: [`sagemaker.md`](sagemaker.md).

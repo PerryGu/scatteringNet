@@ -5,6 +5,22 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
+## 2026-09-09 13:00 — Docs: SageMaker training note
+
+Added [`docs/sagemaker.md`](docs/sagemaker.md) (note for the G5 training box; not a Phase 4 ladder). Phase 3 next action and progress table link to it. Occupancy code unchanged.
+
+
+## 2026-09-07 15:00 — Train: prim_extruded_nr45_knn8_n6
+
+Catalog train ``2026-09-07_15-16-37_prim_extruded_nr45_knn8_n6`` (from scratch). Same catalog as n6, ``knn_k: 8``.
+``best.pt`` epoch 20, val_iou 0.961 / acc 0.994, wall 9h 09m. Val just under n6 (0.965). Fill: OOD woman/man leak from the hands (worse than n6); helix/extrudes similar. Keep n6.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-08-0800--prim_extruded_nr45_knn8_n6-k8-ab).
+
+## 2026-09-07 15:00 — Catalog: knn_k 8 A/B
+
+Live YAML ``knn_k: 8`` and ``run_name: prim_extruded_nr45_knn8_n6``. Same catalog, mix 75, ``n_surface: 1024``, ``envelope_dim=6`` as n6. Fresh train only — do not resume the knn16 ``best.pt``.
+Occupancy code unchanged. Judge Fill in two-skin gaps vs ``12-18-28_…_n6``, not val IoU.
+
 ## 2026-09-05 23:00 — Viewer: envelope normal ticks
 
 ``/api/envelope-obj`` now also returns ``normals_b64`` (same unit face normals occupancy uses). Envelope still sends XYZ in ``points_b64``.

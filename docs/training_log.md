@@ -21,6 +21,7 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 
 | Run id                                          | Name                                                       | Score                      |
 | ----------------------------------------------- | ---------------------------------------------------------- | -------------------------- |
+| `2026-09-07_15-16-37_prim_extruded_nr45_knn8_n6` | Same catalog / n6 head, `knn_k: 8` (fewer neighbors)       | IoU 0.961 · acc 0.994 @ 20 |
 | `2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6` | Same catalog, crease cap + envelope normals (`envelope_dim=6`) | IoU 0.965 · acc 0.994 @ 20 |
 | `2026-09-04_15-52-00_prim_extruded_nr45_knn16`  | New catalog: primitives + smooth + nr1/nr4/nr5, knn16      | IoU 0.894 · acc 0.982 @ 14 |
 | `2026-09-03_15-59-37_prim_extrude_knn16_n2048`  | Mixed catalog knn16, `n_surface: 2048`                     | IoU 0.962 · acc 0.990 @ 19 |
@@ -37,6 +38,77 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 | `2026-08-29_19-43-15_extrude_nr1_surface`       | Envelope + xyz, file holdout                               | IoU 0.691 · acc 0.970 @ 18 |
 | `2026-08-29_09-28-54_extrude_nr1`               | Xyz-only, pooled point split                               | acc 0.853 @ 20             |
 
+
+---
+
+## 2026-09-08 08:00 — prim_extruded_nr45_knn8_n6 (k=8 A/B)
+
+Fresh train. Same catalog, seed, mesh val, mix 75, `h64/d4`, `n_surface: 1024`, `envelope_dim=6` as [`2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6`](#2026-09-05-2300--prim_extruded_nr45_knn16_n6-xyz--face-normal). **Not** a resume of that `best.pt`. The only change is `knn_k: 8` (was 16). Goal: does a tighter neighborhood stop orange in two-skin gaps? Success is **viewer Fill** vs the k=16 checkpoint, not a higher val IoU.
+
+### Fill (viewer) — 8 Sep 2026
+
+User inspect vs n6: woman / man / dog were **not in the catalog** (combos neither). k=8 is **worse on the humans** — orange leaks out of the hands. The dog still fills, with some leak at the head. Helix, primitives, and most extrudes look **about the same** as n6; corridor leaks remain. Overlay Mix/Count do not change infer.
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-08_knn8_woman_hands.png"><img src="media/2026-09-08_knn8_woman_hands.png" alt="Woman knn8" width="100%"/></a><br/>Woman (not in catalog): leak from the hands — worse than n6</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-08_knn8_man_hands.png"><img src="media/2026-09-08_knn8_man_hands.png" alt="Man knn8" width="100%"/></a><br/>Man (not in catalog): leak from the hands — worse than n6</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-08_knn8_dog.png"><img src="media/2026-09-08_knn8_dog.png" alt="Dog knn8" width="100%"/></a><br/>Dog (not in catalog): still fills; some leak at the head</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-08_n6_woman.png"><img src="media/2026-09-08_n6_woman.png" alt="Woman n6" width="100%"/></a><br/>Woman on previous model (n6) — tighter at the hands</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-08_n6_man.png"><img src="media/2026-09-08_n6_man.png" alt="Man n6" width="100%"/></a><br/>Man on previous model (n6) — tighter at the hands</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-08_knn8_extrude_leak.png"><img src="media/2026-09-08_knn8_extrude_leak.png" alt="Extrude leak knn8" width="100%"/></a><br/>Extrude corridor leak — still there (similar to n6)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-08_knn8_extrude_ok.png"><img src="media/2026-09-08_knn8_extrude_ok.png" alt="Extrude knn8" width="100%"/></a><br/>Easy extrude — similar to the previous model</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-08_knn8_helix.png"><img src="media/2026-09-08_knn8_helix.png" alt="Helix knn8" width="100%"/></a><br/>Helix — similar to the previous model</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-08_knn8_combo.png"><img src="media/2026-09-08_knn8_combo.png" alt="Combo knn8" width="100%"/></a><br/>Combo primitives (not in catalog) — similar to n6</td>
+</tr>
+</table>
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` (from scratch; not a resume) |
+| Catalog | Same YAML `npz_catalog` as `15-52-00` / n6 |
+| `run_name` | `prim_extruded_nr45_knn8_n6` |
+| Files | 2454 NPZs, 1227 unique OBJs |
+| Points | 41.99M (train 35.07M / val 6.92M) |
+| Geometry | `n_surface=1024`, `envelope_mix=75`, `knn_k=8`, `shape_encoder=surface`, `envelope_dim=6` |
+| Split | **Mesh** identity (`n_train_meshes=982` / `n_val_meshes=245`, seed 1) |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; local pool over 8 offsets + neighbor normals |
+| Device | `cuda` / NVIDIA GeForce GTX 1080 |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **9h 09m 29.80s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-07_15-16-37_prim_extruded_nr45_knn8_n6/`
+- Weights: `models/2026-09-07_15-16-37_prim_extruded_nr45_knn8_n6/best.pt`
+- Wall: **9h 09m 29.80s** (`started=2026-09-07T15:14:18` → `finished=2026-09-08T00:23:48`)
+- `best_epoch: 20`, `best_metric: 0.961202` (val_iou)
+
+### Vs n6 (`knn_k: 16`) on this catalog
+
+| | **n6 best @ 20** | n6 @ 10 | **this run best @ 20** | this run @ 6 |
+|---|---|---|---|---|
+| val_acc | **0.994** | 0.994 | 0.994 | 0.993 |
+| val_iou / val_f1 | **0.965 / 0.982** | 0.963 / 0.981 | 0.961 / 0.980 | 0.958 / 0.978 |
+| train_acc | 0.997 | 0.996 | 0.996 | 0.995 |
+| loss | **0.0087** | 0.0097 | 0.0101 | 0.0132 |
+| wall | 10h 10m | — | **9h 09m** | — |
+| meshes / NPZs | 1227 / 2454 | same | same | same |
+| val points | 6.92M | same | same | same |
+
+k=8 sat on epoch-6 IoU 0.958 through epoch 19; epoch 20 replaced `best.pt`. Same late-tick pattern as n6. Train and val stay together. A resume is not justified.
+
+**Bottom line:** k=8 is not the new default. Hands on OOD humans leaked more than n6. Inspect stays `12-18-28_…_n6`. Do not resume. Do not stack face-diversity on this head in the same step.
 
 ---
 

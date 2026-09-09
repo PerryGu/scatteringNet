@@ -148,4 +148,4 @@ Phase 1 is a teaching scaffold: one file, xyz only. It is not an interior-popula
 
 ## Next action
 
-Phase 1 is finished. Continue in **Phase 2**: approve or edit Step 1 of [`work_plan_phase2.md`](work_plan_phase2.md) (Maya scatter scripts) before any prototype files are copied.
+Phase 1 is finished. Phase 2 steps 1–10 are done. Occupancy work continues in **Phase 3**: [`work_plan_phase3.md`](work_plan_phase3.md).
