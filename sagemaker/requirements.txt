@@ -1,0 +1,4 @@
+# Extra pip packages for the SageMaker training image.
+# The PyTorch DLC already provides torch. Local conda uses environment.yaml.
+trimesh>=4.0
+pyyaml>=6.0

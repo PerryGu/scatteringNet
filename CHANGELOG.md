@@ -5,9 +5,53 @@ Completed work for the occupancy MLP MVP.
 Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and hour; no minutes).
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
+
+## 2026-09-14 09:00 — Train: prim_extruded_nr45_knn24_n6
+
+Catalog train ``2026-09-13_19-20-50_prim_extruded_nr45_knn24_n6`` (from scratch on ``ml.g5.xlarge``). Same catalog as n6, ``knn_k: 24``.
+``best.pt`` epoch 20, val_iou 0.967 / acc 0.995, wall 5h 01m. Val matches G5 n6 (0.967); +0.0007 is noise. Fill not judged.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-14-0900--prim_extruded_nr45_knn24_n6-k24-ab).
+
+## 2026-09-13 22:00 — Train: prim_extruded_nr45_knn16_n6 (SageMaker A10G)
+
+Catalog train ``2026-09-13_11-23-44_prim_extruded_nr45_knn16_n6`` (from scratch on ``ml.g5.xlarge``). Same n6 recipe as the 1080 inspect default (``knn_k: 16``, mix 75, ``envelope_dim=6``).
+``best.pt`` epoch 20, val_iou 0.967 / acc 0.995, wall 4h 58m. Val matches 1080 n6 (0.965); +0.002 is noise. Fill not judged.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-13-2200--prim_extruded_nr45_knn16_n6-sagemaker-a10g).
+
+## 2026-09-13 14:00 — SageMaker: POSIX S3 keys for source upload
+
+Job ``scatteringnet-n6-20260913130138`` got past ``sm_train.sh`` and pip, then died on ``ModuleNotFoundError: No module named 'geometry'``. The four ``src/geometry/*.py`` files were in the code prefix, but Windows ``os.path.relpath`` put ``\\`` in the S3 keys, so Linux never created ``src/geometry/``.
+``sagemaker/launch.py`` now normalizes those keys to ``/`` during ``train()``. ``entry.py`` fails fast if ``src/geometry/mesh_io.py`` is missing. Occupancy train loop unchanged.
+
+## 2026-09-13 12:00 — SageMaker: Unix LF for sm_train.sh
+
+Job ``scatteringnet-n6-20260913103358`` failed in ~4 min (``AlgorithmError``, exit 2) before ``entry.py`` ran. CloudWatch showed ``$'\r': command not found`` on the SDK-generated ``sm_train.sh``.
+``sagemaker/launch.py`` now wraps ``trainer.train()`` so those ``*.sh`` files are written with Unix LF (``newline='\\n'``) on Windows. Occupancy train loop unchanged; re-launch from this PC after the fix.
+
+## 2026-09-13 10:00 — SageMaker: launch.py for SDK v3
+
+Local ``pip install sagemaker`` pulled SDK 3.x (``3.21``), which dropped ``sagemaker.pytorch.PyTorch`` and ``sagemaker.inputs.TrainingInput``. First launch died on this PC with ``No module named 'sagemaker.inputs'``.
+Rewrote ``sagemaker/launch.py`` around ``ModelTrainer``: repo-root upload, ``entry_script=sagemaker/entry.py``, File-mode channel, ``ml.g5.xlarge``, PyTorch 2.5.1 DLC, region ``eu-north-1``. Occupancy train loop unchanged.
+
+## 2026-09-10 15:00 — SageMaker: files under sagemaker/
+
+Job scripts no longer sit under ``src/``. ``entry.py``, job-only ``requirements.txt`` (``trimesh``, ``pyyaml``), and ``.sagemakerignore`` live in ``sagemaker/``.
+``launch.py`` still runs on this PC and uploads that folder plus ``src/`` and ``config.yaml`` (not ``models/``, ``runs/``, or the viewer). Occupancy train loop unchanged.
+
+## 2026-09-10 10:00 — SageMaker: job entry + launcher
+
+Added the G5 entry (remap ``data_dir`` to the training channel, run ``train_multi_npz``, copy ``best.pt`` and ``runs/`` to S3 output) and the local launcher (``ml.g5.xlarge``, PyTorch 2.5.1 DLC).
+Live YAML is back to the n6 recipe (``knn_k: 16``, ``run_name: prim_extruded_nr45_knn16_n6``); the k=8 A/B is not the default. Occupancy train loop unchanged. Do not submit until G5 training-job quota is 1.
+
+## 2026-09-10 13:00 — Docs: SageMaker S3 data prefix
+
+[`docs/sagemaker.md`](docs/sagemaker.md) now records the uploaded tree: ``s3://scatteringnet-sagemaker-bucket/scatteringNet/data/`` with ``exports/`` and ``meshes/`` as siblings, same as local ``data_dir``.
+Job output is ``…/scatteringNet/output/`` (created by the job; do not pre-create ``models/`` or ``runs/``). Occupancy code unchanged.
+
 ## 2026-09-09 13:00 — Docs: SageMaker training note
 
-Added [`docs/sagemaker.md`](docs/sagemaker.md) (note for the G5 training box; not a Phase 4 ladder). Phase 3 next action and progress table link to it. Occupancy code unchanged.
+Added [`docs/sagemaker.md`](docs/sagemaker.md) as the human note for the G5 box: same ``train_multi_npz`` / catalog, instance ``ml.g5.xlarge`` (A10G), quota vs endpoint, not a Phase 4 ladder.
+Phase 3 next-action and progress table link to it. Occupancy code unchanged.
 
 
 ## 2026-09-07 15:00 — Train: prim_extruded_nr45_knn8_n6

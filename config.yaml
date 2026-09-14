@@ -24,9 +24,9 @@ val_fraction: 0.20
 # none = xyz-only OccupancyMLP. surface = envelope (XYZ + face normal) + OccupancyEncoder.
 # Occupancy labels stay in the NPZ. New trains write envelope_dim=6 on best.pt.
 shape_encoder: surface   # none / surface
-n_surface: 1024          # Envelope samples on the joined OBJ
+n_surface: 2048          # Envelope samples on the joined OBJ. 2048 = A/B vs knn24 n6 at 1024. Fresh train; do not resume that best.pt.
 envelope_mix: 75         # 0 = area-weighted samples, 100 = creases. Same split as the viewer Mix slider.
-knn_k: 8                 # 0 = global z only. 8 = nearest envelope dots per query (offset + neighbor normal).
+knn_k: 24                # 0 = global z only. Keep 24; k=16→24 did not move Fill enough to justify a higher k.
 # knn_local_dim: 64      # z_local width; omit to use latent_dim / hidden
 # latent_dim: 64         # OccupancyEncoder z width; omit to use hidden
 
@@ -59,7 +59,7 @@ max_files_per_shape: 2
 
 # --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
-run_name: prim_extruded_nr45_knn8_n6
+run_name: prim_extruded_nr45_knn24_n2048_n6
 
 # --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.

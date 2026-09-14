@@ -2,9 +2,7 @@
 
 The occupancy trains so far ran on the machine under the desk: a GTX 1080. A full catalog pass on that card takes about nine or ten hours. That loop works — the numbers and Fill stills are in [`training_log.md`](training_log.md) — but it is slow, and the card is old.
 
-The next trains run on **Amazon SageMaker**. Same occupancy problem, same catalog script (`src/train_multi_npz.py`), same write-up in [`training_log.md`](training_log.md). This is not a new phase of the model; the occupancy story stays in [`work_plan_phase3.md`](work_plan_phase3.md).
-
-It will not be a single SageMaker job. It is a series of catalog trains, the same loop as on the 1080: train, look at Fill and the numbers, then change something and train again. Between jobs the code, the YAML, or the training setup may move — that is how we try to improve the model. The faster box is there so those iterations do not each cost a full day.
+The next trains run on **Amazon SageMaker**. Same script (`src/train_multi_npz.py`), same `config.yaml` catalog, same occupancy head. Only the GPU changes. This is not a new phase of the model; the occupancy story stays in [`work_plan_phase3.md`](work_plan_phase3.md).
 
 ---
 
@@ -30,22 +28,95 @@ That is permission to run a **training job**. There is a similar line for **endp
 
 Raising the quota does not start a machine and does not cost anything. The hourly bill starts only while a job is actually running.
 
-A request for this quota is already in. The first SageMaker catalog train has not run yet.
+A request for this quota is in (**Case Opened**, 9 Sep 2026). The applied value is still 0 until AWS closes that case. Do not ``fit()`` a G5 job until Service Quotas shows **1**.
 
 ---
 
-## First train, then the rest
+## Data on S3
 
-When the quota is approved, the **first** job should match the inspect checkpoint we already trust, unless we decide on a new A/B before that:
+The job cannot see `E:/Work_stuff/scatteringNet/data`. The training set lives in the bucket, with the same layout as local `data_dir`: `exports/` and `meshes/` as siblings, so each NPZ `mesh_path` still resolves.
+
+Prefix:
+
+`s3://scatteringnet-sagemaker-bucket/scatteringNet/data/`
+
+That copy is **up** (full local `data/` tree, including Combos / organics that are not in the YAML catalog). Later jobs reuse it. Re-sync only when NPZs or meshes change:
+
+```text
+aws s3 sync "E:\Work_stuff\scatteringNet\data" "s3://scatteringnet-sagemaker-bucket/scatteringNet/data/" --region eu-north-1
+```
+
+Use the CLI for this many files, not the console. Checkpoints and run snapshots come **back** under `s3://scatteringnet-sagemaker-bucket/scatteringNet/output/`. Code stays with the job; it does not live under `data/`.
+
+On the box, `data_dir` must be the downloaded channel root that still contains both `exports/` and `meshes/`. The job entry (`sagemaker/entry.py`) sets that from the SageMaker channel; do not leave `config.yaml` pointing at `E:/` on the box.
+
+---
+
+## Output from S3
+
+When a job Completes, SageMaker writes two tarballs under:
+
+`s3://scatteringnet-sagemaker-bucket/scatteringNet/output/<job-name>/output/`
+
+- `output.tar.gz` — `models/<run_id>/best.pt` and `runs/<run_id>/` (viewer and `training_log.md` need this one)
+- `model.tar.gz` — a copy of `best.pt` at the SageMaker model dir (optional)
+
+The console cannot download a **folder** prefix. Open the `output/` object prefix and grab the `.tar.gz` files, or use the CLI.
+
+From the repo root (PowerShell). `<job-name>` is the Training job name (`scatteringnet-n6-…`). Unpack into this repo so `models/` and `runs/` land next to the local trains:
+
+```text
+aws s3 cp "s3://scatteringnet-sagemaker-bucket/scatteringNet/output/<job-name>/output/output.tar.gz" "$env:TEMP\<name>.tar.gz" --region eu-north-1
+tar -xf "$env:TEMP\<name>.tar.gz" -C .
+```
+
+Example (k=24 job):
+
+```text
+aws s3 cp "s3://scatteringnet-sagemaker-bucket/scatteringNet/output/scatteringnet-n6-20260913221313/output/output.tar.gz" "$env:TEMP\sm_knn24_output.tar.gz" --region eu-north-1
+tar -xf "$env:TEMP\sm_knn24_output.tar.gz" -C .
+```
+
+---
+
+## How to launch
+
+The training loop is still `src/train_multi_npz.py`. SageMaker job files live in **`sagemaker/`**:
+
+- `sagemaker/entry.py` — runs **on the G5** (remap `data_dir`, train, copy `best.pt` + `runs/` to S3 output).
+- `sagemaker/launch.py` — run **on this PC** after `pip install sagemaker boto3` in the conda env (SDK **v3**, `ModelTrainer`). On Windows it writes the job’s `sm_train.sh` with Unix line endings, and it uploads source with POSIX S3 keys (`src/geometry/…`, not `src\geometry/…`) so Linux can import `geometry`.
+- `sagemaker/requirements.txt` — extra pip packages on the training image (not the local conda env; that is still `environment.yaml`).
+
+You need an IAM **execution role** SageMaker can assume (often `AmazonSageMaker-ExecutionRole-…`), with access to this bucket. Pass its ARN. Your user needs `iam:PassRole` on that role.
+
+Dry run (no instance, no bill):
+
+```text
+python sagemaker/launch.py --role arn:aws:iam::ACCOUNT:role/ROLE --dry-run
+```
+
+Submit (only after training-job quota is 1):
+
+```text
+python sagemaker/launch.py --role arn:aws:iam::ACCOUNT:role/ROLE
+```
+
+That does not open a Studio notebook. Watch **SageMaker → Training → Training jobs**. Add `--wait` only if you want the terminal to block until the job ends.
+
+---
+
+## First train on SageMaker
+
+When the quota is approved, the first job should match the inspect checkpoint we already trust, unless we decide on a new A/B first:
 
 `2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6`
 
 That means envelope + local k-NN, `knn_k: 16`, six-D skin dots (position and face normal), 1024 envelope samples, mix 75. Fresh train if the head width changed; do not paste old weights into a different first layer.
 
-Jobs after that are not copies of this recipe. If Fill still leaks, or val looks fine but the stills do not, we change the setup and run another catalog train. Each finished job still gets a [`training_log.md`](training_log.md) entry. The run snapshot (`runs/<id>/config.yaml`) should name the A10G under `gpu`, the same way local runs name the 1080.
+When it finishes, write it up in [`training_log.md`](training_log.md) like any other catalog train. The run snapshot (`runs/<id>/config.yaml`) should name the A10G under `gpu`, the same way local runs name the 1080.
 
 ---
 
 ## Where things stand
 
-Local 1080 trains are done. SageMaker quota for `ml.g5.xlarge` training-job usage is requested (that number is how many of those boxes can run at once, not how many trains we will ever do). The first SageMaker catalog train has not run yet. Hosting an endpoint can wait.
+Local 1080 trains are done. First SageMaker n6 catalog train finished: job `scatteringnet-n6-20260913141750`, run `2026-09-13_11-23-44_prim_extruded_nr45_knn16_n6` (A10G, wall ~5 h, val IoU 0.967 — same band as the 1080 n6). Write-up in [`training_log.md`](training_log.md). Inspect default stays `12-18-28_…_n6` until Fill is judged. Hosting an endpoint can wait.

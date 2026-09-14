@@ -21,6 +21,8 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 
 | Run id                                          | Name                                                       | Score                      |
 | ----------------------------------------------- | ---------------------------------------------------------- | -------------------------- |
+| `2026-09-13_19-20-50_prim_extruded_nr45_knn24_n6` | Same catalog / n6 head, `knn_k: 24` (more neighbors)       | IoU 0.967 · acc 0.995 @ 20 |
+| `2026-09-13_11-23-44_prim_extruded_nr45_knn16_n6` | Same n6 recipe on SageMaker A10G (`knn_k: 16`)            | IoU 0.967 · acc 0.995 @ 20 |
 | `2026-09-07_15-16-37_prim_extruded_nr45_knn8_n6` | Same catalog / n6 head, `knn_k: 8` (fewer neighbors)       | IoU 0.961 · acc 0.994 @ 20 |
 | `2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6` | Same catalog, crease cap + envelope normals (`envelope_dim=6`) | IoU 0.965 · acc 0.994 @ 20 |
 | `2026-09-04_15-52-00_prim_extruded_nr45_knn16`  | New catalog: primitives + smooth + nr1/nr4/nr5, knn16      | IoU 0.894 · acc 0.982 @ 14 |
@@ -38,6 +40,161 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 | `2026-08-29_19-43-15_extrude_nr1_surface`       | Envelope + xyz, file holdout                               | IoU 0.691 · acc 0.970 @ 18 |
 | `2026-08-29_09-28-54_extrude_nr1`               | Xyz-only, pooled point split                               | acc 0.853 @ 20             |
 
+
+---
+
+## 2026-09-14 09:00 — prim_extruded_nr45_knn24_n6 (k=24 A/B)
+
+Fresh train. Same catalog, seed, mesh val, mix 75, `h64/d4`, `n_surface: 1024`, `envelope_dim=6` as [`2026-09-13_11-23-44_prim_extruded_nr45_knn16_n6`](#2026-09-13-2200--prim_extruded_nr45_knn16_n6-sagemaker-a10g) (G5 n6). **Not** a resume of that `best.pt` or of `12-18-28_…_n6`. The only change is `knn_k: 24` (was 16). Job `scatteringnet-n6-20260913221313`. Goal: does a wider neighborhood improve OOD organics vs n6? Success is **viewer Fill** vs `12-18-28_…_n6`, not a higher val IoU.
+
+### Fill (viewer) — 14 Sep 2026
+
+Checkpoint `2026-09-13_19-20-50_prim_extruded_nr45_knn24_n6`. Except **extrudes** and the **gear**, none of these shapes were in the catalog (same for the G5 k=16 stills). Helix **is** in the catalog, but **without** bend / FFD modifiers. The **knot** is a combo (like the combo-primitives still) and was **not in the training catalog**. Hands **improved** vs G5 k=16 — no artifacts / bleeding. Slight bleeding from the **dog's ear**. Overlay Mix/Count do not change infer.
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_woman.png"><img src="media/2026-09-14_knn24_woman.png" alt="Woman knn24" width="100%"/></a><br/>Woman (not in catalog): hands improved — no artifacts / bleeding</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_man.png"><img src="media/2026-09-14_knn24_man.png" alt="Man knn24" width="100%"/></a><br/>Man (not in catalog): hands improved — no artifacts / bleeding</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_dog.png"><img src="media/2026-09-14_knn24_dog.png" alt="Dog knn24" width="100%"/></a><br/>Dog (not in the training catalog): slight bleeding from the ear</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_gear.png"><img src="media/2026-09-14_knn24_gear.png" alt="Gear knn24" width="100%"/></a><br/>Gear (in catalog)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_helix.png"><img src="media/2026-09-14_knn24_helix.png" alt="Helix knn24" width="100%"/></a><br/>Helix: catalog family, but this mesh has bend / FFD (not in catalog that way)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_knot.png"><img src="media/2026-09-14_knn24_knot.png" alt="Knot knn24" width="100%"/></a><br/>Knot (combo; not in the training catalog)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_horse.png"><img src="media/2026-09-14_knn24_horse.png" alt="Horse knn24" width="100%"/></a><br/>Horse (not in catalog)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_combo.png"><img src="media/2026-09-14_knn24_combo.png" alt="Combo knn24" width="100%"/></a><br/>Combo primitives (not in catalog)</td>
+</tr>
+</table>
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` via `sagemaker/entry.py` (from scratch; not a resume) |
+| Catalog | Same YAML `npz_catalog` as `15-52-00` / n6 |
+| `run_name` | `prim_extruded_nr45_knn24_n6` |
+| Files | 2454 NPZs, 1227 unique OBJs |
+| Points | 41.99M (train 35.07M / val 6.92M) |
+| Geometry | `n_surface=1024`, `envelope_mix=75`, `knn_k=24`, `shape_encoder=surface`, `envelope_dim=6` |
+| Split | **Mesh** identity (`n_train_meshes=982` / `n_val_meshes=245`, seed 1) |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; local pool over 24 offsets + neighbor normals |
+| Device | `cuda` / NVIDIA A10G (`ml.g5.xlarge`, `eu-north-1`) |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **5h 00m 50.55s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-13_19-20-50_prim_extruded_nr45_knn24_n6/`
+- Weights: `models/2026-09-13_19-20-50_prim_extruded_nr45_knn24_n6/best.pt`
+- S3: `s3://scatteringnet-sagemaker-bucket/scatteringNet/output/scatteringnet-n6-20260913221313/output/`
+- Wall: **5h 00m 50.55s** (`started=2026-09-13T19:19:51` → `finished=2026-09-14T00:20:42`)
+- `best_epoch: 20`, `best_metric: 0.967399` (val_iou)
+- Snapshot `gpu: NVIDIA A10G`; `data_dir` is the Linux channel (`/opt/ml/input/data/training`)
+
+### Vs G5 n6 (`knn_k: 16`) on this catalog
+
+| | **G5 n6 best @ 20** | G5 n6 @ 10 | **this run best @ 20** | this run @ 10 |
+|---|---|---|---|---|
+| val_acc | 0.995 | 0.994 | 0.995 | 0.994 |
+| val_iou / val_f1 | 0.967 / 0.983 | 0.964 / 0.981 | 0.967 / 0.983 | 0.963 / 0.981 |
+| train_acc | 0.997 | 0.996 | 0.997 | 0.996 |
+| loss | 0.0085 | 0.0098 | 0.0085 | 0.0097 |
+| wall | 4h 58m | — | **5h 01m** | — |
+| meshes / NPZs | 1227 / 2454 | same | same | same |
+| val points | 6.92M | same | same | same |
+
+Same box and catalog. Val IoU 0.9674 vs 0.9667 is +0.0007 — smaller than G5 n6 vs 1080 n6 (+0.002), which was already noise. Epoch 20 took `best.pt` on both. Train and val stay together. Wall is the same ~5 h. A resume is not justified. k=8 lost on Fill (OOD hands); this run does not replay that gap on val.
+
+**Not shown by this run**
+
+- That climbing to `knn_k: 32` would help
+- An extrude still on this checkpoint (gear is the in-catalog primitive here)
+
+**Bottom line:** Fill on OOD humans **improved** (hands clean vs G5 k=16 left-hand drift). New leftover: **slight bleed from the dog's ear**. Val did not move. Inspect stays `12-18-28_…_n6` until you decide the ear vs hands trade. Do not resume. Do not stack another k A/B on val IoU.
+
+---
+
+## 2026-09-13 22:00 — prim_extruded_nr45_knn16_n6 (SageMaker A10G)
+
+Fresh train. Same catalog, seed, mesh val, mix 75, `h64/d4`, `n_surface: 1024`, `knn_k: 16`, `envelope_dim=6` as [`2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6`](#2026-09-05-2300--prim_extruded_nr45_knn16_n6-xyz--face-normal). **Not** a resume of that `best.pt`. The only intended change is the box: `ml.g5.xlarge` / NVIDIA A10G vs the desk GTX 1080. Job `scatteringnet-n6-20260913141750`. Goal: does the n6 recipe reproduce on SageMaker? Success is **matched val + later Fill**, not a new architecture.
+
+### Fill (viewer) — 14 Sep 2026
+
+Checkpoint `2026-09-13_11-23-44_prim_extruded_nr45_knn16_n6`. Woman / man / dog were **not in the catalog**. The **knot** is a combo (like stacked primitives) and was **not in the training catalog** either. Point drift on the **left hands** of the female and male figures (orange outside the mesh). The extrude has a **bit of oozing**. Gear, dog, helix, knot, and primitives look **pretty good**. Overlay Mix/Count do not change infer.
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_g5_knn16_woman_hands.png"><img src="media/2026-09-14_g5_knn16_woman_hands.png" alt="Woman G5 knn16" width="100%"/></a><br/>Woman (not in catalog): point drift on the left hand</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_g5_knn16_man_hands.png"><img src="media/2026-09-14_g5_knn16_man_hands.png" alt="Man G5 knn16" width="100%"/></a><br/>Man (not in catalog): point drift on the left hand</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_g5_knn16_dog.png"><img src="media/2026-09-14_g5_knn16_dog.png" alt="Dog G5 knn16" width="100%"/></a><br/>Dog (not in catalog) — pretty good</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_g5_knn16_gear.png"><img src="media/2026-09-14_g5_knn16_gear.png" alt="Gear G5 knn16" width="100%"/></a><br/>Gear — pretty good</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_g5_knn16_helix.png"><img src="media/2026-09-14_g5_knn16_helix.png" alt="Helix G5 knn16" width="100%"/></a><br/>Helix — pretty good</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_g5_knn16_helix_wide.png"><img src="media/2026-09-14_g5_knn16_helix_wide.png" alt="Wide helix G5 knn16" width="100%"/></a><br/>Wide helix — pretty good</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_g5_knn16_knot.png"><img src="media/2026-09-14_g5_knn16_knot.png" alt="Knot G5 knn16" width="100%"/></a><br/>Knot (combo; not in the training catalog) — pretty good</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_g5_knn16_primitives.png"><img src="media/2026-09-14_g5_knn16_primitives.png" alt="Primitives G5 knn16" width="100%"/></a><br/>Primitives (tetra / torus / cube) — pretty good</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_g5_knn16_extrude.png"><img src="media/2026-09-14_g5_knn16_extrude.png" alt="Extrude G5 knn16" width="100%"/></a><br/>Extrude — a bit of oozing</td>
+</tr>
+</table>
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` via `sagemaker/entry.py` (from scratch; not a resume) |
+| Catalog | Same YAML `npz_catalog` as `15-52-00` / n6 |
+| `run_name` | `prim_extruded_nr45_knn16_n6` |
+| Files | 2454 NPZs, 1227 unique OBJs |
+| Points | 41.99M (train 35.07M / val 6.92M) |
+| Geometry | `n_surface=1024`, `envelope_mix=75`, `knn_k=16`, `shape_encoder=surface`, `envelope_dim=6` |
+| Split | **Mesh** identity (`n_train_meshes=982` / `n_val_meshes=245`, seed 1) |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; local pool over 16 offsets + neighbor normals |
+| Device | `cuda` / NVIDIA A10G (`ml.g5.xlarge`, `eu-north-1`) |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **4h 57m 59.81s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-13_11-23-44_prim_extruded_nr45_knn16_n6/`
+- Weights: `models/2026-09-13_11-23-44_prim_extruded_nr45_knn16_n6/best.pt`
+- S3: `s3://scatteringnet-sagemaker-bucket/scatteringNet/output/scatteringnet-n6-20260913141750/output/`
+- Wall: **4h 57m 59.81s** (`started=2026-09-13T11:22:46` → `finished=2026-09-13T16:20:46`)
+- `best_epoch: 20`, `best_metric: 0.966742` (val_iou)
+- Snapshot `gpu: NVIDIA A10G`; `data_dir` is the Linux channel (`/opt/ml/input/data/training`)
+
+### Vs 1080 n6 (`knn_k: 16`) on this catalog
+
+| | **1080 n6 best @ 20** | 1080 n6 @ 10 | **this run best @ 20** | this run @ 10 |
+|---|---|---|---|---|
+| val_acc | 0.994 | 0.994 | 0.995 | 0.994 |
+| val_iou / val_f1 | 0.965 / 0.982 | 0.963 / 0.981 | 0.967 / 0.983 | 0.964 / 0.981 |
+| train_acc | 0.997 | 0.996 | 0.997 | 0.996 |
+| loss | 0.0087 | 0.0097 | 0.0085 | 0.0098 |
+| wall | 10h 10m | — | **4h 58m** | — |
+| meshes / NPZs | 1227 / 2454 | same | same | same |
+| val points | 6.92M | same | same | same |
+
+Same recipe. Val IoU 0.967 vs 0.965 is a +0.002 tick — same band, not a new head. Epoch 10 already sat at 0.964 (1080: 0.963); epoch 20 took `best.pt` on both. Train and val stay together. A resume is not justified.
+
+**Not shown by this run**
+
+- Side-by-side Fill vs `12-18-28_…_n6` on the same camera (this grid is G5 k=16 only)
+- That a bigger GPU would change the leftover leaks
+
+**Bottom line:** same n6 recipe on the A10G. Numbers match the 1080. Fill leftover is **left-hand drift** on OOD woman/man and a **bit of oozing** on the extrude; gear / dog / helix / primitives look good. The **knot** is a combo (not in the training catalog) and still looks good. Inspect stays `12-18-28_…_n6` until k=24 Fill is judged the same way. Wall is about half the 1080 (~5 h vs ~10 h).
 
 ---
 
