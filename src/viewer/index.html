@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>scatteringNet occupancy viewer</title>
-  <link rel="stylesheet" href="css/viewer.css?v=35">
+  <link rel="stylesheet" href="css/viewer.css?v=36">
 </head>
 <body>
   <div id="canvas-container">
@@ -83,10 +83,16 @@
         </div>
       </div>
       <div id="model-panel">
-        <label class="model-lab" for="sel-model">Select Model</label>
-        <select id="sel-model" title="models/*/best.pt">
-          <option value="">Loading models…</option>
-        </select>
+        <label class="model-lab" id="lab-model">Select Model</label>
+        <div id="model-picker">
+          <button type="button" id="btn-model" aria-labelledby="lab-model" aria-haspopup="listbox" aria-expanded="false" title="Left-click to choose. Right-click a row to add a note at the end (for example *).">Loading models…</button>
+          <select id="sel-model" hidden title="models/*/best.pt" aria-hidden="true" tabindex="-1">
+            <option value="">Loading models…</option>
+          </select>
+          <div id="model-popover" role="listbox" aria-labelledby="lab-model">
+            <ul id="model-list"></ul>
+          </div>
+        </div>
         <button type="button" id="btn-run" disabled>Run model</button>
         <div class="slider-row">
           <span title="After sigmoid: inside if p is at least this value. Lower = more orange. Applies to the last Run; no extra GPU pass.">Inside cut <span id="val-cut">0.50</span></span>
@@ -124,6 +130,6 @@
       }
     }, 2500);
   </script>
-    <script type="module" src="js/main.js?v=37"></script>
+    <script type="module" src="js/main.js?v=39"></script>
 </body>
 </html>

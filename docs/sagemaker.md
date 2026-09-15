@@ -103,6 +103,18 @@ python sagemaker/launch.py --role arn:aws:iam::ACCOUNT:role/ROLE
 
 That does not open a Studio notebook. Watch **SageMaker → Training → Training jobs**. Add `--wait` only if you want the terminal to block until the job ends.
 
+The launcher prints `Training Job Name: scatteringnet-n6-…` (no extra dashes in the timestamp). Follow CloudWatch from this PC. `--format short` is print style only (timestamp + message). Log streams appear after the container starts; if the first tail is empty, wait a minute and run it again:
+
+```text
+aws logs tail /aws/sagemaker/TrainingJobs --log-stream-name-prefix <job-name> --region eu-north-1 --since 1h --follow --format short
+```
+
+Example (nosmooth job):
+
+```text
+aws logs tail /aws/sagemaker/TrainingJobs --log-stream-name-prefix scatteringnet-n6-20260914215452 --region eu-north-1 --since 1h --follow --format short
+```
+
 ---
 
 ## First train on SageMaker

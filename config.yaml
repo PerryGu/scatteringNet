@@ -24,9 +24,9 @@ val_fraction: 0.20
 # none = xyz-only OccupancyMLP. surface = envelope (XYZ + face normal) + OccupancyEncoder.
 # Occupancy labels stay in the NPZ. New trains write envelope_dim=6 on best.pt.
 shape_encoder: surface   # none / surface
-n_surface: 2048          # Envelope samples on the joined OBJ. 2048 = A/B vs knn24 n6 at 1024. Fresh train; do not resume that best.pt.
+n_surface: 1024          # Envelope samples on the joined OBJ
 envelope_mix: 75         # 0 = area-weighted samples, 100 = creases. Same split as the viewer Mix slider.
-knn_k: 24                # 0 = global z only. Keep 24; k=16→24 did not move Fill enough to justify a higher k.
+knn_k: 16                # 0 = global z only. Same as n6 inspect. Catalog A/B only; fresh train; do not resume n6 best.pt.
 # knn_local_dim: 64      # z_local width; omit to use latent_dim / hidden
 # latent_dim: 64         # OccupancyEncoder z width; omit to use hidden
 
@@ -35,8 +35,9 @@ knn_k: 24                # 0 = global z only. Keep 24; k=16→24 did not move Fi
 # max_shapes is set (unique OBJs, sampled with seed; still max_files_per_shape NPZs).
 # Varied/organic and combo* are omitted on purpose.
 # Fallback glob is unused while npz_catalog is set.
-# Smooth extruded_* and high-round extrude_* use s0.08. Primitives and nr1
-# stay s0.15. nr3 is omitted. max_files_per_shape keeps lattice + one jitter.
+# Smooth extruded_* is omitted on purpose (A/B vs n6 inspect). High-round
+# extrude_* stay s0.08. Primitives and nr1 stay s0.15. nr3 is omitted.
+# max_files_per_shape keeps lattice + one jitter.
 npz_glob: "exports/dataset/*.npz"
 npz_catalog:
   - glob: "exports/dataset/cone_*.npz"
@@ -49,7 +50,6 @@ npz_catalog:
   - glob: "exports/dataset/prism_*.npz"
   - glob: "exports/dataset/sphere_*.npz"
   - glob: "exports/dataset/torus_*.npz"
-  - glob: "exports/dataset/extruded_*occupancy_s0.08*.npz"
   - glob: "exports/dataset/extrude_*_nr1_*.npz"
     max_shapes: 40
   - glob: "exports/dataset/extrude_*_nr4_*occupancy_s0.08*.npz"
@@ -59,7 +59,7 @@ max_files_per_shape: 2
 
 # --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
-run_name: prim_extruded_nr45_knn24_n2048_n6
+run_name: prim_nr45_knn16_n6_nosmooth
 
 # --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.

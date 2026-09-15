@@ -421,6 +421,27 @@ class UiPrefsTests(unittest.TestCase):
         out = clamp_ui_prefs({"model_id": "../secret"})
         self.assertEqual(out["model_id"], "")
 
+    def test_model_labels_keep_safe_suffix(self) -> None:
+        from ui_prefs import clamp_ui_prefs
+
+        out = clamp_ui_prefs(
+            {
+                "model_labels": {
+                    "2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6": "*",
+                    "../secret": "nope",
+                    "ok": "   inspect  ",
+                    "empty": "   ",
+                }
+            }
+        )
+        self.assertEqual(
+            out["model_labels"],
+            {
+                "2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6": "*",
+                "ok": "inspect",
+            },
+        )
+
     def test_invalid_json_is_defaults(self) -> None:
         from ui_prefs import DEFAULTS, PREFS_NAME, load_ui_prefs
 

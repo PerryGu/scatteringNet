@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Any
 
 PREFS_NAME = "ui_prefs.json"
-MAX_PREFS_BYTES = 16_384
+MAX_PREFS_BYTES = 32_768
+# Viewer-only notes after the run id in the model list (not folder names).
+MODEL_LABEL_MAX = 48
+MODEL_LABELS_MAX = 80
 
 DEFAULTS: dict[str, Any] = {
     "mesh": True,
@@ -26,9 +29,20 @@ DEFAULTS: dict[str, Any] = {
     "envelope_n": 1024,
     "envelope_mix": 100,
     "model_id": "",
+    "model_labels": {},
 }
 
 _BOOL_KEYS = ("mesh", "inside", "outside", "wireframe")
+
+
+def _safe_run_id(raw: object) -> str:
+    """Single folder name under ``models/``. Empty if unsafe."""
+    name = str(raw or "").strip().replace("\\", "/")
+    if (not name) or "/" in name or name in (".", "..") or ".." in name:
+        return ""
+    return name[:200]
+
+
 _INT_KEYS = {
     "opacity": (0, 100),
     "point_size": (20, 400),
@@ -61,11 +75,19 @@ def clamp_ui_prefs(raw: dict[str, Any] | None) -> dict[str, Any]:
             continue
         out[key] = max(lo, min(hi, val))
     if "model_id" in src:
-        name = str(src.get("model_id") or "").strip().replace("\\", "/")
-        if (not name) or "/" in name or name in (".", "..") or ".." in name:
-            out["model_id"] = ""
-        else:
-            out["model_id"] = name[:200]
+        out["model_id"] = _safe_run_id(src.get("model_id"))
+    labels: dict[str, str] = {}
+    raw_labels = src.get("model_labels")
+    if isinstance(raw_labels, dict):
+        for key, val in raw_labels.items():
+            run_id = _safe_run_id(key)
+            note = str(val or "").strip()[:MODEL_LABEL_MAX]
+            if not run_id or not note:
+                continue
+            labels[run_id] = note
+            if len(labels) >= MODEL_LABELS_MAX:
+                break
+    out["model_labels"] = labels
     return out
 
 
@@ -74,13 +96,13 @@ def load_ui_prefs(viewer_root: Path | str) -> dict[str, Any]:
     path = prefs_path(viewer_root)
     try:
         if not path.is_file():
-            return dict(DEFAULTS)
+            return clamp_ui_prefs({})
         raw = path.read_bytes()
         if len(raw) > MAX_PREFS_BYTES:
-            return dict(DEFAULTS)
+            return clamp_ui_prefs({})
         data = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return dict(DEFAULTS)
+        return clamp_ui_prefs({})
     return clamp_ui_prefs(data if isinstance(data, dict) else {})
 
 

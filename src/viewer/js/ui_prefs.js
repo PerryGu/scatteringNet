@@ -16,6 +16,7 @@ export const UI_PREF_DEFAULTS = {
   envelope_n: 1024,
   envelope_mix: 100,
   model_id: "",
+  model_labels: {},
 };
 
 /**

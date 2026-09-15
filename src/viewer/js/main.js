@@ -56,6 +56,14 @@ const valPsize = document.getElementById("val-psize");
 const sldCap = document.getElementById("sld-cap");
 const valCap = document.getElementById("val-cap");
 const selModel = document.getElementById("sel-model");
+const btnModel = document.getElementById("btn-model");
+const modelPicker = document.getElementById("model-picker");
+const modelList = document.getElementById("model-list");
+const MODEL_SUFFIX_MAX = 48;
+/** User notes after the run id. Keys are folder names; values are suffixes. */
+let modelLabels = {};
+/** Last ``/api/models`` payload (for labels + the custom list). */
+let modelRows = [];
 const btnRun = document.getElementById("btn-run");
 const btnViewTruth = document.getElementById("btn-view-truth");
 const btnViewPred = document.getElementById("btn-view-pred");
@@ -183,6 +191,7 @@ function collectUiPrefs() {
     envelope_mix: clampEnvelopeMix(sldEnvelopeMix && sldEnvelopeMix.value),
     inside_cut: Number(sldCut && sldCut.value),
     model_id: selModel && selModel.value ? String(selModel.value) : "",
+    model_labels: { ...modelLabels },
   };
 }
 
@@ -979,39 +988,186 @@ async function fillModelSelect(preferredId) {
   const previous = (preferredId && String(preferredId)) || selModel.value;
   try {
     const models = await fetchModelList();
+    modelRows = Array.isArray(models) ? models : [];
     selModel.innerHTML = "";
-    if (!models.length) {
+    if (!modelRows.length) {
       const opt = document.createElement("option");
       opt.value = "";
       opt.textContent = "No models/<run>/best.pt";
       selModel.appendChild(opt);
+      paintModelList();
+      syncModelButton();
       syncModelPanel();
       return;
     }
-    models.forEach((row) => {
+    modelRows.forEach((row) => {
       const opt = document.createElement("option");
       opt.value = row.id;
-      const enc = row.shape_encoder ? String(row.shape_encoder) : "";
-      let label = row.id;
-      if (enc === "mesh") {
-        label += " (faces)";
-      } else if (enc === "surface") {
-        label += " (envelope)";
-      }
-      opt.textContent = label;
+      opt.textContent = displayModelLabel(row);
       selModel.appendChild(opt);
     });
-    if (previous && models.some((row) => row.id === previous)) {
+    if (previous && modelRows.some((row) => row.id === previous)) {
       selModel.value = previous;
     }
   } catch (err) {
+    modelRows = [];
     selModel.innerHTML = "";
     const opt = document.createElement("option");
     opt.value = "";
     opt.textContent = "Helper has no model list";
     selModel.appendChild(opt);
   }
+  paintModelList();
+  syncModelButton();
   syncModelPanel();
+}
+
+/**
+ * Run id plus (envelope) / (faces). User notes are appended separately.
+ * @param {{id: string, shape_encoder?: string}} row
+ */
+function baseModelLabel(row) {
+  const enc = row && row.shape_encoder ? String(row.shape_encoder) : "";
+  let label = String(row && row.id ? row.id : "");
+  if (enc === "mesh") {
+    label += " (faces)";
+  } else if (enc === "surface") {
+    label += " (envelope)";
+  }
+  return label;
+}
+
+/**
+ * @param {{id: string, shape_encoder?: string}} row
+ */
+function displayModelLabel(row) {
+  const extra = row && row.id && modelLabels[row.id] ? String(modelLabels[row.id]) : "";
+  const base = baseModelLabel(row);
+  return extra ? base + " " + extra : base;
+}
+
+function syncModelButton() {
+  if (!btnModel) {
+    return;
+  }
+  const id = selModel && selModel.value;
+  const row = modelRows.find((item) => item.id === id);
+  if (!row) {
+    btnModel.textContent = modelRows.length ? "Select a model" : "No models/<run>/best.pt";
+    btnModel.disabled = !modelRows.length;
+    return;
+  }
+  btnModel.disabled = false;
+  btnModel.textContent = displayModelLabel(row);
+}
+
+function setModelPickerOpen(open) {
+  if (!modelPicker) {
+    return;
+  }
+  modelPicker.classList.toggle("model-open", !!open);
+  if (btnModel) {
+    btnModel.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+}
+
+function chooseModel(id) {
+  if (!selModel) {
+    return;
+  }
+  selModel.value = id;
+  selModel.dispatchEvent(new Event("change"));
+  paintModelList();
+  syncModelButton();
+}
+
+function paintModelList() {
+  if (!modelList) {
+    return;
+  }
+  modelList.innerHTML = "";
+  if (!modelRows.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty";
+    empty.textContent = "No models/<run>/best.pt";
+    modelList.appendChild(empty);
+    return;
+  }
+  const current = selModel && selModel.value;
+  modelRows.forEach((row) => {
+    const li = document.createElement("li");
+    li.className = "model-item" + (row.id === current ? " on" : "");
+    li.dataset.id = row.id;
+    li.setAttribute("role", "option");
+    li.textContent = displayModelLabel(row);
+    li.title = "Left-click to select. Right-click to add a note at the end.";
+    li.addEventListener("click", (ev) => {
+      if (ev.target && ev.target.tagName === "INPUT") {
+        return;
+      }
+      chooseModel(row.id);
+      setModelPickerOpen(false);
+    });
+    li.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      startSuffixEdit(li, row);
+    });
+    modelList.appendChild(li);
+  });
+}
+
+/**
+ * Inline field at the end of the existing label. Empty note removes it.
+ * @param {HTMLElement} li
+ * @param {{id: string, shape_encoder?: string}} row
+ */
+function startSuffixEdit(li, row) {
+  if (li.querySelector("input")) {
+    return;
+  }
+  li.classList.add("editing");
+  li.textContent = "";
+  const base = document.createElement("span");
+  base.className = "model-base";
+  base.textContent = baseModelLabel(row) + " ";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "model-suffix";
+  input.maxLength = MODEL_SUFFIX_MAX;
+  input.value = modelLabels[row.id] ? String(modelLabels[row.id]) : "";
+  input.placeholder = "*";
+  input.setAttribute("aria-label", "Note after the model name");
+  const commit = () => {
+    const raw = String(input.value || "").trim().slice(0, MODEL_SUFFIX_MAX);
+    if (raw) {
+      modelLabels[row.id] = raw;
+    } else {
+      delete modelLabels[row.id];
+    }
+    scheduleSaveUiPrefs();
+    paintModelList();
+    syncModelButton();
+  };
+  input.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+  });
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      input.blur();
+    } else if (ev.key === "Escape") {
+      ev.preventDefault();
+      paintModelList();
+    }
+  });
+  input.addEventListener("blur", () => {
+    commit();
+  });
+  li.appendChild(base);
+  li.appendChild(input);
+  input.focus();
+  input.select();
 }
 
 function setViewMode(mode) {
@@ -1148,6 +1304,8 @@ async function restoreUiPrefs() {
   try {
     const prefs = await fetchUiPrefs();
     applyUiPrefs(prefs);
+    const labels = prefs.model_labels && typeof prefs.model_labels === "object" ? prefs.model_labels : {};
+    modelLabels = { ...labels };
     await fillModelSelect(prefs.model_id);
   } catch (err) {
     await fillModelSelect();
@@ -1164,9 +1322,41 @@ btnOpen.addEventListener("click", () => {
 if (selModel) {
   selModel.addEventListener("change", () => {
     syncModelPanel();
+    syncModelButton();
     scheduleSaveUiPrefs();
   });
 }
+if (btnModel) {
+  btnModel.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    if (!modelRows.length) {
+      return;
+    }
+    const open = !(modelPicker && modelPicker.classList.contains("model-open"));
+    setModelPickerOpen(open);
+    if (open) {
+      paintModelList();
+    }
+  });
+}
+document.addEventListener("click", (ev) => {
+  if (!modelPicker || !modelPicker.classList.contains("model-open")) {
+    return;
+  }
+  if (modelPicker.contains(ev.target)) {
+    return;
+  }
+  setModelPickerOpen(false);
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape") {
+    return;
+  }
+  if (ev.target && ev.target.classList && ev.target.classList.contains("model-suffix")) {
+    return;
+  }
+  setModelPickerOpen(false);
+});
 if (btnRun) {
   btnRun.addEventListener("click", () => {
     runInfer();

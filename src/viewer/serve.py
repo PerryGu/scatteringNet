@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent
 REPO = Path(__file__).resolve().parents[2]
 MAX_OBJ_BYTES = 32 * 1024 * 1024
 MAX_INFER_JSON_BYTES = 80 * 1024 * 1024
-MAX_UI_PREFS_JSON_BYTES = 16_384
+MAX_UI_PREFS_JSON_BYTES = 32_768
 JS_MIME = "text/javascript"
 
 if str(ROOT) not in sys.path:

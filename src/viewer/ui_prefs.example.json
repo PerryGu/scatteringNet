@@ -7,6 +7,7 @@
   "inside": true,
   "mesh": true,
   "model_id": "",
+  "model_labels": {},
   "opacity": 100,
   "outside": true,
   "point_size": 100,

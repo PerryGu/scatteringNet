@@ -6,6 +6,23 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-15 10:00 — Viewer: model list notes
+
+The Select Model control is a custom list (native ``<select>`` rows cannot take a right-click). Right-click a row to type a suffix (``*`` or a short note) after the existing label. Stored in ``ui_prefs.json`` as ``model_labels``; ``models/<run_id>/`` is not renamed. Occupancy train loop unchanged.
+
+## 2026-09-15 09:00 — Train: prim_nr45_knn16_n6_nosmooth
+
+Catalog train ``2026-09-14_19-00-37_prim_nr45_knn16_n6_nosmooth`` (from scratch on ``ml.g5.xlarge``). Same n6 head, catalog without smooth ``extruded_*``.
+``best.pt`` epoch 17, val_iou 0.978 / acc 0.996, wall 3h 57m. Val is a different split (1077 meshes vs 1227). Fill vs ``12-18-28_…_n6``: organics still fill; smooth ``extruded_*`` optional (tiny extra volume on the older catalog).
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-15-0900--prim_nr45_knn16_n6_nosmooth-drop-smooth-extruded_).
+
+
+## 2026-09-14 21:00 — Train: prim_extruded_nr45_knn24_n2048_n6
+
+Catalog train ``2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`` (from scratch on ``ml.g5.xlarge``). Same knn24 n6 recipe, ``n_surface: 2048``.
+``best.pt`` epoch 20, val_iou 0.974 / acc 0.996, wall 9h 29m. Val +0.006 vs knn24-1024 (0.967); Fill not judged.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-14-2100--prim_extruded_nr45_knn24_n2048_n6-envelope-2048).
+
 ## 2026-09-14 09:00 — Train: prim_extruded_nr45_knn24_n6
 
 Catalog train ``2026-09-13_19-20-50_prim_extruded_nr45_knn24_n6`` (from scratch on ``ml.g5.xlarge``). Same catalog as n6, ``knn_k: 24``.

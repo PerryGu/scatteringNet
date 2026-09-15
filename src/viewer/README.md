@@ -53,7 +53,7 @@ Right = denser (smaller step). The helper caps the lattice at **200,000** points
 
 ## UI prefs
 
-Checkboxes, sliders, density, **Envelope count**, **Envelope mix**, **Inside cut**, and the selected model are saved to `src/viewer/ui_prefs.json` (helper `GET`/`POST /api/ui-prefs`). Missing file uses defaults; see `ui_prefs.example.json`. Gitignored. Truth / Prediction / Errors are not saved (they depend on the loaded file).
+Checkboxes, sliders, density, **Envelope count**, **Envelope mix**, **Inside cut**, the selected model, and optional **model list notes** (right-click a row, suffix such as `*`) are saved to `src/viewer/ui_prefs.json` (helper `GET`/`POST /api/ui-prefs`). Folder names under `models/` are not renamed. Missing file uses defaults; see `ui_prefs.example.json`. Gitignored. Truth / Prediction / Errors are not saved (they depend on the loaded file).
 
 ## Tests
 

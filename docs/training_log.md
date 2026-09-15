@@ -21,6 +21,8 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 
 | Run id                                          | Name                                                       | Score                      |
 | ----------------------------------------------- | ---------------------------------------------------------- | -------------------------- |
+| `2026-09-14_19-00-37_prim_nr45_knn16_n6_nosmooth` | Same n6 head, catalog without smooth `extruded_*`        | IoU 0.978 · acc 0.996 @ 17 |
+| `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6` | Same knn24 n6, denser envelope (`n_surface: 2048`)    | IoU 0.974 · acc 0.996 @ 20 |
 | `2026-09-13_19-20-50_prim_extruded_nr45_knn24_n6` | Same catalog / n6 head, `knn_k: 24` (more neighbors)       | IoU 0.967 · acc 0.995 @ 20 |
 | `2026-09-13_11-23-44_prim_extruded_nr45_knn16_n6` | Same n6 recipe on SageMaker A10G (`knn_k: 16`)            | IoU 0.967 · acc 0.995 @ 20 |
 | `2026-09-07_15-16-37_prim_extruded_nr45_knn8_n6` | Same catalog / n6 head, `knn_k: 8` (fewer neighbors)       | IoU 0.961 · acc 0.994 @ 20 |
@@ -40,6 +42,174 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 | `2026-08-29_19-43-15_extrude_nr1_surface`       | Envelope + xyz, file holdout                               | IoU 0.691 · acc 0.970 @ 18 |
 | `2026-08-29_09-28-54_extrude_nr1`               | Xyz-only, pooled point split                               | acc 0.853 @ 20             |
 
+
+---
+
+## 2026-09-15 09:00 — prim_nr45_knn16_n6_nosmooth (drop smooth extruded_*)
+
+Fresh train. Same n6 head as [`2026-09-05_12-18-28_prim_extruded_nr45_knn16_n6`](#2026-09-05-2300--prim_extruded_nr45_knn16_n6-xyz--face-normal): `knn_k: 16`, `n_surface: 1024`, mix 75, `h64/d4`, `envelope_dim=6`, seed 1. **Not** a resume of that `best.pt`. The only change is the catalog: drop all smooth `extruded_*` (`s0.08`). Primitives + `nr1` 40 + `nr4` 90 + `nr5` stay. Job `scatteringnet-n6-20260914215452`. Goal: does OOD organic Fill need those blobs, or was n6 (normals) enough? Success is **viewer Fill** vs `12-18-28_…_n6` on the same humans/animals, not a higher val IoU. Val is a **different set** (150 meshes gone).
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` via `sagemaker/entry.py` (from scratch; not a resume) |
+| Catalog | n6 YAML **minus** `extruded_*occupancy_s0.08*.npz` |
+| `run_name` | `prim_nr45_knn16_n6_nosmooth` |
+| Files | 2154 NPZs, 1077 unique OBJs (n6 was 2454 / 1227) |
+| Points | 33.90M (train 26.91M / val 6.99M) |
+| Geometry | `n_surface=1024`, `envelope_mix=75`, `knn_k=16`, `shape_encoder=surface`, `envelope_dim=6` |
+| Split | **Mesh** identity (`n_train_meshes=862` / `n_val_meshes=215`, seed 1) |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; local pool over 16 offsets + neighbor normals |
+| Device | `cuda` / NVIDIA A10G (`ml.g5.xlarge`, `eu-north-1`) |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **3h 57m 13.07s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-14_19-00-37_prim_nr45_knn16_n6_nosmooth/`
+- Weights: `models/2026-09-14_19-00-37_prim_nr45_knn16_n6_nosmooth/best.pt`
+- S3: `s3://scatteringnet-sagemaker-bucket/scatteringNet/output/scatteringnet-n6-20260914215452/output/`
+- Wall: **3h 57m 13.07s** (`started=2026-09-14T18:59:48` → `finished=2026-09-14T22:57:01`)
+- `best_epoch: 17`, `best_metric: 0.977909` (val_iou); epoch 20 did not replace it
+- Snapshot `gpu: NVIDIA A10G`; `data_dir` is the Linux channel (`/opt/ml/input/data/training`)
+- `catalog.txt` has **no** `extruded_*` rows (150 meshes / 300 NPZs dropped vs n6)
+
+### Vs n6 inspect (same head, **different catalog**)
+
+| | **1080 n6 best @ 20** | **G5 n6 best @ 20** | **this run best @ 17** |
+|---|---|---|---|
+| val_acc | 0.994 | 0.995 | 0.996 |
+| val_iou / val_f1 | 0.965 / 0.982 | 0.967 / 0.983 | 0.978 / 0.989 |
+| train_acc | 0.997 | 0.997 | 0.996 |
+| loss | 0.0087 | 0.0085 | 0.0101 |
+| wall | 10h 10m | 4h 58m | **3h 57m** |
+| meshes / NPZs | 1227 / 2454 | same | **1077 / 2154** |
+
+Do **not** read 0.978 vs 0.965 as a better head. The val split no longer includes the dense `s0.08` smooth clouds that dragged the n6 micro-average (`15-52-00` already warned about that). Train and val stay together. Epoch 17 took `best.pt`; later ticks wobble and do not replace it. A resume is not justified. Wall is shorter because the catalog is smaller, not because the G5 got faster.
+
+### Fill (viewer) — 15 Sep 2026
+
+Same OOD meshes, same lattice, two checkpoints. Left column is the inspect n6 that **kept** smooth `extruded_*` (`2026-09-05_12-18-28_…_n6`, 1080). Right column is this run (catalog **without** those blobs). Overlay Mix/Count do not change infer.
+
+**None of these shapes were in either catalog.** Organics still fill without the smooth family. The n6-with-blobs stills have a **tiny** extra inside count (human 12,432 vs 12,094; giraffe 8,201 vs 8,055; dog 15,812 vs 15,400 — about 2–3%). That is a slight extra volume, not a different failure mode. Hands, neck, legs, and the dog ear leftover look like the same class of Fill.
+
+<table>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_n6_human.png"><img src="media/2026-09-15_n6_human.png" alt="Human n6 with smooth extruded" width="100%"/></a><br/>Human — n6 with smooth <code>extruded_*</code> (12,432 inside)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_nosmooth_human.png"><img src="media/2026-09-15_nosmooth_human.png" alt="Human nosmooth" width="100%"/></a><br/>Human — this run, no smooth blobs (12,094 inside)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_n6_giraffe.png"><img src="media/2026-09-15_n6_giraffe.png" alt="Giraffe n6 with smooth extruded" width="100%"/></a><br/>Giraffe — n6 with smooth <code>extruded_*</code> (8,201 inside)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_nosmooth_giraffe.png"><img src="media/2026-09-15_nosmooth_giraffe.png" alt="Giraffe nosmooth" width="100%"/></a><br/>Giraffe — this run, no smooth blobs (8,055 inside)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_n6_dog.png"><img src="media/2026-09-15_n6_dog.png" alt="Dog n6 with smooth extruded" width="100%"/></a><br/>Dog — n6 with smooth <code>extruded_*</code> (15,812 inside)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_nosmooth_dog.png"><img src="media/2026-09-15_nosmooth_dog.png" alt="Dog nosmooth" width="100%"/></a><br/>Dog — this run, no smooth blobs (15,400 inside)</td>
+</tr>
+</table>
+
+**Not shown by this run**
+
+- That dropping `nr4`/`nr5` next would be safe
+
+**Bottom line:** smooth `extruded_*` are **not required** for OOD organics. n6 (envelope normals) was the transfer. The blobs may help a **tiny** bit (slightly fuller inside counts); they are optional for that goal. Inspect can stay `12-18-28_…_n6` as the k=16 / 1024 baseline. Do not read 0.978 val IoU as a Fill win.
+
+---
+
+## 2026-09-14 21:00 — prim_extruded_nr45_knn24_n2048_n6 (envelope 2048)
+
+Fresh train. Same catalog, seed, mesh val, mix 75, `h64/d4`, `knn_k: 24`, `envelope_dim=6` as [`2026-09-13_19-20-50_prim_extruded_nr45_knn24_n6`](#2026-09-14-0900--prim_extruded_nr45_knn24_n6-k24-ab). **Not** a resume of that `best.pt`. The only change is `n_surface: 2048` (was 1024). Job `scatteringnet-n6-20260914103720`. Goal: does a denser skin tighten local k-NN vs knn24 at 1024? Success is **viewer Fill** vs that checkpoint (and vs `12-18-28_…_n6`), not a higher val IoU. An earlier 2048 A/B (`15-59-37`, knn16, older mixed catalog, XYZ neighbors) raised IoU and **did not** change Fill.
+
+### Fill (viewer) — 14 Sep 2026
+
+Checkpoint `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`.
+
+**None of these stills from the animal families, the human figures, or the combos were in the training catalog.** That includes the woman / man / stylized human, the dog / horse, and both combo meshes. Aside from the **gear**, those uploaded shapes were not training identities at all. Helix **is** a catalog family, but **without** bend / FFD on the trained meshes. Extrudes are catalog family (`nr4` / `nr5`). Overlay Mix/Count do not change infer.
+
+Hands / paws no longer **bleed outside** the mesh (the leftover on knn24-1024). The fingers are instead **under-filled** — a lack of orange inside the paws. It is not clearly better. Slight bleeding from the **dog's ear** remains. Other bleeds show up on some OOD combos and on a thin-spike extrude.
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_woman.png"><img src="media/2026-09-14_knn24_n2048_woman.png" alt="Woman knn24 n2048" width="100%"/></a><br/>Woman (human; not in the training catalog): body fills; paws no longer bleed out</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_woman_hand.png"><img src="media/2026-09-14_knn24_n2048_woman_hand.png" alt="Woman hand knn24 n2048" width="100%"/></a><br/>Woman hand (not in the training catalog): no bleed out of the fingers, but a lack of points inside</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_man.png"><img src="media/2026-09-14_knn24_n2048_man.png" alt="Man knn24 n2048" width="100%"/></a><br/>Man (human; not in the training catalog): body fills; paws no longer bleed out</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_man_hand.png"><img src="media/2026-09-14_knn24_n2048_man_hand.png" alt="Man hand knn24 n2048" width="100%"/></a><br/>Man hand (not in the training catalog): no bleed out of the fingers, but a lack of points inside</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_dog.png"><img src="media/2026-09-14_knn24_n2048_dog.png" alt="Dog knn24 n2048" width="100%"/></a><br/>Dog (animal family; not in the training catalog): slight bleeding from the ear</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_horse.png"><img src="media/2026-09-14_knn24_n2048_horse.png" alt="Horse knn24 n2048" width="100%"/></a><br/>Horse (animal family; not in the training catalog)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_human_stylized.png"><img src="media/2026-09-14_knn24_n2048_human_stylized.png" alt="Stylized human knn24 n2048" width="100%"/></a><br/>Stylized human (not in the training catalog)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_combo_animals.png"><img src="media/2026-09-14_knn24_n2048_combo_animals.png" alt="Combo animals knn24 n2048" width="100%"/></a><br/>Combo animals / humans (not in the training catalog): spots of bleed</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_combo_prim.png"><img src="media/2026-09-14_knn24_n2048_combo_prim.png" alt="Combo primitives knn24 n2048" width="100%"/></a><br/>Combo primitives (not in the training catalog): some bleeding at the cone/cylinder join</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_gear.png"><img src="media/2026-09-14_knn24_n2048_gear.png" alt="Gear knn24 n2048" width="100%"/></a><br/>Gear (in catalog)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_helix.png"><img src="media/2026-09-14_knn24_n2048_helix.png" alt="Helix knn24 n2048" width="100%"/></a><br/>Helix: catalog family, but this mesh has bend / FFD (not in catalog that way)</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_extrude.png"><img src="media/2026-09-14_knn24_n2048_extrude.png" alt="Extrude knn24 n2048" width="100%"/></a><br/>Extrude (catalog family)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-14_knn24_n2048_extrude_leak.png"><img src="media/2026-09-14_knn24_n2048_extrude_leak.png" alt="Extrude leak knn24 n2048" width="100%"/></a><br/>Extrude (catalog family): bleeding at thin spikes / arms</td>
+<td></td>
+<td></td>
+</tr>
+</table>
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` via `sagemaker/entry.py` (from scratch; not a resume) |
+| Catalog | Same YAML `npz_catalog` as `15-52-00` / n6 |
+| `run_name` | `prim_extruded_nr45_knn24_n2048_n6` |
+| Files | 2454 NPZs, 1227 unique OBJs |
+| Points | 41.99M (train 35.07M / val 6.92M) |
+| Geometry | `n_surface=2048`, `envelope_mix=75`, `knn_k=24`, `shape_encoder=surface`, `envelope_dim=6` |
+| Split | **Mesh** identity (`n_train_meshes=982` / `n_val_meshes=245`, seed 1) |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; local pool over 24 offsets + neighbor normals |
+| Device | `cuda` / NVIDIA A10G (`ml.g5.xlarge`, `eu-north-1`) |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **9h 28m 35.80s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6/`
+- Weights: `models/2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6/best.pt`
+- S3: `s3://scatteringnet-sagemaker-bucket/scatteringNet/output/scatteringnet-n6-20260914103720/output/`
+- Wall: **9h 28m 35.80s** (`started=2026-09-14T07:42:14` → `finished=2026-09-14T17:10:50`)
+- `best_epoch: 20`, `best_metric: 0.973721` (val_iou)
+- Snapshot `gpu: NVIDIA A10G`; `data_dir` is the Linux channel (`/opt/ml/input/data/training`)
+
+### Vs G5 knn24 (`n_surface: 1024`) on this catalog
+
+| | **knn24 1024 best @ 20** | knn24 1024 @ 10 | **this run best @ 20** | this run @ 10 |
+|---|---|---|---|---|
+| val_acc | 0.995 | 0.994 | 0.996 | 0.995 |
+| val_iou / val_f1 | 0.967 / 0.983 | 0.963 / 0.981 | 0.974 / 0.987 | 0.970 / 0.985 |
+| train_acc | 0.997 | 0.996 | 0.997 | 0.997 |
+| loss | 0.0085 | 0.0097 | 0.0072 | 0.0081 |
+| wall | 5h 01m | — | **9h 29m** | — |
+| meshes / NPZs | 1227 / 2454 | same | same | same |
+| val points | 6.92M | same | same | same |
+
+Same box and catalog. Val IoU 0.9737 vs 0.9674 is **+0.006** — larger than k=16→24 (+0.0007) and G5 vs 1080 n6 (+0.002). Epoch 7 already 0.970; epoch 13 held 0.970 until epoch 20 replaced `best.pt` (epoch 19 dipped to 0.964). Train and val stay together. Wall is ~1.9× (k-NN cost scales with envelope `N`). Same class of bump as `15-59-37` (2048 vs 1024 on the old mix: +0.008 IoU, Fill unchanged). A resume is not justified. Do not read this as a Fill win.
+
+**Not shown by this run**
+
+- That 4096 envelope dots would fill the paws without bringing bleed back
+- A locked organic holdout (these stills are OOD inspect, not Step 11)
+
+**Bottom line:** val IoU moved; Fill is a **trade**. Paws no longer bleed out (vs knn24-1024) but are **under-filled**. Dog-ear bleed remains. Animals / humans / combos were **not** in the catalog. Inspect stays `12-18-28_…_n6` until you pick empty fingers vs bleed. Do not resume. Do not stack another envelope-count A/B on val IoU.
 
 ---
 
