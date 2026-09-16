@@ -89,6 +89,29 @@ Earlier n6 Fill (same catalog, `knn_k: 16`, `n_surface: 1024`) already transferr
 
 ---
 
+## Occupancy viewer
+
+Training prints accuracy and IoU. Those numbers can look fine while, in reality, the points still aren't positioned correctly: most query points sit **outside** the mesh, so “always guess outside” already scores high. The viewer is the inspect window for that check. It is a Three.js page plus a localhost helper (`src/viewer/serve.py`). It does not train, and it is not a Maya plugin.
+
+**Launch.** Double-click `open_viewer.bat` at the repo root. Close any old helper console first, or the browser may still talk to a Python that has no `torch`.
+
+```text
+open_viewer.bat
+```
+
+Or: `conda activate scatteringNet` then `python src/viewer/serve.py`. Orbit works on CPU. **Run model** needs the GPU and checkpoints at `models/<run_id>/best.pt`. Control-by-control notes: [`src/viewer/README.md`](src/viewer/README.md).
+
+**What it can do**
+
+- **Open** or drop an `.obj` or `.npz`. Hover Open for the last ten files. An NPZ with `mesh_path` pulls that OBJ from `data_dir`.
+- **OBJ Fill** (the gallery path). **Fill points** builds an unlabeled lattice in the bounding box (density slider; cap 200,000). **Envelope** draws purple skin dots. Overlay Mix / Count are display-only. Pick a checkpoint → **Run model** classifies every query. There are no file labels, so no Errors view.
+- **NPZ check.** The file already has points and Truth. **Run model** classifies those same coordinates. **Prediction** / **Errors** compare to the labels.
+- **Look.** Mesh / wireframe, inside / outside, opacity, point size, **Inside cut** (drag re-cuts the last Run in the browser, no extra GPU pass). Right-click a model row to append a note (`*`); that does not rename `models/`.
+
+Typical inspect path: **Open** an OBJ → **Fill points** → pick a model → **Run model**.
+
+---
+
 ## Dataset
 
 There was no large, ready-made mesh collection of any kind — and a network needs volume. The meshes were generated in Maya. Operator notes for those scripts: [`docs/maya_batch_scatter_scripts.md`](docs/maya_batch_scatter_scripts.md).
@@ -203,7 +226,7 @@ Side-by-side viewer Fill on the same OOD set (woman, dog, man, CAD extrudes, com
 | -------------------------------------- | -------------- | ------- | ----------- | --------------- | ------------------------------------------------------------------------------- |
 | `2026-09-05_12-18-28_…_n6`             | GTX 1080       | 16      | 1024        | 0.965           | Strong baseline. Cleaner woman hands than SageMaker k=16. More dog bleed.       |
 | `2026-09-13_11-23-44_…_n6`             | SageMaker A10G | 16      | 1024        | 0.967           | Same YAML as the 1080 n6. Trades leftovers (woman left-hand leak; tighter dog). |
-| `2026-09-14_07-43-34_…_knn24_n2048_n6` | SageMaker A10G | **24**  | **2048**    | 0.974           | **Best Fill.** Orange stays inside the wire on humans, extrudes, and combos.    |
+| `2026-09-14_07-43-34_…_knn24_n2048_n6` | SageMaker A10G | **24**  | **2048**    | 0.974           | **Best Fill.** Inside points stay inside the wire on humans, extrudes, and combos.    |
 
 
 **What that comparison is not.** The two k=16 runs are the same recipe, not the same weights. Seed 1 does not pin cuDNN or TF32. Ampere (A10G) uses TF32 for FP32 matmuls by default; the 1080 does not. Val IoU 0.967 vs 0.965 is noise. Fill leftovers swap (hand vs ear) because catalog val never saw those meshes.
@@ -236,7 +259,7 @@ flowchart TD
     ZG["z_global<br/>'What the whole mesh is'<br/>One fingerprint for the shape<br/>gear vs dog vs thin extrude."]
     ZL["z_local<br/>'What is right next to it'<br/>Nearby skin plus which way<br/>those faces point."]
     MLP["Occupancy MLP<br/>'Small classifier'<br/>Glue the three clues together.<br/>hidden 64, depth 4."]
-    OUT["Inside / Outside<br/>'The Fill label'<br/>Orange stays in the solid.<br/>Air is left empty."]
+    OUT["Inside / Outside<br/>'The Fill label'<br/>Inside stays in the solid.<br/>Air is left empty."]
 
     SETUP -->|"1. Hand the skin to the head"| HUB
     HUB -->|"2. Where is this point"| Q
@@ -310,7 +333,8 @@ flowchart TD
 
 ## Project Structure
 
-<img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> **scatteringNet/**
+<details>
+<summary><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <strong>scatteringNet/</strong> — click to expand the tree</summary>
 
 <ul>
 <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>config.yaml</code></li>
@@ -386,7 +410,7 @@ flowchart TD
     <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>maya_batch_helix.py</code></li>
     </ul>
   </li>
-  <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>viewer/</code>
+  <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>viewer/</code> — Three.js inspect page + localhost helper
     <ul>
     <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>serve.py</code></li>
     <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>infer_job.py</code></li>
@@ -400,8 +424,9 @@ flowchart TD
   </li>
   </ul>
 </li>
-<li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>tests/</code></li>
+<li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>tests/</code> — stdlib <code>unittest</code> modules for the occupancy pipeline</li>
 </ul>
+</details>
 
 ---
 
@@ -437,13 +462,11 @@ Checkpoints the viewer lists are `models/<run_id>/best.pt`. Put a downloaded Sag
 
 #### Occupancy viewer
 
+Role, launch, and what the page can do: [Occupancy viewer](#occupancy-viewer).
+
 ```text
 open_viewer.bat
 ```
-
-Or: `conda activate scatteringNet` then `python src/viewer/serve.py`. Close an old helper window first. Viewer notes: [`src/viewer/README.md`](src/viewer/README.md).
-
-Typical Fill path: **Open** an OBJ → **Fill points** → pick a model → **Run model**. Right-click a model row to append a note (`*` or a short label); that does not rename `models/<run_id>/`.
 
 #### Train on the YAML catalog
 
@@ -471,10 +494,12 @@ python sagemaker/launch.py --role arn:aws:iam::ACCOUNT:role/ROLE
 
 Instance `ml.g5.xlarge`, region `eu-north-1`. Quota, S3 layout, download, CloudWatch: [`docs/sagemaker.md`](docs/sagemaker.md).
 
-#### Viewer tests
+#### Unit tests
+
+The `tests/` folder holds stdlib `unittest` modules for the occupancy pipeline.
 
 ```text
-python tests/test_viewer_server.py
+python -m unittest discover -s tests
 ```
 
 ---

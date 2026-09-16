@@ -121,9 +121,48 @@ Same OOD meshes, same lattice, two checkpoints. Left column is the inspect n6 th
 
 ---
 
-## 2026-09-14 21:00 — prim_extruded_nr45_knn24_n2048_n6 (envelope 2048)
+## 2026-09-14 21:00 — knn24 n2048 (envelope 2048)
 
 Fresh train. Same catalog, seed, mesh val, mix 75, `h64/d4`, `knn_k: 24`, `envelope_dim=6` as [`2026-09-13_19-20-50_prim_extruded_nr45_knn24_n6`](#2026-09-14-0900--prim_extruded_nr45_knn24_n6-k24-ab). **Not** a resume of that `best.pt`. The only change is `n_surface: 2048` (was 1024). Job `scatteringnet-n6-20260914103720`. Goal: does a denser skin tighten local k-NN vs knn24 at 1024? Success is **viewer Fill** vs that checkpoint (and vs `12-18-28_…_n6`), not a higher val IoU. An earlier 2048 A/B (`15-59-37`, knn16, older mixed catalog, XYZ neighbors) raised IoU and **did not** change Fill.
+
+Run id (Artifacts, not the heading): `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`. Stills are in the two **Fill** tables immediately below — open **Preview**, not the outline.
+
+### Fill (viewer) — 15 Sep 2026 — k=16 / 1024 vs k=24 / 2048
+
+Same OOD meshes, same lattice. Left is inspect n6 (`2026-09-05_12-18-28_…_n6`, `knn_k: 16`, `n_surface: 1024`). Right is this run (`knn_k: 24`, `n_surface: 2048`). Overlay Mix/Count do not change infer. A SageMaker k=16 still (same YAML as the 1080 n6) was also shot; it trades leftovers with the 1080 and is **not** this pair.
+
+**None of these inspect shapes were training identities** (helix / extrude are catalog *families*, not these exact meshes).
+
+**User conclusion.** The two k=16 models swap who wins a still. If you want the **best** Fill on this set, use 24 neighbors and 2048 envelope dots. Orange stays inside the wire on the woman, the man, the extrudes, and the combo row. Leftover is smaller and different: a bit of dog-ear spray, slightly fewer inside points (tighter, sometimes thinner fingers), not the k=16 palm / shorts blob. Cost is real: this A10G train was ~9h 29m vs ~5h for SageMaker k=16 / 1024 (~10h on the 1080); **Run model** rebuilds a 2048 cloud and a 24-neighbor pool.
+
+If humans / animals had been in `npz_catalog`, k=16 / 1024 might have been enough. Putting them in now would also end the OOD test.
+
+<table>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k16_1024_dog.png"><img src="media/2026-09-15_k16_1024_dog.png" alt="Dog k16 1024" width="100%"/></a><br/>Dog — k=16 / 1024 (25,828 inside; more ear spray)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k24_2048_dog.png"><img src="media/2026-09-15_k24_2048_dog.png" alt="Dog k24 2048" width="100%"/></a><br/>Dog — k=24 / 2048 (24,816 inside; tighter, ear leftover remains)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k16_1024_woman.png"><img src="media/2026-09-15_k16_1024_woman.png" alt="Woman k16 1024" width="100%"/></a><br/>Woman — k=16 / 1024 (14,315 inside; fuller hands, some outside the wire)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k24_2048_woman.png"><img src="media/2026-09-15_k24_2048_woman.png" alt="Woman k24 2048" width="100%"/></a><br/>Woman — k=24 / 2048 (14,097 inside; orange stays in the mesh)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k16_1024_man.png"><img src="media/2026-09-15_k16_1024_man.png" alt="Man k16 1024" width="100%"/></a><br/>Man — k=16 / 1024 (23,577 inside; bleed at shorts, hands, feet)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k24_2048_man.png"><img src="media/2026-09-15_k24_2048_man.png" alt="Man k24 2048" width="100%"/></a><br/>Man — k=24 / 2048 (22,315 inside; fill stays in the volume)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k16_1024_extrude_block.png"><img src="media/2026-09-15_k16_1024_extrude_block.png" alt="Block extrude k16 1024" width="100%"/></a><br/>CAD extrude — k=16 / 1024 (12,659 inside; specks outside slabs)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k24_2048_extrude_block.png"><img src="media/2026-09-15_k24_2048_extrude_block.png" alt="Block extrude k24 2048" width="100%"/></a><br/>CAD extrude — k=24 / 2048 (12,463 inside; fewer outside specks)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k16_1024_extrude_spike.png"><img src="media/2026-09-15_k16_1024_extrude_spike.png" alt="Spike extrude k16 1024" width="100%"/></a><br/>Thin-spike extrude — k=16 / 1024 (7,151 inside; leak at arms)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k24_2048_extrude_spike.png"><img src="media/2026-09-15_k24_2048_extrude_spike.png" alt="Spike extrude k24 2048" width="100%"/></a><br/>Thin-spike extrude — k=24 / 2048 (7,053 inside; leak reduced)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k16_1024_combo.png"><img src="media/2026-09-15_k16_1024_combo.png" alt="Combo k16 1024" width="100%"/></a><br/>Combo primitives — k=16 / 1024 (4,040 inside; specks at torus / helix)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-15_k24_2048_combo.png"><img src="media/2026-09-15_k24_2048_combo.png" alt="Combo k24 2048" width="100%"/></a><br/>Combo primitives — k=24 / 2048 (4,144 inside; cleaner joins)</td>
+</tr>
+</table>
 
 ### Fill (viewer) — 14 Sep 2026
 
@@ -209,7 +248,7 @@ Same box and catalog. Val IoU 0.9737 vs 0.9674 is **+0.006** — larger than k=1
 - That 4096 envelope dots would fill the paws without bringing bleed back
 - A locked organic holdout (these stills are OOD inspect, not Step 11)
 
-**Bottom line:** val IoU moved; Fill is a **trade**. Paws no longer bleed out (vs knn24-1024) but are **under-filled**. Dog-ear bleed remains. Animals / humans / combos were **not** in the catalog. Inspect stays `12-18-28_…_n6` until you pick empty fingers vs bleed. Do not resume. Do not stack another envelope-count A/B on val IoU.
+**Bottom line:** val IoU moved; **Fill** on this OOD set prefers k=24 / 2048 over k=16 / 1024. Paws / hands no longer blob outside the wire; fingers can be tighter (sometimes thinner inside). Dog-ear spray remains. Animals / humans / combos were **not** in the catalog. Best inspect weights for this grid: this `best.pt`. Do not resume. Do not stack another envelope-count A/B on val IoU.
 
 ---
 

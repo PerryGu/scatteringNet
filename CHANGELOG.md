@@ -6,6 +6,18 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-16 10:00 — Docs: README collapsible project tree
+
+[`README.md`](README.md) Project Structure is a closed ``<details>`` block (click ``scatteringNet/`` to expand). Occupancy code unchanged.
+
+## 2026-09-16 10:00 — Docs: viewer README screenshots
+
+[`src/viewer/README.md`](src/viewer/README.md) now has three UI stills (main view, Open recents, Select Model) and maps the left-column buttons to those shots. PNGs in [`docs/media/`](docs/media/). Occupancy code unchanged.
+
+## 2026-09-16 09:00 — Docs: README Fill wording
+
+[`README.md`](README.md) no longer treats inspect-viewer orange as the Fill. Occupancy code unchanged.
+
 ## 2026-09-15 10:00 — Viewer: model list notes
 
 The Select Model control is a custom list (native ``<select>`` rows cannot take a right-click). Right-click a row to type a suffix (``*`` or a short note) after the existing label. Stored in ``ui_prefs.json`` as ``model_labels``; ``models/<run_id>/`` is not renamed. Occupancy train loop unchanged.
@@ -21,7 +33,7 @@ Write-up: [docs/training_log.md](docs/training_log.md#2026-09-15-0900--prim_nr45
 
 Catalog train ``2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`` (from scratch on ``ml.g5.xlarge``). Same knn24 n6 recipe, ``n_surface: 2048``.
 ``best.pt`` epoch 20, val_iou 0.974 / acc 0.996, wall 9h 29m. Val +0.006 vs knn24-1024 (0.967); Fill not judged.
-Write-up: [docs/training_log.md](docs/training_log.md#2026-09-14-2100--prim_extruded_nr45_knn24_n2048_n6-envelope-2048).
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-14-2100--knn24-n2048-envelope-2048).
 
 ## 2026-09-14 09:00 — Train: prim_extruded_nr45_knn24_n6
 
