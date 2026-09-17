@@ -27,11 +27,14 @@ import {
   thresholdFromCutSlider,
 } from "./model_panel.js";
 import { fillObjOnHelper, inferObjOnHelper, spacingFromSlider } from "./obj_infer.js";
-import { clampEnvelopeMix, clampNSurface, envelopeObjOnHelper, makeEnvelopeLayer } from "./envelope.js";
+import { clampNSurface, envelopeObjOnHelper, makeEnvelopeLayer } from "./envelope.js";
 import { fetchUiPrefs, postUiPrefs } from "./ui_prefs.js";
 
 const container = document.getElementById("canvas-container");
 const canvas = document.getElementById("canvas");
+const titleBar = document.getElementById("title-bar");
+const titleText = document.getElementById("title-text");
+const TITLE_DEFAULT = "scatteringNet — occupancy viewer";
 const statusEl = document.getElementById("status");
 const dropHint = document.getElementById("drop-hint");
 const openWrap = document.getElementById("open-wrap");
@@ -76,13 +79,12 @@ const legSwatchIn = document.getElementById("leg-swatch-in");
 const legSwatchOut = document.getElementById("leg-swatch-out");
 const fillPanel = document.getElementById("fill-panel");
 const btnFill = document.getElementById("btn-fill");
+const btnClearPoints = document.getElementById("btn-clear-points");
 const sldDensity = document.getElementById("sld-density");
 const valDensity = document.getElementById("val-density");
 const btnEnvelope = document.getElementById("btn-envelope");
 const sldEnvelope = document.getElementById("sld-envelope");
 const valEnvelope = document.getElementById("val-envelope");
-const sldEnvelopeMix = document.getElementById("sld-envelope-mix");
-const valEnvelopeMix = document.getElementById("val-envelope-mix");
 const sldCut = document.getElementById("sld-cut");
 const valCut = document.getElementById("val-cut");
 
@@ -119,8 +121,108 @@ function cancelPendingFill() {
   fillPending = false;
 }
 
+/**
+ * Last Run-model snapshot so the Inside-cut slider can refresh the table.
+ * @type {{checkpoint: string, wallSec: number, fillSec: number, timings: object|null}|null}
+ */
+let lastRunStatus = null;
+
 function setStatus(text) {
+  lastRunStatus = null;
+  statusEl.classList.remove("is-table");
   statusEl.textContent = text;
+}
+
+function addStatusRow(tbody, label, value, valueClass, hint) {
+  const tr = document.createElement("tr");
+  const th = document.createElement("th");
+  const name = document.createElement("span");
+  name.className = "status-name";
+  name.textContent = label;
+  th.appendChild(name);
+  if (hint) {
+    const rest = document.createElement("span");
+    rest.className = "status-hint";
+    rest.textContent = " — " + hint;
+    th.appendChild(rest);
+  }
+  const td = document.createElement("td");
+  td.className = valueClass || "num";
+  td.textContent = value;
+  if (valueClass && valueClass.indexOf("model") >= 0) {
+    td.title = value;
+  }
+  tr.appendChild(th);
+  tr.appendChild(td);
+  tbody.appendChild(tr);
+}
+
+function addStatusSection(tbody, title) {
+  const tr = document.createElement("tr");
+  tr.className = "sec";
+  const th = document.createElement("th");
+  th.colSpan = 2;
+  th.textContent = title;
+  tr.appendChild(th);
+  tbody.appendChild(tr);
+}
+
+/**
+ * Paint the post-Run table (counts follow the current Inside cut).
+ * @param {{checkpoint: string, wallSec: number, fillSec: number, timings: object|null}} run
+ */
+function paintRunStatusTable(run) {
+  lastRunStatus = run;
+  const t = run.timings && typeof run.timings === "object" ? run.timings : {};
+  const table = document.createElement("table");
+  const tbody = document.createElement("tbody");
+  addStatusRow(tbody, "Model", run.checkpoint || "—", "model");
+  if (npzState && npzState.pred) {
+    addStatusRow(
+      tbody,
+      "Inside",
+      countPredClass(npzState.pred, true).toLocaleString(),
+      "num in"
+    );
+    addStatusRow(
+      tbody,
+      "Outside",
+      countPredClass(npzState.pred, false).toLocaleString(),
+      "num out"
+    );
+    if (!isFillJob()) {
+      const acc = Number(npzState.cutAcc);
+      const iou = Number(npzState.cutIou);
+      addStatusRow(tbody, "Acc", Number.isFinite(acc) ? acc.toFixed(4) : "—", "num acc");
+      addStatusRow(tbody, "IoU", Number.isFinite(iou) ? iou.toFixed(4) : "—", "num acc");
+    }
+  }
+  addStatusSection(tbody, "Times");
+  addStatusRow(tbody, "Fill points", fmtSec(run.fillSec), "num time", "AABB in mesh bounding box");
+  addStatusRow(tbody, "Envelope", fmtSec(t.envelope), "num time", "surface samples");
+  addStatusRow(
+    tbody,
+    "Load to GPU",
+    fmtSec(addSecs(t.parse_obj, t.load_model)),
+    "num time",
+    "parse the OBJ and copy weights onto the GPU"
+  );
+  addStatusRow(tbody, "Run model", fmtSec(t.forward), "num time", "occupancy forward pass");
+  addStatusRow(tbody, "Total", fmtSec(run.wallSec), "num tot", "wall time, including HTTP");
+  table.appendChild(tbody);
+  const head = document.createElement("div");
+  head.className = "status-head";
+  head.textContent = "Prediction";
+  statusEl.classList.add("is-table");
+  statusEl.replaceChildren(head, table);
+}
+
+function refreshStatusAfterCut() {
+  if (lastRunStatus) {
+    paintRunStatusTable(lastRunStatus);
+    return;
+  }
+  setStatus(statusForCurrentCut());
 }
 
 function hideNpzPanel() {
@@ -131,6 +233,24 @@ function hideNpzPanel() {
   npzPath.textContent = "";
   npzPath.removeAttribute("title");
   currentMeshPath = "";
+}
+
+/**
+ * Put the opened OBJ/NPZ basename in the title bar (and tab).
+ * @param {string} name
+ */
+function setDisplayedFileName(name) {
+  const n = String(name || "").trim();
+  const label = n ? "scatteringNet — " + n : TITLE_DEFAULT;
+  if (titleText) {
+    titleText.textContent = label;
+  } else if (titleBar) {
+    titleBar.textContent = label;
+  }
+  if (titleBar) {
+    titleBar.title = n;
+  }
+  document.title = n ? n + " — occupancy viewer" : "scatteringNet occupancy viewer";
 }
 
 function hideInspectPanel() {
@@ -145,6 +265,10 @@ function isNpzJob() {
   return !!(npzState && npzState.source !== "fill");
 }
 
+function isObjJob() {
+  return !!objText && !isNpzJob();
+}
+
 function syncFillPanel() {
   const hasMesh = !!objText;
   const jobB = hasMesh && !isNpzJob();
@@ -153,6 +277,10 @@ function syncFillPanel() {
   }
   if (btnFill) {
     btnFill.disabled = !jobB || fillBusy || inferBusy;
+  }
+  if (btnClearPoints) {
+    const hasPoints = hasDrawnPointCloud();
+    btnClearPoints.disabled = !hasPoints || fillBusy || inferBusy || envelopeBusy;
   }
   if (btnEnvelope) {
     btnEnvelope.disabled = !hasMesh || envelopeBusy || inferBusy;
@@ -163,7 +291,7 @@ function syncFillPanel() {
 function syncModelPanel() {
   const hasModel = !!(selModel && selModel.value);
   const hasPred = !!(npzState && npzState.pred);
-  const canRun = isNpzJob() || isFillJob();
+  const canRun = isNpzJob() || isObjJob();
   btnRun.disabled = !canRun || !hasModel || inferBusy || fillBusy;
   btnViewTruth.disabled = !isNpzJob();
   btnViewPred.disabled = !hasPred;
@@ -188,7 +316,6 @@ function collectUiPrefs() {
     draw_cap: Number(sldCap && sldCap.value),
     density: Number(sldDensity && sldDensity.value),
     envelope_n: clampNSurface(sldEnvelope && sldEnvelope.value),
-    envelope_mix: clampEnvelopeMix(sldEnvelopeMix && sldEnvelopeMix.value),
     inside_cut: Number(sldCut && sldCut.value),
     model_id: selModel && selModel.value ? String(selModel.value) : "",
     model_labels: { ...modelLabels },
@@ -230,15 +357,11 @@ function applyUiPrefs(prefs) {
   if (sldEnvelope && prefs.envelope_n != null) {
     sldEnvelope.value = String(clampNSurface(prefs.envelope_n));
   }
-  if (sldEnvelopeMix && prefs.envelope_mix != null) {
-    sldEnvelopeMix.value = String(clampEnvelopeMix(prefs.envelope_mix));
-  }
   if (sldCut && prefs.inside_cut != null) {
     sldCut.value = String(prefs.inside_cut);
   }
   updateDensityLabel();
   updateEnvelopeLabel();
-  updateEnvelopeMixLabel();
   updateCutLabel();
   applyInspectToMesh();
   applyInspectToPoints();
@@ -324,9 +447,26 @@ function applyStoredProbs(opts) {
     rebuildNpzLayers();
   }
   if (opts && opts.status) {
-    setStatus(statusForCurrentCut());
+    refreshStatusAfterCut();
   }
   return true;
+}
+
+function fmtSec(sec) {
+  const n = Number(sec);
+  if (!Number.isFinite(n)) {
+    return "—";
+  }
+  return n.toFixed(2) + "s";
+}
+
+function addSecs(a, b) {
+  const x = Number(a);
+  const y = Number(b);
+  if (!Number.isFinite(x) && !Number.isFinite(y)) {
+    return NaN;
+  }
+  return (Number.isFinite(x) ? x : 0) + (Number.isFinite(y) ? y : 0);
 }
 
 function statusForCurrentCut() {
@@ -477,6 +617,64 @@ function applyInspectToPoints() {
   valPsize.textContent = (Number(sldPsize.value) / 100).toFixed(1) + "×";
 }
 
+function removeNpzPointLayers() {
+  if (!loadedRoot) {
+    return;
+  }
+  ["npz-inside", "npz-outside"].forEach((name) => {
+    const old = loadedRoot.getObjectByName(name);
+    if (old) {
+      loadedRoot.remove(old);
+      disposeObject3d(old);
+    }
+  });
+}
+
+function hasDrawnPointCloud() {
+  if (envelopeVisible) {
+    return true;
+  }
+  if (!loadedRoot) {
+    return false;
+  }
+  return !!(
+    loadedRoot.getObjectByName("npz-inside") || loadedRoot.getObjectByName("npz-outside")
+  );
+}
+
+function clearPoints() {
+  if (fillBusy || inferBusy || envelopeBusy) {
+    return;
+  }
+  cancelPendingFill();
+  window.clearTimeout(envelopeTimer);
+  envelopeTimer = 0;
+  // NPZ job must survive Clear: leftover objText is the helper mesh, and
+  // wiping npzState would make Run model treat that mesh as a new OBJ fill
+  // (often the previous Job B lattice).
+  const keepNpz = isNpzJob();
+  removeNpzPointLayers();
+  removeEnvelopeLayer();
+  envelopeVisible = false;
+  if (keepNpz) {
+    npzState.pred = null;
+    npzState.probs = null;
+    npzState.nFn = 0;
+    npzState.nFp = 0;
+  } else {
+    npzState = null;
+  }
+  hideNpzPanel();
+  resetViewMode();
+  syncInspectEnabled();
+  syncFillPanel();
+  setStatus(
+    keepNpz
+      ? "Points cleared. Mesh kept. Run model uses this NPZ’s file points."
+      : "Points cleared. Mesh kept. Fill points or Run model."
+  );
+}
+
 function removeEnvelopeLayer() {
   if (!loadedRoot) {
     envelopeVisible = false;
@@ -561,15 +759,23 @@ function showNpzPanel(info) {
     npzNInside.textContent = info.nInside.toLocaleString();
     npzNOutside.textContent = info.nOutside.toLocaleString();
   }
+  const fileName = String(info.fileName || objFileName || "").trim();
   if (info.source === "fill") {
-    npzPath.textContent =
-      "fill · spacing " +
-      (info.usedSpacing != null ? Number(info.usedSpacing).toFixed(2) : "—");
-    npzPath.title = objFileName || "";
-  } else if (info.meshPath) {
-    npzPath.textContent = info.meshPath;
-    npzPath.title = info.meshPath;
-    currentMeshPath = info.meshPath;
+    const spacing =
+      info.usedSpacing != null ? Number(info.usedSpacing).toFixed(2) : "—";
+    // Filename first; spacing was the only visible line before.
+    npzPath.textContent = fileName
+      ? fileName + " · spacing " + spacing
+      : "fill · spacing " + spacing;
+    npzPath.title = fileName;
+  } else if (fileName || info.meshPath) {
+    if (fileName && info.meshPath) {
+      npzPath.textContent = fileName + " · " + info.meshPath;
+    } else {
+      npzPath.textContent = fileName || info.meshPath;
+    }
+    npzPath.title = info.meshPath || fileName;
+    currentMeshPath = info.meshPath || "";
   } else {
     npzPath.textContent = "(no mesh_path in this NPZ)";
     npzPath.title = "";
@@ -670,6 +876,7 @@ function clearView() {
   npzState = null;
   objText = "";
   objFileName = "";
+  setDisplayedFileName("");
   inferBusy = false;
   fillBusy = false;
   envelopeBusy = false;
@@ -705,6 +912,7 @@ async function openUserFile(file, handle) {
       npzState = null;
       objText = text;
       objFileName = file.name;
+      setDisplayedFileName(file.name);
       hideNpzPanel();
       replaceContent(group);
       shownMesh = group;
@@ -714,7 +922,7 @@ async function openUserFile(file, handle) {
       updateDensityLabel();
       await rememberFile(file, handle);
       dropHint.textContent = "Drop an OBJ or NPZ to replace";
-      setStatus("Loaded “" + file.name + "”. Fill points, then Run model.");
+      setStatus("Loaded “" + file.name + "”. Run model (Fill points is optional).");
     } catch (err) {
       setStatus("Could not load “" + file.name + "”: " + err);
     }
@@ -727,6 +935,7 @@ async function openUserFile(file, handle) {
       npzState = loaded;
       npzState.fileName = file.name;
       npzState.source = "npz";
+      setDisplayedFileName(file.name);
       npzState.pred = null;
       npzState.probs = null;
       objText = "";
@@ -825,17 +1034,8 @@ function updateEnvelopeLabel() {
   valEnvelope.textContent = String(clampNSurface(sldEnvelope.value));
 }
 
-function updateEnvelopeMixLabel() {
-  if (!valEnvelopeMix || !sldEnvelopeMix) {
-    return;
-  }
-  const mix = clampEnvelopeMix(sldEnvelopeMix.value);
-  valEnvelopeMix.textContent = mix + "% edges";
-}
-
 function scheduleEnvelopeFromSlider() {
   updateEnvelopeLabel();
-  updateEnvelopeMixLabel();
   if (!envelopeVisible || !objText) {
     return;
   }
@@ -865,31 +1065,20 @@ async function runEnvelope(opts) {
   envelopeBusy = true;
   syncFillPanel();
   const nSurface = clampNSurface(sldEnvelope && sldEnvelope.value);
-  const mix = clampEnvelopeMix(sldEnvelopeMix && sldEnvelopeMix.value);
   setStatus("Sampling " + nSurface.toLocaleString() + " envelope points…");
   try {
     const sampled = await envelopeObjOnHelper({
       objText: objText,
       nSurface: nSurface,
-      mix: mix,
     });
     attachEnvelopeLayer(sampled.points, sampled.normals);
     syncInspectEnabled();
-    const nArea = Number(sampled.nArea) || 0;
-    const nEdge = Number(sampled.nEdge) || 0;
-    const nCreases = Number(sampled.nCreases) || 0;
     setStatus(
       "Envelope “" +
         (objFileName || "mesh") +
         "”: " +
         sampled.n.toLocaleString() +
-        " purple points + normals (" +
-        nArea.toLocaleString() +
-        " faces / " +
-        nEdge.toLocaleString() +
-        " edges" +
-        (nCreases > 0 ? " on " + nCreases.toLocaleString() + " creases" : "") +
-        ")."
+        " purple points + normals."
     );
     scheduleSaveUiPrefs();
   } catch (err) {
@@ -913,17 +1102,17 @@ function scheduleFillFromDensity() {
   }, 180);
 }
 
-async function runFill() {
-  if (!objText || isNpzJob()) {
-    return;
-  }
-  if (fillBusy || inferBusy) {
-    fillPending = true;
-    return;
-  }
+/**
+ * AABB lattice at the current Density slider.
+ * @param {{forInfer?: boolean}} [opts]
+ * @returns {Promise<boolean>}
+ */
+async function fillObjLattice(opts) {
+  const forInfer = !!(opts && opts.forInfer);
   fillPending = false;
   fillBusy = true;
   syncFillPanel();
+  syncModelPanel();
   const spacing = spacingFromSlider(sldDensity.value);
   setStatus("Filling box at spacing " + spacing.toFixed(2) + "…");
   try {
@@ -962,23 +1151,43 @@ async function runFill() {
     }
     basePointSize = Math.max(maxAbs / 90, 0.02);
     applyInspectToPoints();
-    setStatus(
-      "Filled " +
-        n.toLocaleString() +
-        " points (spacing " +
-        Number(filled.usedSpacing).toFixed(2) +
-        "). Run model to classify."
-    );
+    if (!forInfer) {
+      setStatus(
+        "Filled " +
+          n.toLocaleString() +
+          " points (spacing " +
+          Number(filled.usedSpacing).toFixed(2) +
+          "). Run model to classify."
+      );
+    }
     scheduleSaveUiPrefs();
+    syncInspectEnabled();
+    return true;
   } catch (err) {
     setStatus("Fill failed: " + err);
+    return false;
+  } finally {
+    fillBusy = false;
+    if (!forInfer) {
+      if (fillPending) {
+        runFill();
+      } else {
+        syncInspectEnabled();
+        syncModelPanel();
+      }
+    }
   }
-  fillBusy = false;
-  if (fillPending) {
-    runFill();
+}
+
+async function runFill() {
+  if (!isObjJob()) {
     return;
   }
-  syncInspectEnabled();
+  if (fillBusy || inferBusy) {
+    fillPending = true;
+    return;
+  }
+  await fillObjLattice({ forInfer: false });
 }
 
 async function fillModelSelect(preferredId) {
@@ -1166,8 +1375,13 @@ function startSuffixEdit(li, row) {
   });
   li.appendChild(base);
   li.appendChild(input);
-  input.focus();
+  // Focus must not scroll #toolbar; a wide row used to shove the whole column off-screen.
+  input.focus({ preventScroll: true });
   input.select();
+  const bar = document.getElementById("toolbar");
+  if (bar) {
+    bar.scrollLeft = 0;
+  }
 }
 
 function setViewMode(mode) {
@@ -1204,7 +1418,7 @@ function delayMs(ms) {
 }
 
 async function runInfer() {
-  if (!npzState || inferBusy) {
+  if (inferBusy) {
     return;
   }
   const checkpoint = selModel && selModel.value;
@@ -1212,12 +1426,29 @@ async function runInfer() {
     setStatus("Select a model under models/<run>/best.pt.");
     return;
   }
+  if (!isNpzJob() && !isObjJob()) {
+    return;
+  }
   inferBusy = true;
   syncModelPanel();
-  hideOutsideForRun();
-  await delayMs(RUN_HIDE_OUTSIDE_MS);
-  setStatus("Running “" + checkpoint + "” on " + npzState.n.toLocaleString() + " points…");
+  const tWall = performance.now();
+  let fillSec = 0;
   try {
+    if (isObjJob()) {
+      cancelPendingFill();
+      const tFill = performance.now();
+      const filledOk = await fillObjLattice({ forInfer: true });
+      fillSec = (performance.now() - tFill) / 1000;
+      if (!filledOk || !isFillJob()) {
+        return;
+      }
+    }
+    if (!npzState) {
+      return;
+    }
+    hideOutsideForRun();
+    await delayMs(RUN_HIDE_OUTSIDE_MS);
+    setStatus("Running “" + checkpoint + "” on " + npzState.n.toLocaleString() + " points…");
     if (isFillJob()) {
       if (!objText) {
         throw new Error("OBJ text is missing; open the object again.");
@@ -1232,7 +1463,19 @@ async function runInfer() {
       viewMode = "pred";
       applyLegendForView();
       rebuildNpzLayers();
-      setStatus("Prediction from “" + checkpoint + "”. " + statusForCurrentCut());
+      const wallSec = (performance.now() - tWall) / 1000;
+      const timings = result.metrics && result.metrics.timings;
+      console.info("Run model timings", {
+        wall_s: wallSec,
+        fill_s: fillSec,
+        timings: timings || null,
+      });
+      paintRunStatusTable({
+        checkpoint: checkpoint,
+        wallSec: wallSec,
+        fillSec: fillSec,
+        timings: timings || null,
+      });
     } else {
       const result = await inferNpzOnHelper({
         checkpoint,
@@ -1245,15 +1488,28 @@ async function runInfer() {
       viewMode = "pred";
       applyLegendForView();
       rebuildNpzLayers();
-      setStatus("Prediction from “" + checkpoint + "”. " + statusForCurrentCut());
+      const wallSec = (performance.now() - tWall) / 1000;
+      const timings = result.metrics && result.metrics.timings;
+      console.info("Run model timings", {
+        wall_s: wallSec,
+        fill_s: fillSec,
+        timings: timings || null,
+      });
+      paintRunStatusTable({
+        checkpoint: checkpoint,
+        wallSec: wallSec,
+        fillSec: fillSec,
+        timings: timings || null,
+      });
     }
   } catch (err) {
     setStatus("Run failed: " + err);
-  }
-  inferBusy = false;
-  syncModelPanel();
-  if (fillPending) {
-    runFill();
+  } finally {
+    inferBusy = false;
+    syncModelPanel();
+    if (fillPending) {
+      runFill();
+    }
   }
 }
 
@@ -1385,6 +1641,11 @@ if (btnFill) {
     runFill();
   });
 }
+if (btnClearPoints) {
+  btnClearPoints.addEventListener("click", () => {
+    clearPoints();
+  });
+}
 if (btnEnvelope) {
   btnEnvelope.addEventListener("click", () => {
     window.clearTimeout(envelopeTimer);
@@ -1398,13 +1659,6 @@ if (sldEnvelope) {
     scheduleSaveUiPrefs();
   });
   updateEnvelopeLabel();
-}
-if (sldEnvelopeMix) {
-  sldEnvelopeMix.addEventListener("input", () => {
-    scheduleEnvelopeFromSlider();
-    scheduleSaveUiPrefs();
-  });
-  updateEnvelopeMixLabel();
 }
 if (sldDensity) {
   sldDensity.addEventListener("input", () => {

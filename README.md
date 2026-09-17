@@ -14,7 +14,7 @@
 
 I already knew this was a bad production idea.
 
-Filling a mesh with points is a geometry problem. A ray test, or the first-and-last-hit trick in **[scatteringNode](https://github.com/PerryGu/scatteringNode)** (a Maya C++ plugin I wrote **for work**, almost a decade ago), does it **exactly** and **faster** than a network ever will. A model is the wrong tool here: you spend hours of GPU time to approximate a test that the CPU already owns.
+Filling a mesh with points is a geometry problem. A ray test, or the first-and-last-hit trick in **[scatteringNode](https://github.com/PerryGu/scatteringNode)** (a Maya C++ plugin I wrote, almost a decade ago), does it **exactly** and **faster** than a network ever will. A model is the wrong tool here: you spend hours of GPU time to approximate a test that the CPU already owns.
 
 I built scatteringNet anyway. scatteringNode came first: ordinary programming on a **production job**. After the AI wave I wanted to close the loop — same task, this time as a network — out of curiosity, and to mark the shift from writing algorithms by hand to training them.
 
@@ -38,7 +38,7 @@ The stills below are that first step only: query points fill the box. They are n
 | ![](docs/media/2026-09-15_bbox_fill_dog.png) **Query lattice in the bounding box (dog)** | ![](docs/media/2026-09-15_bbox_fill_human.png) **Query lattice in the bounding box (human)** | ![](docs/media/2026-09-15_bbox_fill_torus.png) **Query lattice in the bounding box (torus)** |
 
 
-The mesh is also reduced to an **envelope**: `n_surface` samples on the skin. Each sample stores position and a face normal. Early trains used **1024** (the stills below). The best OOD Fill later used **2048**. Mix 75 puts most samples on faces (area-weighted) and the rest on sharp creases. A query does not see the triangles. It sees this cloud: a global PointNet over all envelope dots, plus the `knn_k` nearest neighbors.
+The mesh is also reduced to an **envelope**: `n_surface` area-weighted samples on the skin (larger faces get more dots). Each sample stores position and a face normal. Early trains used **1024** (the stills below). The best OOD Fill later used **2048**. A query does not see the triangles. It sees this cloud: a global PointNet over all envelope dots, plus the `knn_k` nearest neighbors.
 
 
 |                                                                                      |                                                                                      |                                                                                          |
@@ -80,9 +80,9 @@ Earlier n6 Fill (same catalog, `knn_k: 16`, `n_surface: 1024`) already transferr
 
 - Occupancy classification of lattice / NPZ query points (inside vs outside).
 - Envelope-conditioned encoder: PointNet over skin dots, plus per-query k-NN.
-- Skin dots are XYZ + face normal (`envelope_dim=6`). Mix 75 splits face-area vs crease samples.
+- Skin dots are XYZ + face normal (`envelope_dim=6`). Sampling is area-weighted on triangle faces.
 - Catalog training on many NPZs with a **mesh-identity** val split (`best.pt` by `val_iou`).
-- Browser occupancy viewer: Open OBJ/NPZ, Fill an AABB lattice, Run model, Inside cut, Truth / Prediction / Errors.
+- Browser occupancy viewer: Open OBJ/NPZ, Run model (OBJ fill at Density is automatic), Inside cut, Truth / Prediction / Errors.
 - Local train on a GTX 1080, or the same script on SageMaker `ml.g5.xlarge` (A10G).
 - Maya batch OBJ scripts (primitives, extrude, smooth extruded, helix) and a conda NPZ builder.
 - Run snapshots under `runs/<id>/` (YAML, metrics, TensorBoard) and weights under `models/<id>/best.pt`.
@@ -104,11 +104,11 @@ Or: `conda activate scatteringNet` then `python src/viewer/serve.py`. Orbit work
 **What it can do**
 
 - **Open** or drop an `.obj` or `.npz`. Hover Open for the last ten files. An NPZ with `mesh_path` pulls that OBJ from `data_dir`.
-- **OBJ Fill** (the gallery path). **Fill points** builds an unlabeled lattice in the bounding box (density slider; cap 200,000). **Envelope** draws purple skin dots. Overlay Mix / Count are display-only. Pick a checkpoint → **Run model** classifies every query. There are no file labels, so no Errors view.
+- **OBJ Fill** (the gallery path). **Run model** builds an unlabeled lattice in the bounding box at the current **Density** (cap 200,000), then classifies. **Fill points** is an optional preview of that lattice. **Envelope** draws purple skin dots. Overlay **Count** is display-only. There are no file labels, so no Errors view.
 - **NPZ check.** The file already has points and Truth. **Run model** classifies those same coordinates. **Prediction** / **Errors** compare to the labels.
 - **Look.** Mesh / wireframe, inside / outside, opacity, point size, **Inside cut** (drag re-cuts the last Run in the browser, no extra GPU pass). Right-click a model row to append a note (`*`); that does not rename `models/`.
 
-Typical inspect path: **Open** an OBJ → **Fill points** → pick a model → **Run model**.
+Typical inspect path: **Open** an OBJ → pick a model → **Run model**.
 
 ---
 
@@ -201,7 +201,7 @@ Index `0` is a bounding-box corner (outside). Index `121` sits near this sphere�
 
 Training labels come from geometry, not from the network. Each NPZ is a cloud of query points in a padded AABB, marked inside or outside the OBJ (lattice, optional jitter, ray tests). The model never sees those labels at Fill time; Fill is an unlabeled grid plus a forward pass.
 
-At train and infer, the mesh is reduced to an **envelope**: `n_surface` darts on the joined triangles. Mix 75 puts most dots on faces (area-weighted) and the rest on sharp creases. Each dart stores position and a face normal. Catalog trains started at 1024; the best OOD Fill used 2048. Overview has stills of the 1024 envelope.
+At train and infer, the mesh is reduced to an **envelope**: `n_surface` area-weighted darts on the joined triangles. Each dart stores position and a face normal. Catalog trains started at 1024; the best OOD Fill used 2048. Overview has stills of the 1024 envelope.
 
 For one query point the head sees three things:
 
@@ -213,7 +213,21 @@ For one query point the head sees three things:
 
 The occupancy MLP on xyz alone could not fill sleeves. A global envelope code (no k-NN) filled boxes and still left thin arms empty: every query shared the same shape vector. Local neighbors fixed that reading problem. Putting face normals on those neighbors (`n6`) is what transferred Fill to OOD organics. A denser envelope at k=16, on an older XYZ-only catalog, raised val IoU and **did not** change Fill — density only helped later, on the n6 head, together with k=24.
 
-Overlay Mix / Count in the viewer are display-only. **Run model** rebuilds the envelope with the **checkpoint** mix and count.
+Overlay **Count** in the viewer is display-only. **Run model** rebuilds the envelope with the **checkpoint** count (area-weighted; old `envelope_mix` on `best.pt` is ignored).
+
+---
+
+## Optimization
+
+As the project got close to finished, the next step was **optimization**: make the same Fill faster, not invent a new network.
+
+Clicking **Run model** felt slow. The wait was not the network deciding inside vs outside (about 0.5 seconds). Most of the time went into placing a few thousand sample points on the surface of the mesh. That cloud of surface samples is the **envelope**.
+
+Those samples used to hunt for folds and sharp corners (**Mix 75**). The hope was that thin edges were not getting enough points, so extra dots were packed onto creases. Finding those creases meant walking every edge of the mesh.
+
+It did not help. On most shapes — especially extrusions — spreading points evenly over the faces looked **better**. It was also much faster. On a detailed human figure, building the envelope took about **5.2 seconds**, and the whole click-to-visible-result wait was about **13 seconds**. After dropping the fold hunt, that envelope step is about **0.00–0.06 seconds** on typical inspect meshes (helix, gear, platonic). Training and inference now only sprinkle points by how large each face is. Mix 75 is gone.
+
+What actually improved **the visible result** was something else: storing which way each face points (the **outward normal**) on every envelope sample. Nearby query points then know not only *where* the skin is, but *which way it faces*. That is what filled humans and animals the catalog never saw. Hunting folds did not.
 
 ---
 
@@ -250,7 +264,7 @@ The occupancy head never sees triangles. It sees a skin envelope plus one query.
 ```mermaid
 %%{init: {"theme": "dark", "flowchart": {"htmlLabels": true, "curve": "basis"}}}%%
 flowchart TD
-    SETUP["Envelope mix 75<br/>'Skin sampling'<br/>Sprinkle dots on the surface only.<br/>Best Fill: 2048 dots."]
+    SETUP["Area-weighted envelope<br/>'Skin sampling'<br/>Sprinkle dots on the surface only.<br/>Best Fill: 2048 dots."]
     HUB["OccupancyEncoder<br/>'The occupancy head'<br/>For each test point, gather three clues<br/>then decide: solid or air."]
     Q["Query XYZ<br/>'One test point'<br/>A location in the mesh bounding box.<br/>Question: is this inside the solid."]
     PN["SurfaceEncoder<br/>'Whole-shape summary'<br/>Looks at every skin dot at once.<br/>Same code for all queries on this mesh."]
@@ -289,32 +303,25 @@ k-NN distance is XYZ only. Each neighbor still carries that skin dot’s face no
 
 **Envelope**
 
-How the mesh is reduced to those skin dots. Mix 75 means most dots sit on faces; the rest hug sharp creases.
+How the mesh is reduced to those skin dots. Larger triangles get more samples.
 
 ```mermaid
 %%{init: {"theme": "dark", "flowchart": {"htmlLabels": true, "curve": "basis"}}}%%
 flowchart TD
     OBJ["OBJ mesh<br/>'The 3D file'<br/>Triangles that make the surface.<br/>The network never sees these later."]
-    MIX["envelope_mix 75<br/>'How to sprinkle the dots'<br/>75% on faces, 25% on sharp folds.<br/>Count is n_surface 1024 or 2048."]
-    AREA["Area samples<br/>'Paint the big faces'<br/>Larger triangles get more dots.<br/>This covers the bulk of the skin."]
-    CREASE["Crease samples<br/>'Hug the sharp edges'<br/>Extra dots on folds and corners<br/>so thin limbs are not missed."]
-    AABB["AABB normalize<br/>'Same frame as the queries'<br/>Join the two clouds, then shift<br/>and scale like the NPZ points."]
+    AREA["Area samples<br/>'Paint the big faces'<br/>Larger triangles get more dots.<br/>Count is n_surface 1024 or 2048."]
+    AABB["AABB normalize<br/>'Same frame as the queries'<br/>Shift and scale like the NPZ points."]
     ENV["Envelope<br/>'Skin cloud in query space'<br/>Each dot: position + face direction.<br/>This is all the head will see."]
 
-    OBJ -->|"1. Load the mesh"| MIX
-    MIX -->|"most dots"| AREA
-    MIX -->|"crease budget"| CREASE
-    AREA -->|"2. Join"| AABB
-    CREASE -->|"2. Join"| AABB
+    OBJ -->|"1. Load the mesh"| AREA
+    AREA -->|"2. Normalize"| AABB
     AABB -->|"3. Ready for the head"| ENV
 
     classDef setup fill:#243447,stroke:#6eb5d6,stroke-width:2px,color:#e6edf3
-    classDef hub fill:#243447,stroke:#6eb5d6,stroke-width:2px,color:#e6edf3
     classDef proc fill:#1a3c35,stroke:#4caf86,stroke-width:2px,color:#e6edf3
     classDef out fill:#161b22,stroke:#6e7681,stroke-width:1.5px,stroke-dasharray:6 4,color:#9aa3af
     class OBJ setup
-    class MIX hub
-    class AREA,CREASE,AABB proc
+    class AREA,AABB proc
     class ENV out
 ```
 
@@ -324,7 +331,7 @@ flowchart TD
 - `OccupancyMLP` (`src/occupancy_mlp.py`) — xyz-only head; older runs still load.
 - `train_multi_npz.py` — catalog loop, mesh split, `val_iou` selection, `models/<run_id>/best.pt`.
 - `infer_multi_npz.py` / viewer `infer_job.py` — same AABB and envelope rebuild as train.
-- `src/geometry/` — OBJ triangles, envelope sampling, crease mix (no torch in mesh IO).
+- `src/geometry/` — OBJ triangles, area-weighted envelope sampling (no torch in mesh IO).
 - `src/scatter_generation/` — Maya OBJ batch scripts + `dataset_builder.py` (NPZ labels).
 - `src/viewer/` — Three.js page + localhost helper (`serve.py`). Occupancy Python stays in `src/`.
 - `sagemaker/` — job entry and launcher. Same train script; `data_dir` remapped to the training channel.
@@ -508,9 +515,8 @@ python -m unittest discover -s tests
 
 ```
 shape_encoder : surface     # envelope OccupancyEncoder (xyz-only is "none")
-n_surface     : 1024|2048   # envelope count (skin dots)
+n_surface     : 1024|2048   # envelope count (skin dots, area-weighted)
 knn_k         : 16|24       # neighbors per query (not envelope count)
-envelope_mix  : 75          # 0 = faces, 100 = creases
 hidden/depth  : 64 / 4
 checkpoint_metric : val_iou
 ```
@@ -525,7 +531,7 @@ Live `config.yaml` is the **next experiment**, not always the best Fill weights.
 - Catalog val can match while Fill leftovers swap across two trains of the same YAML (GPU / TF32 / non-deterministic CUDA).
 - Mesh-identity val selects `best.pt`; it is **not** a locked organic holdout (Phase 3 Step 12 still open).
 - Viewer Fill lattice is capped at 200,000 points (spacing coarsens if needed).
-- Envelope overlay sliders do not change infer; forgetting that looks like a “Mix did nothing” bug.
+- Envelope overlay **Count** does not change infer (display-only).
 - Face-token (`shape_encoder: mesh`) checkpoints are no longer loaded.
 - SageMaker source upload on Windows must use POSIX S3 keys and Unix LF on `sm_train.sh` (already handled in `launch.py`).
 

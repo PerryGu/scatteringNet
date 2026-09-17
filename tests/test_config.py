@@ -46,7 +46,8 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertEqual(knobs["batch_size"], int(disk["batch_size"]))
         self.assertEqual(knobs["optimizer"], str(disk["optimizer"]).strip().lower())
         self.assertEqual(knobs["n_surface"], int(disk["n_surface"]))
-        self.assertEqual(knobs["envelope_mix"], int(disk["envelope_mix"]))
+        self.assertNotIn("envelope_mix", knobs)
+        self.assertNotIn("envelope_mix", disk)
         self.assertEqual(knobs["knn_k"], int(disk["knn_k"]))
         self.assertEqual(len(knobs["npz_catalog"]), len(disk["npz_catalog"]))
         self.assertEqual(knobs["npz_catalog"][-1][0], disk["npz_catalog"][-1]["glob"])
@@ -82,7 +83,7 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn("batch_size=", rendered)
         self.assertIn("optimizer=", rendered)
         self.assertIn("n_surface=", rendered)
-        self.assertIn("envelope_mix=", rendered)
+        self.assertNotIn("envelope_mix=", rendered)
         self.assertIn("knn_k=", rendered)
         self.assertIn("shape_encoder=", rendered)
         self.assertIsNone(gpu_name(torch.device("cpu")))
@@ -206,11 +207,11 @@ class OccupancyConfigTests(unittest.TestCase):
             self.assertAlmostEqual(knobs["val_fraction"], 0.25)
             self.assertEqual(knobs["checkpoint_metric"], "val_acc")
             self.assertEqual(knobs["latent_dim"], 16)
-            # Old YAML without the key trains like Step 8 (all face-area).
-            self.assertEqual(knobs["envelope_mix"], 0)
+            self.assertNotIn("envelope_mix", knobs)
             self.assertEqual(knobs["knn_k"], 0)
 
-    def test_envelope_mix_out_of_range_rejected(self) -> None:
+    def test_stale_envelope_mix_yaml_is_ignored(self) -> None:
+        """Old run snapshots still load; mix is no longer a knob."""
         with tempfile.TemporaryDirectory() as tmp:
             yaml_path = Path(tmp) / "config.yaml"
             yaml_path.write_text(
@@ -223,14 +224,14 @@ class OccupancyConfigTests(unittest.TestCase):
                         "epochs: 2",
                         "lr: 0.001",
                         "test_fraction: 0.2",
-                        "envelope_mix: 101",
+                        "envelope_mix: 75",
                         "",
                     ]
                 ),
                 encoding="utf-8",
             )
-            with self.assertRaises(ValueError):
-                load_yaml_knobs(yaml_path)
+            knobs = load_yaml_knobs(yaml_path)
+            self.assertNotIn("envelope_mix", knobs)
 
 
 if __name__ == "__main__":

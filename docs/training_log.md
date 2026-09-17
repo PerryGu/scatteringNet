@@ -21,6 +21,7 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 
 | Run id                                          | Name                                                       | Score                      |
 | ----------------------------------------------- | ---------------------------------------------------------- | -------------------------- |
+| `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6` | Same knn24 n2048 catalog, area-only envelope (no Mix 75) | IoU 0.974 · acc 0.996 @ 20 |
 | `2026-09-14_19-00-37_prim_nr45_knn16_n6_nosmooth` | Same n6 head, catalog without smooth `extruded_*`        | IoU 0.978 · acc 0.996 @ 17 |
 | `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6` | Same knn24 n6, denser envelope (`n_surface: 2048`)    | IoU 0.974 · acc 0.996 @ 20 |
 | `2026-09-13_19-20-50_prim_extruded_nr45_knn24_n6` | Same catalog / n6 head, `knn_k: 24` (more neighbors)       | IoU 0.967 · acc 0.995 @ 20 |
@@ -42,6 +43,95 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 | `2026-08-29_19-43-15_extrude_nr1_surface`       | Envelope + xyz, file holdout                               | IoU 0.691 · acc 0.970 @ 18 |
 | `2026-08-29_09-28-54_extrude_nr1`               | Xyz-only, pooled point split                               | acc 0.853 @ 20             |
 
+
+---
+
+## 2026-09-17 10:00 — knn24 n2048 area-only (drop Mix 75)
+
+Fresh train. Same catalog, seed, mesh val, `h64/d4`, `knn_k: 24`, `n_surface: 2048`, `envelope_dim=6` as [`2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`](#2026-09-14-2100--knn24-n2048-envelope-2048). **Not** a resume of that `best.pt`. The only change is the envelope: **area-weighted face darts** (Mix 75 / crease sampling gone). Job `scatteringnet-n6-20260916210418`. Goal: does dropping fold sampling keep the knn24 / 2048 Fill? Success is **viewer Fill** vs that mix-75 checkpoint, not a higher val IoU.
+
+Run id (Artifacts, not the heading): `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`. Stills are in the **Fill** table immediately below — open **Preview**, not the outline.
+
+### Fill (viewer) — 17 Sep 2026
+
+Checkpoint `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`. Overlay Count does not change infer. Envelope rebuild on these stills is ~0.00–0.04 s (the Mix 75 crease walk is gone).
+
+**User conclusion.** Slight improvement on **extrudes**. Everything else is the same class of leftover as mix-75 knn24 / 2048: dog-ear spray, thin / slightly outside fingers, a few gear-tooth specks, one thin-spike arm tip. Combo / cat / helix / pipe still fill. Mix 75 is not required for this Fill.
+
+**None of the combo / animal / human stills were training identities.** Gear, pipe, and the two smooth `extruded_*` meshes are in-catalog. Helix **is** a catalog family, but this still is a bent / FFD mesh. Extrudes are catalog family (`nr5`).
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_combo.png"><img src="media/2026-09-17_area_combo.png" alt="Combo area-only knn24 n2048" width="100%"/></a><br/>Combo cone / sphere / penguin / lion (not in the training catalog): 14,834 inside</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_extrude_block.png"><img src="media/2026-09-17_area_extrude_block.png" alt="CAD extrude block area-only" width="100%"/></a><br/>CAD extrude (catalog family): 10,424 inside; solid</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_extrude_spike.png"><img src="media/2026-09-17_area_extrude_spike.png" alt="Thin-spike extrude area-only" width="100%"/></a><br/>Thin-spike extrude (catalog family): 5,892 inside; leftover at one arm tip</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_extruded_lie.png"><img src="media/2026-09-17_area_extruded_lie.png" alt="Smooth extruded lie area-only" width="100%"/></a><br/>Smooth extruded lie (in catalog): 19,417 inside</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_extruded_stand.png"><img src="media/2026-09-17_area_extruded_stand.png" alt="Smooth extruded stand area-only" width="100%"/></a><br/>Smooth extruded stand (in catalog): 19,868 inside</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_pipe.png"><img src="media/2026-09-17_area_pipe.png" alt="Pipe area-only" width="100%"/></a><br/>Pipe (in catalog): 5,641 inside; bore empty</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_gear.png"><img src="media/2026-09-17_area_gear.png" alt="Gear area-only" width="100%"/></a><br/>Gear (in catalog): 35,184 inside; specks at some tooth tips</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_helix.png"><img src="media/2026-09-17_area_helix.png" alt="Helix bend area-only" width="100%"/></a><br/>Helix: catalog family, but this mesh has bend / FFD (not in catalog that way): 24,675 inside</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_cat.png"><img src="media/2026-09-17_area_cat.png" alt="Cat area-only" width="100%"/></a><br/>Cat (animal family; not in the training catalog): 12,472 inside</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_dog.png"><img src="media/2026-09-17_area_dog.png" alt="Dog area-only" width="100%"/></a><br/>Dog (animal family; not in the training catalog): 25,025 inside; ear leftover</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_human.png"><img src="media/2026-09-17_area_human.png" alt="Human area-only" width="100%"/></a><br/>Human (not in the training catalog): 10,951 inside; hands thin / a few points outside the fingers</td>
+<td align="center" valign="top" width="33%"><a href="media/2026-09-17_area_player.png"><img src="media/2026-09-17_area_player.png" alt="Player area-only" width="100%"/></a><br/>Player (not in the training catalog): 24,885 inside; leftover at shorts, wrist, feet</td>
+</tr>
+</table>
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` via `sagemaker/entry.py` (from scratch; not a resume) |
+| Catalog | Same YAML `npz_catalog` as mix-75 knn24 n2048 (primitives + smooth `extruded_*` + capped `nr1`/`nr4`/`nr5`) |
+| `run_name` | `prim_extruded_nr45_knn24_n2048_n6` |
+| Files | 2454 NPZs, 1227 unique OBJs |
+| Points | 41.99M (train 35.07M / val 6.92M) |
+| Geometry | `n_surface=2048`, area-weighted envelope (no `envelope_mix`), `knn_k=24`, `shape_encoder=surface`, `envelope_dim=6` |
+| Split | **Mesh** identity (`n_train_meshes=982` / `n_val_meshes=245`, seed 1) |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; local pool over 24 offsets + neighbor normals |
+| Device | `cuda` / NVIDIA A10G (`ml.g5.xlarge`, `eu-north-1`) |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **9h 23m 59.08s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6/`
+- Weights: `models/2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6/best.pt`
+- S3: `s3://scatteringnet-sagemaker-bucket/scatteringNet/output/scatteringnet-n6-20260916210418/output/`
+- Wall: **9h 23m 59.08s** (`started=2026-09-16T18:09:15` → `finished=2026-09-17T03:33:14`)
+- `best_epoch: 20`, `best_metric: 0.974084` (val_iou)
+- Snapshot `gpu: NVIDIA A10G`; `data_dir` is the Linux channel (`/opt/ml/input/data/training`); no `envelope_mix` key
+
+### Vs mix-75 knn24 n2048 (same catalog / split)
+
+| | **mix-75 best @ 20** | **this run best @ 20** |
+|---|---|---|
+| val_acc | 0.996 | 0.996 |
+| val_iou / val_f1 | 0.974 / 0.987 | 0.974 / 0.987 |
+| train_acc | 0.997 | 0.998 |
+| loss | 0.0072 | 0.0062 |
+| wall | 9h 29m | **9h 24m** |
+| meshes / NPZs | 1227 / 2454 | same |
+| val points | 6.92M | same |
+
+Same box, catalog, seed, and mesh split as `07-43-34`. Val IoU 0.9741 vs 0.9737 is **noise**. Train and val stay together. Epoch 12 and 18 dipped, then epoch 20 took `best.pt`. Wall did not drop because train cost is 2048-dot k-NN over ~42M queries, not the crease walk (that walk was the **Run model** lag). A resume is not justified. Do not read +0.0004 as a Fill win.
+
+**Not shown by this run**
+
+- That putting `combo*` in the catalog would tighten joins
+- That k=32 / 4096 would move the leftover
+
+**Bottom line:** Mix 75 is **not required** for knn24 / 2048 Fill. Area-only matches that inspect on organics and CAD; extrudes are a **slight** improvement. Leftover is the same class (dog ear, thin fingers, one spike tip, gear-tooth specks). This `best.pt` is the area-only twin of `07-43-34_…_knn24_n2048_n6`. Do not pick it from val IoU.
 
 ---
 

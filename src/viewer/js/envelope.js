@@ -10,22 +10,6 @@ export const COLOR_ENVELOPE = new THREE.Color(0xb56bff);
 export const N_SURFACE_MIN = 256;
 export const N_SURFACE_MAX = 4096;
 export const N_SURFACE_DEFAULT = 1024;
-export const MIX_MIN = 0;
-export const MIX_MAX = 100;
-export const MIX_DEFAULT = 100;
-
-/**
- * Clamp the Faces↔Edges mix slider (0 = faces, 100 = edges).
- * @param {string|number} raw
- * @returns {number}
- */
-export function clampEnvelopeMix(raw) {
-  const n = Math.round(Number(raw));
-  if (!Number.isFinite(n)) {
-    return MIX_DEFAULT;
-  }
-  return Math.min(MIX_MAX, Math.max(MIX_MIN, n));
-}
 
 /**
  * Clamp the envelope count slider to the helper range.
@@ -127,8 +111,8 @@ export function makeEnvelopeLayer(xyz, pointSize, nrm) {
 }
 
 /**
- * @param {{objText: string, nSurface: number, mix: number}} payload
- * @returns {Promise<{points: Float32Array, normals: Float32Array|null, n: number, nCreases: number, nArea: number, nEdge: number}>}
+ * @param {{objText: string, nSurface: number}} payload
+ * @returns {Promise<{points: Float32Array, normals: Float32Array|null, n: number}>}
  */
 export async function envelopeObjOnHelper(payload) {
   const res = await fetch("/api/envelope-obj", {
@@ -137,7 +121,6 @@ export async function envelopeObjOnHelper(payload) {
     body: JSON.stringify({
       obj_text: payload.objText,
       n_surface: payload.nSurface,
-      mix: payload.mix,
     }),
   });
   const body = await readHelperJson(res);
@@ -160,8 +143,5 @@ export async function envelopeObjOnHelper(payload) {
     points: xyz,
     normals: normals,
     n: n,
-    nCreases: Number(body.n_creases) || 0,
-    nArea: Number(body.n_area) || 0,
-    nEdge: Number(body.n_edge) || 0,
   };
 }

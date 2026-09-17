@@ -51,7 +51,6 @@ class YamlKnobs(TypedDict):
     batch_size: int
     optimizer: str
     n_surface: int
-    envelope_mix: int
     knn_k: int
     knn_local_dim: int | None
     shape_encoder: str
@@ -108,7 +107,7 @@ def _as_positive_int(name: str, value: Any) -> int:
 
 
 def _as_int_in_range(name: str, value: Any, lo: int, hi: int) -> int:
-    """Inclusive integer range (YAML ``envelope_mix`` is 0–100)."""
+    """Inclusive integer range (YAML ``knn_k`` is 0–4096)."""
     try:
         parsed = int(value)
     except (TypeError, ValueError) as exc:
@@ -375,11 +374,6 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             if "n_surface" in raw
             else 1024
         ),
-        "envelope_mix": (
-            _as_int_in_range("envelope_mix", raw["envelope_mix"], 0, 100)
-            if "envelope_mix" in raw
-            else 0
-        ),
         "knn_k": (
             _as_int_in_range("knn_k", raw["knn_k"], 0, 4096)
             if "knn_k" in raw
@@ -453,8 +447,6 @@ class OccupancyConfig:
     optimizer: str = "adam"
     # Envelope sample count (YAML). Used when ``shape_encoder`` is ``surface``.
     n_surface: int = 1024
-    # 0 = area-weighted envelope, 100 = crease-hugging (viewer Mix).
-    envelope_mix: int = 0
     # 0 = global envelope z only. >0 = that many nearest envelope dots per query.
     knn_k: int = 0
     # Width of z_local; None → same as occupancy latent_dim / hidden.
@@ -511,7 +503,6 @@ def load_config(
         batch_size=knobs["batch_size"],
         optimizer=knobs["optimizer"],
         n_surface=knobs["n_surface"],
-        envelope_mix=knobs["envelope_mix"],
         knn_k=knobs["knn_k"],
         knn_local_dim=knobs["knn_local_dim"],
         shape_encoder=knobs["shape_encoder"],
@@ -567,7 +558,6 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  batch_size={cfg.batch_size}\n"
         f"  optimizer={cfg.optimizer}\n"
         f"  n_surface={cfg.n_surface}\n"
-        f"  envelope_mix={cfg.envelope_mix}\n"
         f"  knn_k={cfg.knn_k}\n"
         f"  knn_local_dim={cfg.knn_local_dim}\n"
         f"  shape_encoder={cfg.shape_encoder}\n"

@@ -218,37 +218,8 @@ class ObjFillTests(unittest.TestCase):
         self.assertEqual(len(raw), out["n"] * 3 * 4)
 
 
-def _floor_and_flap_mesh():
-    """3x3 XY floor (8 coplanar tris) plus a vertical flap on x=0."""
-    verts = []
-    for y in (0.0, 2.0, 4.0):
-        for x in (0.0, 2.0, 4.0):
-            verts.append([x, y, 0.0])
-    # Vertical flap shares the two left floor edges (0-3 and 3-6).
-    verts.append([0.0, 0.0, 1.0])
-    verts.append([0.0, 2.0, 1.0])
-    verts.append([0.0, 4.0, 1.0])
-    faces = []
-    def vid(ix: int, iy: int) -> int:
-        return iy * 3 + ix
-
-    for iy in range(2):
-        for ix in range(2):
-            a = vid(ix, iy)
-            b = vid(ix + 1, iy)
-            c = vid(ix + 1, iy + 1)
-            d = vid(ix, iy + 1)
-            faces.append([a, b, c])
-            faces.append([a, c, d])
-    faces.append([0, 3, 10])
-    faces.append([0, 10, 9])
-    faces.append([3, 6, 11])
-    faces.append([3, 11, 10])
-    return np.asarray(verts, dtype=np.float64), np.asarray(faces, dtype=np.int64)
-
-
 class EnvelopeOverlayTests(unittest.TestCase):
-    """Purple overlay: same mix sampler as occupancy, no torch."""
+    """Purple overlay: same area-weighted sampler as occupancy, no torch."""
 
     def test_envelope_job_does_not_import_torch(self) -> None:
         src = Path(__file__).resolve().parents[1] / "src" / "viewer" / "envelope_job.py"
@@ -269,9 +240,8 @@ class EnvelopeOverlayTests(unittest.TestCase):
 
         out = envelope_from_obj_text(_CUBE_OBJ, 256)
         self.assertEqual(out["n"], 256)
-        self.assertEqual(out["n_creases"], 12)
-        self.assertEqual(out["n_edge"], 256)
-        self.assertEqual(out["n_area"], 0)
+        self.assertNotIn("n_creases", out)
+        self.assertNotIn("mix", out)
         raw = base64.b64decode(out["points_b64"])
         self.assertEqual(len(raw), 256 * 3 * 4)
         nrm = base64.b64decode(out["normals_b64"])
@@ -279,86 +249,22 @@ class EnvelopeOverlayTests(unittest.TestCase):
         vecs = np.frombuffer(nrm, dtype=np.float32).reshape(256, 3)
         self.assertTrue(np.allclose(np.linalg.norm(vecs, axis=1), 1.0, atol=1e-5))
 
-    def test_split_envelope_counts(self) -> None:
-        from envelope_job import split_envelope_counts
 
-        self.assertEqual(split_envelope_counts(1024, 0), (1024, 0))
-        self.assertEqual(split_envelope_counts(1024, 100), (0, 1024))
-        self.assertEqual(split_envelope_counts(1024, 50), (512, 512))
+class ViewerStaticMimeTests(unittest.TestCase):
+    """Windows paths must still map .js to text/javascript for ES modules."""
 
-    def test_envelope_mix_faces_only(self) -> None:
-        from envelope_job import envelope_from_obj_text
+    def test_js_url_and_windows_path(self) -> None:
+        from serve import Handler, JS_MIME, mime_for_static
 
-        out = envelope_from_obj_text(_CUBE_OBJ, 256, mix=0)
-        self.assertEqual(out["n"], 256)
-        self.assertEqual(out["n_area"], 256)
-        self.assertEqual(out["n_edge"], 0)
-        self.assertEqual(out["mix"], 0)
-
-    def test_cube_points_hug_edges(self) -> None:
-        from envelope_job import sample_crease_surface
-        from obj_fill import triangles_from_obj_text
-
-        verts, faces = triangles_from_obj_text(_CUBE_OBJ)
-        pts, _idx, n_creases = sample_crease_surface(verts, faces, 512, seed=1)
-        self.assertEqual(n_creases, 12)
-        # Unit cube [0,1]^3: 12 edges. Clustered samples sit near those edges.
-        corners = np.array(
-            [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
-             [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
-            dtype=np.float64,
-        )
-        segs = [
-            (0, 1), (1, 2), (2, 3), (3, 0),
-            (4, 5), (5, 6), (6, 7), (7, 4),
-            (0, 4), (1, 5), (2, 6), (3, 7),
-        ]
-        dmin = np.full((pts.shape[0],), np.inf, dtype=np.float64)
-        xyz = np.asarray(pts, dtype=np.float64)
-        for i0, i1 in segs:
-            a = corners[i0]
-            b = corners[i1]
-            ab = b - a
-            den = float(np.dot(ab, ab)) + 1e-12
-            t = np.clip(((xyz - a) @ ab) / den, 0.0, 1.0)
-            proj = a + t[:, None] * ab
-            dmin = np.minimum(dmin, np.linalg.norm(xyz - proj, axis=1))
-        self.assertLess(float(np.median(dmin)), 0.12)
-
-    def test_unwelded_cube_still_hugs_edges(self) -> None:
-        from envelope_job import sample_crease_surface
-        from obj_fill import triangles_from_obj_text
-
-        verts, faces = triangles_from_obj_text(_CUBE_OBJ)
-        exploded = np.asarray(verts, dtype=np.float64)[np.asarray(faces).reshape(-1)]
-        exploded_faces = np.arange(faces.shape[0] * 3, dtype=np.int64).reshape(-1, 3)
-        pts, _idx, n_creases = sample_crease_surface(
-            exploded, exploded_faces, 256, seed=1
-        )
-        self.assertEqual(n_creases, 12)
-        self.assertEqual(pts.shape, (256, 3))
-
-    def test_flap_points_hug_the_fold(self) -> None:
-        from envelope_job import sample_crease_surface
-        from geometry.surface import crease_length_fraction, plan_envelope_counts
-
-        verts, faces = _floor_and_flap_mesh()
-        pts, _idx, n_creases = sample_crease_surface(verts, faces, 512, seed=1)
-        self.assertGreaterEqual(n_creases, 1)
-        # One 90° fold on a large floor: Mix 100 is capped; leftover is area.
-        frac = crease_length_fraction(verts, faces)
-        _n_area, n_edge = plan_envelope_counts(512, 100, frac)
-        self.assertLess(n_edge, 512)
-        # Only sharp shared edge is the 90° fold along x=0, y in [0,4], z=0.
-        a = np.array([0.0, 0.0, 0.0])
-        b = np.array([0.0, 4.0, 0.0])
-        ab = b - a
-        xyz = np.asarray(pts, dtype=np.float64)
-        t = np.clip(((xyz - a) @ ab) / (float(np.dot(ab, ab)) + 1e-12), 0.0, 1.0)
-        proj = a + t[:, None] * ab
-        dist = np.linalg.norm(xyz - proj, axis=1)
-        near = np.sort(dist)[: max(1, n_edge)]
-        self.assertLess(float(np.median(near)), 0.25)
+        self.assertEqual(mime_for_static("/"), "text/html")
+        self.assertEqual(mime_for_static("/js/load_obj.js"), JS_MIME)
+        self.assertEqual(mime_for_static("/js/main.js?v=44"), JS_MIME)
+        self.assertEqual(mime_for_static(r"F:\viewer\js\load_obj.js"), JS_MIME)
+        self.assertEqual(mime_for_static(r"F:\viewer\css\viewer.css"), "text/css")
+        handler = Handler.__new__(Handler)
+        self.assertEqual(handler.guess_type(r"F:\viewer\js\obj_infer.js"), JS_MIME)
+        self.assertEqual(handler.guess_type("/css/viewer.css?v=38"), "text/css")
+        self.assertEqual(handler.guess_type("/"), "text/html")
 
 
 class UiPrefsTests(unittest.TestCase):
@@ -408,12 +314,11 @@ class UiPrefsTests(unittest.TestCase):
         self.assertEqual(clamp_ui_prefs({"envelope_n": 10})["envelope_n"], 256)
         self.assertEqual(clamp_ui_prefs({})["envelope_n"], 1024)
 
-    def test_clamp_envelope_mix(self) -> None:
+    def test_rejects_stale_envelope_mix(self) -> None:
         from ui_prefs import clamp_ui_prefs
 
-        self.assertEqual(clamp_ui_prefs({"envelope_mix": 999})["envelope_mix"], 100)
-        self.assertEqual(clamp_ui_prefs({"envelope_mix": -3})["envelope_mix"], 0)
-        self.assertEqual(clamp_ui_prefs({})["envelope_mix"], 100)
+        out = clamp_ui_prefs({"envelope_mix": 75})
+        self.assertNotIn("envelope_mix", out)
 
     def test_rejects_unsafe_model_id(self) -> None:
         from ui_prefs import clamp_ui_prefs

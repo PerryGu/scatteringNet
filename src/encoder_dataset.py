@@ -30,7 +30,6 @@ class OccupancyEncoderDataset(OccupancyPointDataset):
         n_surface: int,
         seed: int = 1,
         shape_id: int = 0,
-        envelope_mix: int = 0,
     ) -> None:
         super().__init__(Path(npz_path), data_dir, shape_id=shape_id)
         if self.vertices is None or self.faces is None or self.mesh_path is None:
@@ -44,7 +43,6 @@ class OccupancyEncoderDataset(OccupancyPointDataset):
             self.faces,
             count,
             seed=int(seed),
-            mix=int(envelope_mix),
             cache_key=cache_key,
         )
         env = apply_envelope_aabb(world, self.center, self.scale)

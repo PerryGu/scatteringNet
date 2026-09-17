@@ -205,7 +205,6 @@ def _checkpoint_payload(
         "depth": int(cfg.depth),
         "shape_encoder": str(cfg.shape_encoder),
         "n_surface": int(cfg.n_surface),
-        "envelope_mix": int(cfg.envelope_mix),
         "knn_k": int(cfg.knn_k),
         "knn_local_dim": encoder_knn_local_dim(cfg) if int(cfg.knn_k) > 0 else 0,
         "latent_dim": encoder_latent_dim(cfg),
@@ -288,7 +287,6 @@ def train_multi_npz(
             max_files_per_shape=cfg.max_files_per_shape,
             n_surface=n_surface,
             seed=cfg.seed,
-            envelope_mix=int(cfg.envelope_mix),
         )
     else:
         dataset = OccupancyMultiNpzDataset(
@@ -296,7 +294,6 @@ def train_multi_npz(
             data_dir=cfg.data_dir,
             n_surface=n_surface,
             seed=cfg.seed,
-            envelope_mix=int(cfg.envelope_mix),
         )
 
     # File-level randperm leaks: lattice + jitter of one OBJ can sit on both sides.
@@ -364,7 +361,6 @@ def train_multi_npz(
         f"gpu={gpu_name(cfg.device)} "
         f"hidden={cfg.hidden} depth={cfg.depth} "
         f"shape_encoder={cfg.shape_encoder} n_surface={cfg.n_surface} "
-        f"envelope_mix={cfg.envelope_mix} "
         f"knn_k={cfg.knn_k} "
         f"latent_dim={encoder_latent_dim(cfg)}"
     )

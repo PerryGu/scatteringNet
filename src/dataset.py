@@ -121,7 +121,6 @@ class OccupancyMultiNpzDataset:
         *,
         n_surface: int | None = None,
         seed: int = 1,
-        envelope_mix: int = 0,
     ) -> None:
         """
         Load each NPZ as :class:`OccupancyPointDataset` (no point pooling).
@@ -136,8 +135,6 @@ class OccupancyMultiNpzDataset:
             Envelope count; ``None`` keeps xyz-only items.
         seed:
             Sample seed (forwarded to each part).
-        envelope_mix:
-            0–100 split between face-area and crease samples (viewer Mix).
         """
         paths = [Path(p) for p in npz_paths]
         if not paths:
@@ -153,7 +150,6 @@ class OccupancyMultiNpzDataset:
                     data_dir=data_dir,
                     n_surface=n_surface,
                     seed=seed,
-                    envelope_mix=envelope_mix,
                 )
                 for path in paths
             ]
@@ -202,7 +198,6 @@ class OccupancyMultiNpzDataset:
         max_files_per_shape: int | None = 2,
         n_surface: int | None = None,
         seed: int = 1,
-        envelope_mix: int = 0,
     ) -> OccupancyMultiNpzDataset:
         """
         Build from :func:`resolve_npz_catalog`.
@@ -214,8 +209,6 @@ class OccupancyMultiNpzDataset:
         n_surface, seed:
             Envelope sampling; ``None`` keeps xyz-only items. ``seed`` also
             drives ``max_shapes`` catalog subsampling.
-        envelope_mix:
-            0–100 split between face-area and crease samples.
 
         Returns
         -------
@@ -235,7 +228,6 @@ class OccupancyMultiNpzDataset:
             data_dir=data_dir,
             n_surface=n_surface,
             seed=seed,
-            envelope_mix=envelope_mix,
         )
 
 

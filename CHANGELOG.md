@@ -6,6 +6,45 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-17 10:00 — Train: prim_extruded_nr45_knn24_n2048_n6 (area-only)
+
+Catalog train ``2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`` (from scratch on ``ml.g5.xlarge``). Same knn24 n2048 catalog as mix-75 inspect, area-weighted envelope (no Mix 75).
+``best.pt`` epoch 20, val_iou 0.974 / acc 0.996, wall 9h 24m. Val matches mix-75 (0.9737). Fill: slight extrude improvement; organics / CAD leftovers the same class.
+Write-up: [docs/training_log.md](docs/training_log.md#2026-09-17-1000--knn24-n2048-area-only-drop-mix-75).
+
+
+## 2026-09-16 19:00 — Envelope area-only; viewer filename and lists
+
+Dropped crease/fold sampling. Envelope is face-area darts; YAML ``envelope_mix``, the Mix slider, and mix keys on new ``best.pt`` / run snapshots are gone. Infer ignores leftover mix on old checkpoints. Historical ``runs/*/`` and ``docs/training_log.md`` unchanged.
+
+**Optimization:** Mix 75 packed extra envelope dots onto folds so sharp corners would not be starved. It did not help the visible result (extrudes looked better without it). That fold hunt was the **Run model** lag (~5.2 s envelope on a dense human vs ~0.00–0.06 s without it). The Fill gain that mattered is face normals on each skin dot (``envelope_dim=6``), not crease mix.
+
+Viewer: opened OBJ/NPZ name in the title bar (selectable) and on the counts row. Right-click model notes no longer shove the left column off-screen. Model and recents menus show the full name (may overlap the 3D view); the closed Select Model button still ellipsizes.
+
+## 2026-09-16 17:00 — Viewer: NPZ Clear points keeps the file job
+
+**Clear points** on an NPZ only hides the cloud; **Run model** still classifies that file’s points. Wiping ``npzState`` left the helper OBJ text, so Run filled the previous Job B lattice. Occupancy train loop unchanged.
+
+## 2026-09-16 16:00 — Docs: viewer README status still
+
+[`src/viewer/README.md`](src/viewer/README.md) has the Prediction status table still, one-click **Run model** fill, and launch warmup. PNG in [`docs/media/`](docs/media/). Occupancy code unchanged.
+
+## 2026-09-16 15:00 — Viewer: status table
+
+After **Run model**, the left panel is a colored key/value table: inside/outside counts plus five times (**Fill points**, **Envelope**, **Load to GPU**, **Run model**, **Total**), each with a short gloss. No Mix row; Inside cut stays on the slider. Occupancy train loop unchanged.
+
+## 2026-09-16 14:00 — Viewer: Windows JS MIME and module load
+
+Helper sends ``.js`` as ``text/javascript`` on Windows (URL and ``F:\\...\\file.js`` paths), loads ``main.js`` as a ``type=module`` tag, and serves scripts on threads so Chrome runs the 3D page. Occupancy train loop unchanged.
+
+## 2026-09-16 13:00 — Viewer: helper GPU warmup at start
+
+``serve.py`` now loads torch/CUDA, a tiny fill, and one dummy infer on the newest ``best.pt`` before the browser opens. Occupancy train loop unchanged.
+
+## 2026-09-16 12:00 — Viewer: Run model fill, Clear points, mix 0
+
+OBJ **Run model** builds the AABB fill at the current Density, then infers (**Fill points** remains an optional preview). **Clear points** drops fill and envelope, keeps the mesh. Infer uses an area-only envelope (``envelope_mix: 0``) even if ``best.pt`` was mix 75; overlay Mix is unchanged. Occupancy train loop unchanged.
+
 ## 2026-09-16 10:00 — Docs: README collapsible project tree
 
 [`README.md`](README.md) Project Structure is a closed ``<details>`` block (click ``scatteringNet/`` to expand). Occupancy code unchanged.

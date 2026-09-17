@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import sys
+import time
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
@@ -38,6 +39,19 @@ from model_access import match_checkpoint_part, resolve_viewer_checkpoint  # noq
 from obj_fill import triangles_from_obj_text  # noqa: E402
 
 MAX_POINTS = 2_000_000
+
+
+def _sync_if_cuda(device) -> None:
+    """Wait for GPU work so lap times are not just the CPU launch."""
+    import torch
+
+    dev = device if hasattr(device, "type") else torch.device(str(device))
+    if str(dev.type) == "cuda":
+        torch.cuda.synchronize()
+
+
+def _round_s(t0: float) -> float:
+    return round(time.perf_counter() - t0, 3)
 
 
 def pred_from_probs(probs: np.ndarray, threshold: float = 0.5) -> np.ndarray:
@@ -155,7 +169,8 @@ def _geom_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
 
     ``surface`` → ``(1, n_surface, C)`` envelope (C from checkpoint).
     ``none`` → no geometry (xyz-only MLP).
-    Count and mix come from the checkpoint, not live YAML.
+    Count comes from the checkpoint. Sampling is always area-weighted
+    (old ``envelope_mix`` on ``best.pt`` is ignored).
     """
     import torch
 
@@ -165,13 +180,11 @@ def _geom_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
         n_surface = (
             int(ckpt["n_surface"]) if ckpt.get("n_surface") is not None else 1024
         )
-        mix = int(ckpt["envelope_mix"]) if ckpt.get("envelope_mix") is not None else 0
         world = sample_surface_points(
             vertices,
             faces,
             n_surface,
             seed=seed,
-            mix=mix,
             cache_key=cache_key,
         )
         env = apply_envelope_aabb(world, center, scale)
@@ -230,10 +243,14 @@ def infer_uploaded_npz(
     if int(labels.shape[0]) != n:
         raise ValueError("labels length does not match points")
 
+    t_all = time.perf_counter()
     ckpt_path = resolve_viewer_checkpoint(run_id, models_root)
+    t0 = time.perf_counter()
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cfg = _runtime_cfg(cfg)
     model = load_occupancy_model(ckpt, cfg.device)
+    _sync_if_cuda(cfg.device)
+    load_s = _round_s(t0)
     center, scale, aabb_src = aabb_for_viewer(
         ckpt,
         npz_name=npz_name,
@@ -244,24 +261,53 @@ def infer_uploaded_npz(
     enc = _ckpt_shape_encoder(ckpt)
     geom = None
     shape_id = None
+    parse_s = 0.0
+    envelope_s = 0.0
     if enc in ("surface", "mesh"):
         if not mesh_path:
             raise ValueError("this checkpoint needs a mesh_path for the geometry encoder")
         if data_dir is None:
             raise ValueError("helper has no data_dir; cannot load the OBJ for the encoder")
+        t0 = time.perf_counter()
         mesh_file = resolve_viewer_mesh(mesh_path, data_dir)
         vertices, faces = load_obj_triangles(mesh_file)
+        parse_s = _round_s(t0)
+        t0 = time.perf_counter()
         geom, shape_id = _geom_from_mesh(
             ckpt, cfg, vertices, faces, center, scale, str(mesh_file.resolve())
         )
+        envelope_s = _round_s(t0)
         if geom is None:
             raise ValueError(f"checkpoint shape_encoder={enc!r} built no geometry tokens")
 
+    t0 = time.perf_counter()
     xyz = torch.from_numpy(apply_normalization(points, center, scale))
     y = torch.from_numpy(labels.astype(np.float32)).unsqueeze(1)
     logits = _forward_logits(model, cfg, xyz, geom, shape_id)
+    _sync_if_cuda(cfg.device)
+    forward_s = _round_s(t0)
     scores = occupancy_metrics(logits, y)
     probs, pred = _sigmoid_probs_and_pred(logits)
+    timings = {
+        "parse_obj": parse_s,
+        "load_model": load_s,
+        "envelope": envelope_s,
+        "forward": forward_s,
+        "server_total": _round_s(t_all),
+    }
+    print(
+        "viewer infer-npz timings (s) n=%s parse=%.3f load=%.3f envelope=%.3f "
+        "forward=%.3f total=%.3f"
+        % (
+            n,
+            parse_s,
+            load_s,
+            envelope_s,
+            forward_s,
+            timings["server_total"],
+        ),
+        flush=True,
+    )
     gt = labels > 0
     pred_bool = pred > 0
     n_fn = int(np.count_nonzero(gt & ~pred_bool))
@@ -280,6 +326,7 @@ def infer_uploaded_npz(
         "n_fn": n_fn,
         "n_fp": n_fp,
         "run_id": Path(ckpt_path).parent.name,
+        "timings": timings,
     }
 
 
@@ -309,11 +356,17 @@ def infer_uploaded_obj(
     if points.ndim != 2 or points.shape[1] != 3:
         raise ValueError(f"points must be (N, 3), got {tuple(points.shape)}")
 
+    t_all = time.perf_counter()
+    t0 = time.perf_counter()
     vertices, faces = triangles_from_obj_text(obj_text)
+    parse_s = _round_s(t0)
     ckpt_path = resolve_viewer_checkpoint(run_id, models_root)
+    t0 = time.perf_counter()
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cfg = _runtime_cfg(cfg)
     model = load_occupancy_model(ckpt, cfg.device)
+    _sync_if_cuda(cfg.device)
+    load_s = _round_s(t0)
     center, scale, aabb_src = aabb_for_viewer(
         ckpt,
         npz_name="",
@@ -323,15 +376,40 @@ def infer_uploaded_obj(
         vertices=vertices,
     )
     enc = _ckpt_shape_encoder(ckpt)
+    t0 = time.perf_counter()
     geom, shape_id = _geom_from_mesh(
         ckpt, cfg, vertices, faces, center, scale, "upload:" + str(obj_name or "obj")
     )
+    envelope_s = _round_s(t0)
     if enc in ("surface", "mesh") and geom is None:
         raise ValueError(f"checkpoint shape_encoder={enc!r} built no geometry tokens")
+    t0 = time.perf_counter()
     xyz = torch.from_numpy(apply_normalization(points, center, scale))
     logits = _forward_logits(model, cfg, xyz, geom, shape_id)
+    _sync_if_cuda(cfg.device)
+    forward_s = _round_s(t0)
     probs, pred = _sigmoid_probs_and_pred(logits)
     n_in = int(np.count_nonzero(pred > 0))
+    timings = {
+        "parse_obj": parse_s,
+        "load_model": load_s,
+        "envelope": envelope_s,
+        "forward": forward_s,
+        "server_total": _round_s(t_all),
+    }
+    print(
+        "viewer infer-obj timings (s) n=%s parse=%.3f load=%.3f envelope=%.3f "
+        "forward=%.3f total=%.3f"
+        % (
+            n,
+            parse_s,
+            load_s,
+            envelope_s,
+            forward_s,
+            timings["server_total"],
+        ),
+        flush=True,
+    )
     return {
         "pred_b64": base64.b64encode(np.ascontiguousarray(pred)).decode("ascii"),
         "prob_b64": base64.b64encode(np.ascontiguousarray(probs)).decode("ascii"),
@@ -342,4 +420,58 @@ def infer_uploaded_obj(
         "shape_encoder": enc,
         "aabb": aabb_src,
         "run_id": Path(ckpt_path).parent.name,
+        "timings": timings,
     }
+
+
+_WARM_OBJ = (
+    "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\n"
+    "f 1 2 3\nf 1 2 4\nf 1 3 4\nf 2 3 4\n"
+)
+
+
+def warmup_viewer_helper(models_root: Path) -> None:
+    """
+    Pay first-click costs before the browser opens: torch, CUDA, trimesh
+    fill, load newest ``best.pt``, tiny envelope + forward.
+    """
+    t0 = time.perf_counter()
+    print("warmup: torch / CUDA…", flush=True)
+    import torch
+
+    from config import load_config
+    from obj_fill import fill_aabb_lattice
+
+    cfg = load_config()
+    if str(cfg.device.type) == "cuda":
+        torch.zeros(1, device=cfg.device)
+        torch.cuda.synchronize()
+        print("warmup: CUDA " + str(cfg.device), flush=True)
+    else:
+        print("warmup: CPU only", flush=True)
+
+    print("warmup: tiny fill…", flush=True)
+    verts, faces = triangles_from_obj_text(_WARM_OBJ)
+    points, _used, _grid = fill_aabb_lattice(verts, 0.40)
+    if int(points.shape[0]) < 1:
+        points = np.array([[0.2, 0.2, 0.2], [0.8, 0.2, 0.2]], dtype=np.float32)
+
+    from model_access import list_viewer_models
+
+    rows = list_viewer_models(models_root)
+    if not rows:
+        print("warmup: no models/; skip infer", flush=True)
+        print("warmup: done in %.1fs" % (time.perf_counter() - t0), flush=True)
+        return
+    run_id = str(rows[0]["id"])
+    print("warmup: infer " + run_id + "…", flush=True)
+    infer_uploaded_obj(
+        run_id=run_id,
+        models_root=models_root,
+        data_dir=None,
+        obj_name="warmup.obj",
+        obj_text=_WARM_OBJ,
+        points=points,
+        cfg=cfg,
+    )
+    print("warmup: done in %.1fs" % (time.perf_counter() - t0), flush=True)

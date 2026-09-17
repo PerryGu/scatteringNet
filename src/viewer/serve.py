@@ -28,6 +28,42 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+def _norm_static_path(path: object) -> str:
+    """URL or Windows filesystem path, no query/hash, slashes normalized."""
+    if isinstance(path, bytes):
+        raw = path.decode("utf-8", "replace")
+    else:
+        raw = os.fspath(path)
+    raw = raw.replace("\\", "/")
+    return raw.split("?", 1)[0].split("#", 1)[0]
+
+
+def mime_for_static(path: object) -> str | None:
+    """
+    Map a static viewer file to a Chrome-safe Content-Type.
+
+    ``posixpath.splitext`` on a Windows path (``F:\\...\\load_obj.js``) sees no
+    extension, so the stdlib handler falls through to ``mimetypes`` which is
+    often ``text/plain`` for ``.js``. ES modules then never run.
+    """
+    name = _norm_static_path(path).lower().rstrip("/") or "/"
+    # GET / has no suffix; the log used to call that application/octet-stream.
+    if name in ("/", "/index.html", "index.html"):
+        return "text/html"
+    if name.endswith(".js") or name.endswith(".mjs"):
+        return JS_MIME
+    ext = os.path.splitext(name)[1]
+    if ext == ".css":
+        return "text/css"
+    if ext in (".html", ".htm"):
+        return "text/html"
+    if ext == ".json":
+        return "application/json"
+    if ext == ".wasm":
+        return "application/wasm"
+    return None
+
+
 def _port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.3)
@@ -87,6 +123,11 @@ class Handler(SimpleHTTPRequestHandler):
     data_dir: Path | None = None
     models_dir: Path | None = None
 
+    def __init__(self, *args, **kwargs) -> None:
+        # Serve viewer files even if warmup or torch changes cwd.
+        kwargs.setdefault("directory", str(ROOT))
+        super().__init__(*args, **kwargs)
+
     extensions_map = {
         **SimpleHTTPRequestHandler.extensions_map,
         ".html": "text/html",
@@ -98,10 +139,28 @@ class Handler(SimpleHTTPRequestHandler):
     }
 
     def guess_type(self, path: str) -> str:
-        clean = path.split("?", 1)[0].lower()
-        if clean.endswith(".js") or clean.endswith(".mjs"):
-            return JS_MIME
+        forced = mime_for_static(path)
+        if forced:
+            return forced
         return super().guess_type(path)
+
+    def send_header(self, keyword: str, value: str) -> None:
+        # Last line of defence: whatever send_head guessed, scripts stay JS.
+        if str(keyword).lower() == "content-type":
+            forced = mime_for_static(urllib.parse.urlparse(getattr(self, "path", "")).path)
+            if forced:
+                value = forced
+        super().send_header(keyword, value)
+
+    def send_head(self):
+        url = urllib.parse.urlparse(getattr(self, "path", "")).path.lower()
+        if url.endswith((".js", ".mjs", ".css", ".html", ".htm")):
+            # 304 would reuse a cached text/plain ES module from an older helper.
+            try:
+                del self.headers["If-Modified-Since"]
+            except (KeyError, TypeError, AttributeError):
+                pass
+        return super().send_head()
 
     def end_headers(self) -> None:
         self.send_header("Cache-Control", "no-store")
@@ -112,7 +171,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path.startswith("/api/"):
             self.log_message('"%s" %s %s', self.requestline, str(code), str(size))
             return
-        ctype = self.guess_type(path)
+        ctype = mime_for_static(path) or self.guess_type(path)
         self.log_message('"%s" %s %s  Content-Type=%s', self.requestline, str(code), str(size), ctype)
 
     def do_GET(self) -> None:
@@ -335,9 +394,8 @@ class Handler(SimpleHTTPRequestHandler):
             from envelope_job import envelope_from_obj_text
 
             n_surface = int(payload.get("n_surface") or 0)
-            mix = int(payload.get("mix") if payload.get("mix") is not None else 100)
             result = envelope_from_obj_text(
-                str(payload.get("obj_text") or ""), n_surface, mix=mix
+                str(payload.get("obj_text") or ""), n_surface
             )
         except ImportError as exc:
             self._send_json(
@@ -441,6 +499,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
 
+class ThreadingViewerServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    """Serve JS modules in parallel; a single-thread queue can make Chrome abort import()."""
+
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 def main() -> None:
     os.chdir(ROOT)
     port = _pick_port()
@@ -469,8 +534,15 @@ def main() -> None:
     print(f"ui prefs: {ROOT / 'ui_prefs.json'}")
     if guessed_js not in ("text/javascript", "application/javascript", "application/ecmascript"):
         print("NOTE: Windows often serves .js as text/plain; Chrome then never runs the module.")
+    print("warmup: first-click GPU / torch (browser opens after this)…")
+    try:
+        from infer_job import warmup_viewer_helper
+
+        warmup_viewer_helper(models_dir)
+    except Exception as exc:
+        print("warmup: skipped: " + str(exc))
     print("Leave this window open. Close it (and any old server window) to stop.")
-    with socketserver.TCPServer(("127.0.0.1", port), Handler) as httpd:
+    with ThreadingViewerServer(("127.0.0.1", port), Handler) as httpd:
         threading.Thread(target=open_browser, daemon=True).start()
         httpd.serve_forever()
 

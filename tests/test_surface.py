@@ -17,10 +17,7 @@ from geometry.surface import (
     _ENVELOPE_CACHE,
     apply_envelope_aabb,
     clear_envelope_cache,
-    crease_length_fraction,
-    plan_envelope_counts,
     sample_surface_points,
-    split_envelope_counts,
 )
 
 
@@ -83,73 +80,16 @@ class SurfaceSampleTests(unittest.TestCase):
         b = sample_surface_points(
             mesh.vertices, mesh.faces, 16, seed=3, cache_key="box-cache"
         )
-        key = ("box-cache", 16, 3, 0)
+        key = ("box-cache", 16, 3)
         self.assertIn(key, _ENVELOPE_CACHE)
         self.assertIs(a, b)
         clear_envelope_cache()
         self.assertNotIn(key, _ENVELOPE_CACHE)
 
-    def test_mix_uses_separate_cache_slot(self) -> None:
-        mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
-        clear_envelope_cache()
-        a = sample_surface_points(
-            mesh.vertices, mesh.faces, 16, seed=3, mix=0, cache_key="box-mix"
-        )
-        b = sample_surface_points(
-            mesh.vertices, mesh.faces, 16, seed=3, mix=100, cache_key="box-mix"
-        )
-        self.assertIn(("box-mix", 16, 3, 0), _ENVELOPE_CACHE)
-        self.assertIn(("box-mix", 16, 3, 100), _ENVELOPE_CACHE)
-        self.assertFalse(np.allclose(a, b))
-
     def test_rejects_zero_count(self) -> None:
         mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
         with self.assertRaises(ValueError):
             sample_surface_points(mesh.vertices, mesh.faces, 0)
-
-    def test_mix_100_hugs_box_edges(self) -> None:
-        mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
-        pts = sample_surface_points(
-            mesh.vertices, mesh.faces, 256, seed=1, mix=100
-        )
-        # Box faces sit at |coord|=1. Distance to the nearest of 12 edges.
-        xyz = np.abs(np.asarray(pts[:, :3], dtype=np.float64))
-        d_edge = np.sort(np.abs(xyz - 1.0), axis=1)[:, 1]
-        self.assertLess(float(np.median(d_edge)), 0.15)
-
-    def test_rejects_bad_mix(self) -> None:
-        mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
-        with self.assertRaises(ValueError):
-            sample_surface_points(mesh.vertices, mesh.faces, 8, mix=101)
-
-    def test_plan_caps_sparse_creases_and_spills_to_area(self) -> None:
-        # Mix 75 wants 768 crease dots; 10% sharp edges may take only 20%.
-        self.assertEqual(split_envelope_counts(1024, 75), (256, 768))
-        self.assertEqual(plan_envelope_counts(1024, 75, 0.10), (819, 205))
-        self.assertEqual(plan_envelope_counts(1024, 75, 0.0), (1024, 0))
-        # CAD box: almost every interior edge is sharp → Mix budget stands.
-        self.assertEqual(plan_envelope_counts(1024, 75, 1.0), (256, 768))
-        n_area, n_crease = plan_envelope_counts(1024, 75, 0.10)
-        self.assertEqual(n_area + n_crease, 1024)
-
-    def test_box_crease_fraction_keeps_mix_budget(self) -> None:
-        mesh = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
-        # Face diagonals are coplanar, so frac is ~0.59, not 1. 2× still ≥ Mix 75.
-        frac = crease_length_fraction(mesh.vertices, mesh.faces)
-        self.assertGreater(frac, 0.5)
-        n_area, n_crease = plan_envelope_counts(1024, 75, frac)
-        self.assertEqual((n_area, n_crease), (256, 768))
-
-    def test_sphere_mix_keeps_full_count(self) -> None:
-        mesh = trimesh.creation.icosphere(subdivisions=3, radius=1.0)
-        frac = crease_length_fraction(mesh.vertices, mesh.faces)
-        n_area, n_crease = plan_envelope_counts(512, 75, frac)
-        self.assertEqual(n_area + n_crease, 512)
-        self.assertLess(n_crease, int(round(512 * 0.75)))
-        pts = sample_surface_points(
-            mesh.vertices, mesh.faces, 512, seed=2, mix=75
-        )
-        self.assertEqual(pts.shape, (512, 6))
 
 
 if __name__ == "__main__":
