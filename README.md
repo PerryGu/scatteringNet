@@ -4,9 +4,41 @@
 
 - PyTorch occupancy network that labels 3D query points **inside** a mesh volume (not on the surface, not outside).
 - Input is an OBJ (or a labeled occupancy NPZ). Output is an inside / outside point cloud. How you display it is up to the host tool.
-- Best **out-of-catalog Fill** so far: envelope of **2048** skin dots and **24** nearest neighbors (`2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`).
+- Best **out-of-catalog Fill** so far: envelope of **2048** skin dots and **24** nearest neighbors (`2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`).
 - Trained on CAD primitives and extrudes only. Humans, animals, and combo meshes were **not** in the catalog; they are the inspect test.
 - This is **not** how you should fill a volume in production. There are plenty of tools and libraries that do this quickly and accurately. This repo exists because I had already built that plugin, and I wanted to see the same job done with a network.
+
+---
+
+## Video Showcase
+
+<a href="https://www.youtube.com/watch?v=vU45O0Mu0o4">
+  <img src="https://img.youtube.com/vi/vU45O0Mu0o4/hqdefault.jpg" alt="Occupancy fill with a neural net" width="100%" />
+</a>
+<p align="center"><strong>Occupancy fill with a neural net</strong></p>
+
+---
+
+## Image Gallery
+
+Fill stills below are the **best current checkpoint** (`knn_k: 24`, `n_surface: 2048`, area-only: `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`).  
+The PNGs are the mix-75 twin (`07-43-34`); leftover class is the same. **None of the human / animal / combo stills were in the training catalog.** Gear is in-catalog. Helix is a catalog *family*, but not these bent / FFD meshes. Extrudes are a catalog family (`nr4` / `nr5`).
+
+
+|                                                                             |                                                                                                  |                                                                                             |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| ![](docs/media/2026-09-14_knn24_n2048_woman.png) **Woman (not in catalog)** | ![](docs/media/2026-09-14_knn24_n2048_man.png) **Man (not in catalog)**                          | ![](docs/media/2026-09-14_knn24_n2048_dog.png) **Dog (not in catalog)**                     |
+| ![](docs/media/2026-09-14_knn24_n2048_horse.png) **Horse (not in catalog)** | ![](docs/media/2026-09-14_knn24_n2048_human_stylized.png) **Stylized human (not in catalog)**    | ![](docs/media/2026-09-14_knn24_n2048_combo_animals.png) **Combo animals (not in catalog)** |
+| ![](docs/media/2026-09-14_knn24_n2048_gear.png) **Gear (in catalog)**       | ![](docs/media/2026-09-14_knn24_n2048_helix.png) **Helix (family in catalog; this mesh is not)** | ![](docs/media/2026-09-14_knn24_n2048_extrude.png) **Extrude (catalog family)**             |
+
+
+Earlier n6 Fill (same catalog, `knn_k: 16`, `n_surface: 1024`) already transferred to organics. That was the jump from empty humans to a usable volume. The 2048 / k=24 run is a tighter OOD fill on top of that, not a new architecture.
+
+
+|                                                                          |                                                                       |                                                                       |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| ![](docs/media/2026-09-06_n6_human.png) **n6 human (1080, k=16 / 1024)** | ![](docs/media/2026-09-06_n6_horse.png) **n6 horse (not in catalog)** | ![](docs/media/2026-09-06_n6_shark.png) **n6 shark (not in catalog)** |
+
 
 ---
 
@@ -14,7 +46,7 @@
 
 I already knew this was a bad production idea.
 
-Filling a mesh with points is a geometry problem. A ray test, or the first-and-last-hit trick in **[scatteringNode](https://github.com/PerryGu/scatteringNode)** (a Maya C++ plugin I wrote, almost a decade ago), does it **exactly** and **faster** than a network ever will. A model is the wrong tool here: you spend hours of GPU time to approximate a test that the CPU already owns.
+Filling a mesh with points is a geometry problem. A ray test, or the first-and-last-hit trick in **[scatteringNode](https://github.com/PerryGu/scatteringNode)** (a Maya C++ plugin I wrote, almost a decade ago), does it **accurately** and **faster** than a network ever will. A model is the wrong tool here: you spend hours of GPU time to approximate a test that the CPU already owns.
 
 I built scatteringNet anyway. scatteringNode came first: ordinary programming on a **production job**. After the AI wave I wanted to close the loop — same task, this time as a network — out of curiosity, and to mark the shift from writing algorithms by hand to training them.
 
@@ -53,29 +85,6 @@ Catalog val IoU is a useful health check. It is **not** the success bar. Success
 
 ---
 
-## Image Gallery
-
-Fill stills below are the **best current checkpoint** (`knn_k: 24`, `n_surface: 2048`).  
-**None of the human / animal / combo stills were in the training catalog.** Gear is in-catalog. Helix is a catalog *family*, but not these bent / FFD meshes. Extrudes are a catalog family (`nr4` / `nr5`).
-
-
-|                                                                             |                                                                                                  |                                                                                             |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| ![](docs/media/2026-09-14_knn24_n2048_woman.png) **Woman (not in catalog)** | ![](docs/media/2026-09-14_knn24_n2048_man.png) **Man (not in catalog)**                          | ![](docs/media/2026-09-14_knn24_n2048_dog.png) **Dog (not in catalog)**                     |
-| ![](docs/media/2026-09-14_knn24_n2048_horse.png) **Horse (not in catalog)** | ![](docs/media/2026-09-14_knn24_n2048_human_stylized.png) **Stylized human (not in catalog)**    | ![](docs/media/2026-09-14_knn24_n2048_combo_animals.png) **Combo animals (not in catalog)** |
-| ![](docs/media/2026-09-14_knn24_n2048_gear.png) **Gear (in catalog)**       | ![](docs/media/2026-09-14_knn24_n2048_helix.png) **Helix (family in catalog; this mesh is not)** | ![](docs/media/2026-09-14_knn24_n2048_extrude.png) **Extrude (catalog family)**             |
-
-
-Earlier n6 Fill (same catalog, `knn_k: 16`, `n_surface: 1024`) already transferred to organics. That was the jump from empty humans to a usable volume. The 2048 / k=24 run is a tighter OOD fill on top of that, not a new architecture.
-
-
-|                                                                          |                                                                       |                                                                       |
-| ------------------------------------------------------------------------ | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| ![](docs/media/2026-09-06_n6_human.png) **n6 human (1080, k=16 / 1024)** | ![](docs/media/2026-09-06_n6_horse.png) **n6 horse (not in catalog)** | ![](docs/media/2026-09-06_n6_shark.png) **n6 shark (not in catalog)** |
-
-
----
-
 ## Features
 
 - Occupancy classification of lattice / NPZ query points (inside vs outside).
@@ -99,7 +108,7 @@ Training prints accuracy and IoU. Those numbers can look fine while, in reality,
 open_viewer.bat
 ```
 
-Or: `conda activate scatteringNet` then `python src/viewer/serve.py`. Orbit works on CPU. **Run model** needs the GPU and checkpoints at `models/<run_id>/best.pt`. Control-by-control notes: [`src/viewer/README.md`](src/viewer/README.md).
+Or: `conda activate scatteringNet` then `python src/viewer/serve.py`. Orbit works on CPU. **Run model** needs the GPU and checkpoints at `models/<run_id>/best.pt`. Control-by-control notes: `[src/viewer/README.md](src/viewer/README.md)`.
 
 **What it can do**
 
@@ -114,13 +123,13 @@ Typical inspect path: **Open** an OBJ → pick a model → **Run model**.
 
 ## Dataset
 
-There was no large, ready-made mesh collection of any kind — and a network needs volume. The meshes were generated in Maya. Operator notes for those scripts: [`docs/maya_batch_scatter_scripts.md`](docs/maya_batch_scatter_scripts.md).
+There was no large, ready-made mesh collection of any kind — and a network needs volume. The meshes were generated in Maya. Operator notes for those scripts: `[docs/maya_batch_scatter_scripts.md](docs/maya_batch_scatter_scripts.md)`.
 
-**Primitives.** Start with Maya’s built-in solids — ten families: sphere, cube, cylinder, cone, torus, pipe, prism, helix, gear, platonic. [`maya_batch_primitives.py`](docs/maya_batch_scatter_scripts.md#maya_batch_primitivespy) sweeps each family’s parameters (radius, subdivisions, teeth, and so on) and writes on the order of **~100 distinct OBJs per type**.
+**Primitives.** Start with Maya’s built-in solids — ten families: sphere, cube, cylinder, cone, torus, pipe, prism, helix, gear, platonic. `[maya_batch_primitives.py](docs/maya_batch_scatter_scripts.md#maya_batch_primitivespy)` sweeps each family’s parameters (radius, subdivisions, teeth, and so on) and writes on the order of **~100 distinct OBJs per type**.
 
-**Extrude.** Primitives alone are too clean. [`maya_batch_extrude.py`](docs/maya_batch_scatter_scripts.md#maya_batch_extrudepy) starts from a subdivided cube, extrudes a few faces (steps / corners; `keepFacesTogether` on), and varies thickness, face count, and how many extrude rounds (`nr1` … `nr5`). Open leftover shells are skipped so occupancy Truth does not leak. The result is non-standard CAD with limbs, holes, and slabs the sphere/cube grid does not cover.
+**Extrude.** Primitives alone are too clean. `[maya_batch_extrude.py](docs/maya_batch_scatter_scripts.md#maya_batch_extrudepy)` starts from a subdivided cube, extrudes a few faces (steps / corners; `keepFacesTogether` on), and varies thickness, face count, and how many extrude rounds (`nr1` … `nr5`). Open leftover shells are skipped so occupancy Truth does not leak. The result is non-standard CAD with limbs, holes, and slabs the sphere/cube grid does not cover.
 
-**Smooth extrude.** [`maya_batch_extruded_smooth.py`](docs/maya_batch_scatter_scripts.md#maya_batch_extruded_smoothpy) is a separate recipe: a rectangular box, a few directed extrudes (legs / neck / tail, or a star of sides), then **one** Maya `polySmooth`. The hope was a stand-in for organics, of which there were almost no examples. Viewer Fill later showed that this family was **not** what made humans and animals fill — envelope normals (`n6`) did. Smoothed CAD is optional for that goal.
+**Smooth extrude.** `[maya_batch_extruded_smooth.py](docs/maya_batch_scatter_scripts.md#maya_batch_extruded_smoothpy)` is a separate recipe: a rectangular box, a few directed extrudes (legs / neck / tail, or a star of sides), then **one** Maya `polySmooth`. The hope was a stand-in for organics, of which there were almost no examples. Viewer Fill later showed that this family was **not** what made humans and animals fill — envelope normals (`n6`) did. Smoothed CAD is optional for that goal.
 
 Primitive stills will go here when they are in `docs/media/`.
 
@@ -128,7 +137,7 @@ Primitive stills will go here when they are in `docs/media/`.
 
 ## Occupancy NPZs
 
-Maya writes **meshes**. Training needs **query points with inside/outside labels**. That second stage is conda, not Maya: [`src/scatter_generation/dataset_builder.py`](src/scatter_generation/dataset_builder.py). Full operator note: [`docs/npz_dataset_generation.md`](docs/npz_dataset_generation.md).
+Maya writes **meshes**. Training needs **query points with inside/outside labels**. That second stage is conda, not Maya: `[src/scatter_generation/dataset_builder.py](src/scatter_generation/dataset_builder.py)`. Full operator note: `[docs/npz_dataset_generation.md](docs/npz_dataset_generation.md)`.
 
 For each OBJ the script places a regular lattice in a padded bounding box (`--spacings`; smaller = denser). Optional `--random-ranges` then nudges every point on X/Y/Z; labels are computed on the **moved** positions (`0` leaves the lattice). The everyday method is `--method occupancy`: each query is classified by a multi-ray vote through Open3D (odd hit counts in enough directions). `--method raycast` exists for some torus-like solids (rays from one bbox face). `--spacings` and `--random-ranges` are lists; their cartesian product is written (two ranges × one spacing = two NPZs per mesh). `--max-points` coarsens density if a lattice would exceed 200,000 samples.
 
@@ -176,7 +185,7 @@ Example from `sphere_r0p5_sa16_sh16__occupancy_s0.15_inout.npz` (spacing `0.15`,
 | `random_range`  | `0`                                                  |
 
 
-Point rows (five inside, then five outside):
+Point rows (five inside, then five outside) — click to expand
 
 
 | #   | x       | y       | z       | label |
@@ -194,6 +203,8 @@ Point rows (five inside, then five outside):
 
 
 Index `0` is a bounding-box corner (outside). Index `121` sits near this sphere’s origin (inside).
+
+
 
 ---
 
@@ -236,22 +247,25 @@ What actually improved **the visible result** was something else: storing which 
 Side-by-side viewer Fill on the same OOD set (woman, dog, man, CAD extrudes, combo primitives):
 
 
-| Checkpoint                             | Box            | `knn_k` | `n_surface` | Catalog val IoU | Fill on this OOD set                                                            |
-| -------------------------------------- | -------------- | ------- | ----------- | --------------- | ------------------------------------------------------------------------------- |
-| `2026-09-05_12-18-28_…_n6`             | GTX 1080       | 16      | 1024        | 0.965           | Strong baseline. Cleaner woman hands than SageMaker k=16. More dog bleed.       |
-| `2026-09-13_11-23-44_…_n6`             | SageMaker A10G | 16      | 1024        | 0.967           | Same YAML as the 1080 n6. Trades leftovers (woman left-hand leak; tighter dog). |
-| `2026-09-14_07-43-34_…_knn24_n2048_n6` | SageMaker A10G | **24**  | **2048**    | 0.974           | **Best Fill.** Inside points stay inside the wire on humans, extrudes, and combos.    |
+| Checkpoint                             | Box            | `knn_k` | `n_surface` | Catalog val IoU | Fill on this OOD set                                                                              |
+| -------------------------------------- | -------------- | ------- | ----------- | --------------- | ------------------------------------------------------------------------------------------------- |
+| `2026-09-05_12-18-28_…_n6`             | GTX 1080       | 16      | 1024        | 0.965           | Strong baseline. Cleaner woman hands than SageMaker k=16. More dog bleed.                         |
+| `2026-09-13_11-23-44_…_n6`             | SageMaker A10G | 16      | 1024        | 0.967           | Same YAML as the 1080 n6. Trades leftovers (woman left-hand leak; tighter dog).                   |
+| `2026-09-14_07-43-34_…_knn24_n2048_n6` | SageMaker A10G | **24**  | **2048**    | 0.974           | Mix 75. Inside points stay inside the wire on humans, extrudes, and combos.                       |
+| `2026-09-16_18-09-31_…_knn24_n2048_n6` | SageMaker A10G | **24**  | **2048**    | 0.974           | **Best Fill.** Area-only envelope. Slight extrude improvement; leftover class otherwise the same. |
 
 
 **What that comparison is not.** The two k=16 runs are the same recipe, not the same weights. Seed 1 does not pin cuDNN or TF32. Ampere (A10G) uses TF32 for FP32 matmuls by default; the 1080 does not. Val IoU 0.967 vs 0.965 is noise. Fill leftovers swap (hand vs ear) because catalog val never saw those meshes.
 
 **User conclusion (15 Sep 2026).** The two k=16 models are close: one wins a still, the other wins the next. If you want the **best** result on this inspect set, use 2048 envelope dots and 24 neighbors. Train wall and **Run model** are slower (k-NN scales with envelope `N`; that A10G train was ~9h 29m vs ~5h for SageMaker k=16 / 1024, ~10h on the 1080).
 
+**User conclusion (17 Sep 2026).** Area-only `18-09-31` matches that mix-75 Fill (slightly better on extrudes). Mix 75 is not required. Inspect weights are `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`.
+
 **Catalog caveat (agreed).** None of those inspect shapes were training identities. If humans / animals had been in `npz_catalog`, k=16 / 1024 might have been enough, and this upgrade might not have been justified. Putting them in now would also end the OOD test: the next stills would be in-catalog, not a rerun of this grid.
 
 **What not to do next.** Do not pick a default from val IoU. Do not resume a `best.pt` across a head or catalog change. Raising `knn_k` and `n_surface` **did** help this OOD Fill; more neighbors and a denser envelope (for example 32 and 4096) might help again. That is an open trade against train wall and infer time, not a closed door. A leftover remains: slight dog-ear spray, and fingers that are tighter (sometimes thinner inside) rather than bleeding out.
 
-Full train write-ups: [`docs/training_log.md`](docs/training_log.md). Code / knob history: [`CHANGELOG.md`](CHANGELOG.md).
+Full train write-ups: `[docs/training_log.md](docs/training_log.md)`. Code / knob history: `[CHANGELOG.md](CHANGELOG.md)`.
 
 ---
 
@@ -340,100 +354,66 @@ flowchart TD
 
 ## Project Structure
 
-<details>
-<summary><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <strong>scatteringNet/</strong> — click to expand the tree</summary>
+![](docs/media/icons/folder.svg) **scatteringNet/** — click to expand the tree
 
-<ul>
-<li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>config.yaml</code></li>
-<li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>environment.yaml</code></li>
-<li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>open_viewer.bat</code></li>
-<li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>CHANGELOG.md</code></li>
-<li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>README.md</code></li>
-<li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>docs/</code>
-  <ul>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>training_log.md</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>sagemaker.md</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>maya_batch_scatter_scripts.md</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>npz_dataset_generation.md</code></li>
-  <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>media/</code></li>
-  </ul>
-</li>
-<li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>models/</code>
-  <ul>
-  <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>&lt;run_id&gt;/</code>
-    <ul>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>best.pt</code></li>
-    </ul>
-  </li>
-  </ul>
-</li>
-<li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>runs/</code>
-  <ul>
-  <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>&lt;run_id&gt;/</code>
-    <ul>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>config.yaml</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>catalog.txt</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>metrics.jsonl</code></li>
-    </ul>
-  </li>
-  </ul>
-</li>
-<li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>sagemaker/</code>
-  <ul>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>entry.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>launch.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>requirements.txt</code></li>
-  </ul>
-</li>
-<li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>src/</code>
-  <ul>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>occupancy_encoder.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>occupancy_mlp.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>train_multi_npz.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>infer_multi_npz.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>config.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>dataset.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>encoder_dataset.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>data_npz.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>checkpointing.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>metrics.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>normalize.py</code></li>
-  <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>run_tracking.py</code></li>
-  <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>geometry/</code>
-    <ul>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>mesh_io.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>surface.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>trimesh_util.py</code></li>
-    </ul>
-  </li>
-  <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>scatter_generation/</code>
-    <ul>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>dataset_builder.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>mesh_loader.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>raycast_scatter.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>maya_batch_primitives.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>maya_batch_extrude.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>maya_batch_extruded_smooth.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>maya_batch_helix.py</code></li>
-    </ul>
-  </li>
-  <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>viewer/</code> — Three.js inspect page + localhost helper
-    <ul>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>serve.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>infer_job.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>envelope_job.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>obj_fill.py</code></li>
-    <li><img src="docs/media/icons/file.svg" width="16" height="16" alt=""/> <code>index.html</code></li>
-    <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>js/</code></li>
-    <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>css/</code></li>
-    <li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>vendor/</code></li>
-    </ul>
-  </li>
-  </ul>
-</li>
-<li><img src="docs/media/icons/folder.svg" width="16" height="16" alt=""/> <code>tests/</code> — stdlib <code>unittest</code> modules for the occupancy pipeline</li>
-</ul>
-</details>
+- ![](docs/media/icons/file.svg) `config.yaml`
+- ![](docs/media/icons/file.svg) `environment.yaml`
+- ![](docs/media/icons/file.svg) `open_viewer.bat`
+- ![](docs/media/icons/file.svg) `CHANGELOG.md`
+- ![](docs/media/icons/file.svg) `README.md`
+- ![](docs/media/icons/folder.svg) `docs/`
+  - ![](docs/media/icons/file.svg) `training_log.md`
+  - ![](docs/media/icons/file.svg) `sagemaker.md`
+  - ![](docs/media/icons/file.svg) `maya_batch_scatter_scripts.md`
+  - ![](docs/media/icons/file.svg) `npz_dataset_generation.md`
+  - ![](docs/media/icons/folder.svg) `media/`
+- ![](docs/media/icons/folder.svg) `models/`
+  - ![](docs/media/icons/folder.svg) `/`
+    - ![](docs/media/icons/file.svg) `best.pt`
+- ![](docs/media/icons/folder.svg) `runs/`
+  - ![](docs/media/icons/folder.svg) `/`
+    - ![](docs/media/icons/file.svg) `config.yaml`
+    - ![](docs/media/icons/file.svg) `catalog.txt`
+    - ![](docs/media/icons/file.svg) `metrics.jsonl`
+- ![](docs/media/icons/folder.svg) `sagemaker/`
+  - ![](docs/media/icons/file.svg) `entry.py`
+  - ![](docs/media/icons/file.svg) `launch.py`
+  - ![](docs/media/icons/file.svg) `requirements.txt`
+- ![](docs/media/icons/folder.svg) `src/`
+  - ![](docs/media/icons/file.svg) `occupancy_encoder.py`
+  - ![](docs/media/icons/file.svg) `occupancy_mlp.py`
+  - ![](docs/media/icons/file.svg) `train_multi_npz.py`
+  - ![](docs/media/icons/file.svg) `infer_multi_npz.py`
+  - ![](docs/media/icons/file.svg) `config.py`
+  - ![](docs/media/icons/file.svg) `dataset.py`
+  - ![](docs/media/icons/file.svg) `encoder_dataset.py`
+  - ![](docs/media/icons/file.svg) `data_npz.py`
+  - ![](docs/media/icons/file.svg) `checkpointing.py`
+  - ![](docs/media/icons/file.svg) `metrics.py`
+  - ![](docs/media/icons/file.svg) `normalize.py`
+  - ![](docs/media/icons/file.svg) `run_tracking.py`
+  - ![](docs/media/icons/folder.svg) `geometry/`
+    - ![](docs/media/icons/file.svg) `mesh_io.py`
+    - ![](docs/media/icons/file.svg) `surface.py`
+    - ![](docs/media/icons/file.svg) `trimesh_util.py`
+  - ![](docs/media/icons/folder.svg) `scatter_generation/`
+    - ![](docs/media/icons/file.svg) `dataset_builder.py`
+    - ![](docs/media/icons/file.svg) `mesh_loader.py`
+    - ![](docs/media/icons/file.svg) `raycast_scatter.py`
+    - ![](docs/media/icons/file.svg) `maya_batch_primitives.py`
+    - ![](docs/media/icons/file.svg) `maya_batch_extrude.py`
+    - ![](docs/media/icons/file.svg) `maya_batch_extruded_smooth.py`
+    - ![](docs/media/icons/file.svg) `maya_batch_helix.py`
+  - ![](docs/media/icons/folder.svg) `viewer/` — Three.js inspect page + localhost helper
+    - ![](docs/media/icons/file.svg) `serve.py`
+    - ![](docs/media/icons/file.svg) `infer_job.py`
+    - ![](docs/media/icons/file.svg) `envelope_job.py`
+    - ![](docs/media/icons/file.svg) `obj_fill.py`
+    - ![](docs/media/icons/file.svg) `index.html`
+    - ![](docs/media/icons/folder.svg) `js/`
+    - ![](docs/media/icons/folder.svg) `css/`
+    - ![](docs/media/icons/folder.svg) `vendor/`
+- ![](docs/media/icons/folder.svg) `tests/` — stdlib `unittest` modules for the occupancy pipeline
 
 ---
 
@@ -490,7 +470,7 @@ Reads `config.yaml`. Fresh train unless you pass `--resume-run-id` / `--resume` 
 python src/scatter_generation/dataset_builder.py E:/path/to/meshes --out E:/path/to/data/exports/dataset --spacings 0.15 --jitters 0,0.04
 ```
 
-Operator note: [`docs/npz_dataset_generation.md`](docs/npz_dataset_generation.md). Maya mesh scripts: [`docs/maya_batch_scatter_scripts.md`](docs/maya_batch_scatter_scripts.md).
+Operator note: `[docs/npz_dataset_generation.md](docs/npz_dataset_generation.md)`. Maya mesh scripts: `[docs/maya_batch_scatter_scripts.md](docs/maya_batch_scatter_scripts.md)`.
 
 #### SageMaker (same catalog, A10G)
 
@@ -499,7 +479,7 @@ python sagemaker/launch.py --role arn:aws:iam::ACCOUNT:role/ROLE --dry-run
 python sagemaker/launch.py --role arn:aws:iam::ACCOUNT:role/ROLE
 ```
 
-Instance `ml.g5.xlarge`, region `eu-north-1`. Quota, S3 layout, download, CloudWatch: [`docs/sagemaker.md`](docs/sagemaker.md).
+Instance `ml.g5.xlarge`, region `eu-north-1`. Quota, S3 layout, download, CloudWatch: `[docs/sagemaker.md](docs/sagemaker.md)`.
 
 #### Unit tests
 
@@ -521,7 +501,7 @@ hidden/depth  : 64 / 4
 checkpoint_metric : val_iou
 ```
 
-Live `config.yaml` is the **next experiment**, not always the best Fill weights. Best Fill as of this README: `models/2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6/best.pt`.
+Live `config.yaml` is the **next experiment**, not always the best Fill weights. Best Fill as of this README: `models/2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6/best.pt`.
 
 ---
 
@@ -537,20 +517,13 @@ Live `config.yaml` is the **next experiment**, not always the best Fill weights.
 
 ---
 
-## Roadmap (Future Improvements)
-
-- A locked holdout family that never selected `best.pt`.
-- Decide whether organics belong in the **train** catalog (that ends the current OOD inspect, on purpose).
-- Hosting a SageMaker endpoint is not required for this wrap-up.
-- A denser envelope / wider k-NN is still on the table if the leftover leaks are worth the extra wall.
-
----
-
 ## Status
 
 Personal occupancy research repo, wrapped at a Fill result that is willing to be shown: CAD catalog in, OOD volume fill out, with an honest leftover.
 
-Best inspect weights: `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6` (`knn_k: 24`, `n_surface: 2048`, `envelope_dim=6`).  
+More geometry families (combos, or organics in the train catalog — that ends the OOD inspect), `knn_k` 24→32, and a locked holdout that never selected `best.pt` are possible. I am not running those. For me the project has run its course.
+
+Best inspect weights: `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6` (`knn_k: 24`, `n_surface: 2048`, `envelope_dim=6`, area-only).  
 The cheaper n6 baseline (`knn_k: 16`, `n_surface: 1024`, `2026-09-05_12-18-28_…` on the 1080) remains the recipe that first made organics fill.
 
 Not a Maya plugin and not a hosted API. The production way to fill a volume is still geometry; this repo is the network detour I chose to take on purpose.
@@ -564,4 +537,5 @@ Not a Maya plugin and not a hosted API. The production way to fill a volume is s
 
 📧 **Email**: [perryguy2@gmail.com](mailto:perryguy2@gmail.com)
 
-**YouTube Channel**: [@ThePerryGuy](https://www.youtube.com/@ThePerryGuy)
+**YouTube Channel**: [@ThePerryGuy](https://www.youtube.com/@ThePerryGuy)  
+**Video**: [scatteringNet — occupancy fill with a neural net](https://youtu.be/vU45O0Mu0o4)

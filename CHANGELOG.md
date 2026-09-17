@@ -6,6 +6,10 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-17 17:00 — Docs: README YouTube link and Status wrap-up
+
+[`README.md`](README.md) **Video Showcase** links to [occupancy fill with a neural net](https://www.youtube.com/watch?v=vU45O0Mu0o4). **Status** is the wrap-up (leftover knobs named once; no separate Roadmap). Occupancy code unchanged.
+
 ## 2026-09-17 10:00 — Train: prim_extruded_nr45_knn24_n2048_n6 (area-only)
 
 Catalog train ``2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`` (from scratch on ``ml.g5.xlarge``). Same knn24 n2048 catalog as mix-75 inspect, area-weighted envelope (no Mix 75).
