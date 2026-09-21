@@ -8,6 +8,12 @@ version = "0.1.0"
 description = "3D occupancy training for ScatteringNet"
 requires-python = ">=3.10"
 
+# Optional Hugging Face Gradio demo (src/gradio). Occupancy train does not need this.
+[project.optional-dependencies]
+gradio = [
+    "gradio>=4.44",
+]
+
 # Flat src modules stay importable as `from config import …` after
 # `pip install -e .`. Existing test sys.path injection is unchanged.
 [tool.setuptools]
@@ -29,3 +35,5 @@ py-modules = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+# src/gradio is an app folder, not the pip `gradio` package.
+exclude = ["gradio", "gradio.*"]

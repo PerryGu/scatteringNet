@@ -6,6 +6,53 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-21 09:00 — Gradio: loading a file keeps the orbit again
+
+Sample / drop / **Load OBJ** was snapping the camera back to the start pose on every click — that undid the earlier “keep the orbit when the mesh changes” fix. Loading a file keeps the current camera again, the same way **Run model** does. **Reset view** is still what returns to 45° / 70°. Occupancy training and the Three.js inspect viewer were left unchanged.
+
+
+## 2026-09-20 19:00 — Gradio: sample load pins the start camera
+
+Clicking a **Sample OBJ** (or dropping / **Load OBJ**) keeps the start camera — 45° / 70°, looking at the origin, same distance as an empty view. The viewer no longer zooms to each mesh. **Run model** and the sliders still keep your orbit. **Reset view** returns to that same start camera. Occupancy training and the Three.js inspect viewer were left unchanged.
+
+
+## 2026-09-20 17:00 — Gradio: more sample meshes
+
+The **Sample OBJ** row now includes ``horse.obj``, ``Player.obj``, ``dog.obj``, ``Helix_bend.obj``, and ``TorusX3_box.obj`` as well as the cube, so you can try a few shapes without hunting files. Copies live in [`src/gradio/examples/`](src/gradio/README.md). Occupancy training and the Three.js inspect viewer were left unchanged.
+
+
+## 2026-09-20 16:00 — Gradio: how the 3D view looks
+
+The scene is meant to feel like the inspect tool: mid-gray background, a thin floor grid under the mesh, and a small red / green / blue axis gizmo so “up” is obvious. The camera looks slightly down and to the side, the same framing as the original viewer.
+
+The mesh starts at **50% opacity** so the inside points show through. Those points are **orange**, matching the inspect tool (an earlier yellow look was only a lighting wash). **Dot size** (1–24, default 8) changes only the occupancy dots — not the floor or the axes (those briefly turned into dots by mistake and were fixed).
+
+**Wireframe** draws the sharp crease edges of the solid, the way the original viewer does, instead of outlining every triangle of the surface. You can also show outside points if you want them.
+
+
+## 2026-09-20 11:00 — Gradio: drop a file on the view
+
+You load a mesh by dropping an OBJ onto the 3D window, or by clicking **Load OBJ**. A hint at the top of the view says “Drop an OBJ file here.” A second file replaces the first. The status line shows the current file name.
+
+The old left-side file box was removed because long names spilled across the header and sat behind the button — even before any file was chosen. **Load OBJ** is a normal button that opens the system file picker. Nothing is drawn in that spot until you have actually picked a mesh.
+
+
+## 2026-09-20 09:00 — Gradio: the camera stays put while you work
+
+Early versions rebuilt the whole 3D scene every time you moved a slider or pressed **Run model**. That flashed gray and snapped the camera back to the start — it felt like the page was reloading. The first 3D plot also put the floor in the wrong place. A later in-page viewer went blank because the host page strips scripts from embedded HTML.
+
+The pane is now one 3D canvas that stays on the page for the whole session. Changing density, inside cut, opacity, dot size, or wireframe — or running the model — updates the mesh and points **without** resetting your orbit. **Reset view** (or loading a new OBJ) still frames the shape from the usual start angle.
+
+
+## 2026-09-18 10:00 — Gradio: a public interactive demo
+
+To give this project an interactive view that anyone can open in a browser, I decided to put the trained model on **Hugging Face** and wrap it in a **Gradio** app. Hugging Face is where the checkpoint lives and can be shared; Gradio is the simple web page around it — upload a file, move sliders, press a button — without asking people to install the local inspect tool or run training.
+
+That page lives in ``src/gradio/``, next to the existing inspect viewer. How to run it and what it does not cover are in the [Gradio README](src/gradio/README.md). It is a **thin public demo**, not a copy of that viewer: you bring a 3D mesh (OBJ), press **Run model**, and the network fills the solid with points it judges to be **inside** the shape. The fill-and-classify work is the same path the project already uses. A short line at the top of the page says what the tool does.
+
+Open it locally with ``python src/gradio/app.py`` or by double-clicking ``open_gradio.bat``. An example cube is included. The Space will ship **one** trained model, so there is no model-picker list — **Run model** always uses that default checkpoint. Occupancy training and the Three.js inspect viewer were left unchanged.
+
+
 ## 2026-09-17 17:00 — Docs: README YouTube link and Status wrap-up
 
 [`README.md`](README.md) **Video Showcase** links to [occupancy fill with a neural net](https://www.youtube.com/watch?v=vU45O0Mu0o4). **Status** is the wrap-up (leftover knobs named once; no separate Roadmap). Occupancy code unchanged.

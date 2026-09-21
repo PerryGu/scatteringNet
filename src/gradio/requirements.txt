@@ -1,0 +1,2 @@
+# Occupancy Gradio demo (optional extra; not required to train).
+gradio>=4.44
