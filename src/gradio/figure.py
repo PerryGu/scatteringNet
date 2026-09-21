@@ -30,7 +30,8 @@ COLOR_GRID_CENTER = np.array([170, 187, 204, 255], dtype=np.uint8)
 DEFAULT_MESH_OPACITY = 50
 # Babylon POINTS are 1 px in the GLB; orbit.js applies this pixel size.
 DEFAULT_POINT_SIZE = 8
-MAX_PLOT_POINTS = 25_000
+# Match pipeline.MAX_FILL_POINTS so the GLB is not a random subset of the lattice.
+MAX_PLOT_POINTS = 80_000
 MAX_MESH_VERTS = 80_000
 FLOOR_DIVS = 20
 

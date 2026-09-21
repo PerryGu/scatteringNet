@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
@@ -33,12 +34,56 @@ from metrics import occupancy_metrics  # noqa: E402
 from normalize import apply_normalization, compute_center_scale  # noqa: E402
 from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND  # noqa: E402
 from occupancy_encoder import envelope_dim_from_ckpt  # noqa: E402
+from occupancy_encoder import envelope_seed_from_ckpt  # noqa: E402
 
 from mesh_access import resolve_viewer_mesh  # noqa: E402
 from model_access import match_checkpoint_part, resolve_viewer_checkpoint  # noqa: E402
 from obj_fill import triangles_from_obj_text  # noqa: E402
 
 MAX_POINTS = 2_000_000
+
+# One occupancy head in this process. Same checkpoint + device → skip torch.load.
+_CACHE_LOCK = threading.Lock()
+_MODEL_CACHE: tuple[tuple[str, int, str], Any, dict[str, Any]] | None = None
+
+
+def clear_model_cache() -> None:
+    """Drop the cached head (tests / swapped GPU)."""
+    global _MODEL_CACHE
+    with _CACHE_LOCK:
+        _MODEL_CACHE = None
+
+
+def _model_cache_key(ckpt_path: Path, device: Any) -> tuple[str, int, str]:
+    stat = ckpt_path.stat()
+    return (str(ckpt_path.resolve()), int(stat.st_mtime_ns), str(device))
+
+
+def load_cached_occupancy(
+    run_id: str,
+    models_root: Path,
+    device: Any,
+) -> tuple[Any, dict[str, Any], Path, bool]:
+    """
+    Load ``best.pt`` once per (path, mtime, device).
+
+    Returns ``(model, ckpt, path, cache_hit)``. Switching run_id replaces
+    the slot so GPU RAM does not keep every inspect checkpoint.
+    """
+    import torch
+
+    ckpt_path = resolve_viewer_checkpoint(run_id, models_root)
+    key = _model_cache_key(ckpt_path, device)
+    global _MODEL_CACHE
+    with _CACHE_LOCK:
+        slot = _MODEL_CACHE
+        if slot is not None and slot[0] == key:
+            return slot[1], slot[2], ckpt_path, True
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    model = load_occupancy_model(ckpt, device)
+    with _CACHE_LOCK:
+        _MODEL_CACHE = (key, model, ckpt)
+    return model, ckpt, ckpt_path, False
 
 
 def _sync_if_cuda(device) -> None:
@@ -89,15 +134,20 @@ def aabb_for_viewer(
     points: np.ndarray,
     data_dir: Path | None,
     vertices: np.ndarray | None = None,
+    uploaded_obj: bool = False,
 ) -> tuple[np.ndarray, float, str]:
     """
-    Checkpoint AABB when this NPZ/mesh was trained; else mesh vertices; else queries.
+    Checkpoint AABB when this catalog NPZ/mesh was trained; else mesh vertices.
+
+    Uploaded OBJ Fill (Job B) always uses this mesh's vertices. Catalog
+    ``parts`` matched by filename would apply another cube's box.
     """
-    part = match_checkpoint_part(ckpt, npz_name, mesh_path)
-    if part is not None:
-        center = np.asarray(part["center"], dtype=np.float32).reshape(3)
-        scale = float(part["scale"])
-        return center, scale, "checkpoint"
+    if not uploaded_obj:
+        part = match_checkpoint_part(ckpt, npz_name, mesh_path)
+        if part is not None:
+            center = np.asarray(part["center"], dtype=np.float32).reshape(3)
+            scale = float(part["scale"])
+            return center, scale, "checkpoint"
     if vertices is not None and int(np.asarray(vertices).shape[0]) > 0:
         center, scale = compute_center_scale(np.asarray(vertices, dtype=np.float32))
         return center, scale, "mesh"
@@ -175,7 +225,7 @@ def _geom_from_mesh(ckpt, cfg, vertices, faces, center, scale, cache_key: str):
     import torch
 
     enc = _ckpt_shape_encoder(ckpt)
-    seed = int(ckpt["seed"]) if ckpt.get("seed") is not None else int(cfg.seed)
+    seed = envelope_seed_from_ckpt(ckpt)
     if enc == "surface":
         n_surface = (
             int(ckpt["n_surface"]) if ckpt.get("n_surface") is not None else 1024
@@ -244,11 +294,11 @@ def infer_uploaded_npz(
         raise ValueError("labels length does not match points")
 
     t_all = time.perf_counter()
-    ckpt_path = resolve_viewer_checkpoint(run_id, models_root)
     t0 = time.perf_counter()
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cfg = _runtime_cfg(cfg)
-    model = load_occupancy_model(ckpt, cfg.device)
+    model, ckpt, ckpt_path, cache_hit = load_cached_occupancy(
+        run_id, models_root, cfg.device
+    )
     _sync_if_cuda(cfg.device)
     load_s = _round_s(t0)
     center, scale, aabb_src = aabb_for_viewer(
@@ -294,10 +344,12 @@ def infer_uploaded_npz(
         "envelope": envelope_s,
         "forward": forward_s,
         "server_total": _round_s(t_all),
+        "load_cached": cache_hit,
+        "device": str(cfg.device),
     }
     print(
         "viewer infer-npz timings (s) n=%s parse=%.3f load=%.3f envelope=%.3f "
-        "forward=%.3f total=%.3f"
+        "forward=%.3f total=%.3f cached=%s device=%s"
         % (
             n,
             parse_s,
@@ -305,6 +357,8 @@ def infer_uploaded_npz(
             envelope_s,
             forward_s,
             timings["server_total"],
+            cache_hit,
+            cfg.device,
         ),
         flush=True,
     )
@@ -360,11 +414,11 @@ def infer_uploaded_obj(
     t0 = time.perf_counter()
     vertices, faces = triangles_from_obj_text(obj_text)
     parse_s = _round_s(t0)
-    ckpt_path = resolve_viewer_checkpoint(run_id, models_root)
     t0 = time.perf_counter()
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cfg = _runtime_cfg(cfg)
-    model = load_occupancy_model(ckpt, cfg.device)
+    model, ckpt, ckpt_path, cache_hit = load_cached_occupancy(
+        run_id, models_root, cfg.device
+    )
     _sync_if_cuda(cfg.device)
     load_s = _round_s(t0)
     center, scale, aabb_src = aabb_for_viewer(
@@ -374,6 +428,7 @@ def infer_uploaded_obj(
         points=points,
         data_dir=data_dir,
         vertices=vertices,
+        uploaded_obj=True,
     )
     enc = _ckpt_shape_encoder(ckpt)
     t0 = time.perf_counter()
@@ -396,10 +451,12 @@ def infer_uploaded_obj(
         "envelope": envelope_s,
         "forward": forward_s,
         "server_total": _round_s(t_all),
+        "load_cached": cache_hit,
+        "device": str(cfg.device),
     }
     print(
         "viewer infer-obj timings (s) n=%s parse=%.3f load=%.3f envelope=%.3f "
-        "forward=%.3f total=%.3f"
+        "forward=%.3f total=%.3f cached=%s device=%s"
         % (
             n,
             parse_s,
@@ -407,6 +464,8 @@ def infer_uploaded_obj(
             envelope_s,
             forward_s,
             timings["server_total"],
+            cache_hit,
+            cfg.device,
         ),
         flush=True,
     )
@@ -443,6 +502,7 @@ def warmup_viewer_helper(models_root: Path) -> None:
     from obj_fill import fill_aabb_lattice
 
     cfg = load_config()
+    print("warmup: occupancy device=" + str(cfg.device), flush=True)
     if str(cfg.device.type) == "cuda":
         torch.zeros(1, device=cfg.device)
         torch.cuda.synchronize()

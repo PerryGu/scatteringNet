@@ -19,6 +19,7 @@ from config import (
     as_data_relative,
     as_repo_relative,
     format_config,
+    get_device,
     gpu_name,
     load_config,
     load_yaml_knobs,
@@ -232,6 +233,13 @@ class OccupancyConfigTests(unittest.TestCase):
             )
             knobs = load_yaml_knobs(yaml_path)
             self.assertNotIn("envelope_mix", knobs)
+
+    def test_get_device_cpu_env_override(self) -> None:
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"SCATTERINGNET_DEVICE": "cpu"}, clear=False):
+            self.assertEqual(get_device().type, "cpu")
 
 
 if __name__ == "__main__":

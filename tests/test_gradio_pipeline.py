@@ -202,6 +202,23 @@ class GradioFigureTests(unittest.TestCase):
         self.assertIn("occ_points", names)
         self.assertIn("occ_shell", names)
 
+    def test_draw_cap_matches_fill_lattice(self) -> None:
+        """GLB subsample must not drop points the 80k fill already classified."""
+        from figure import MAX_PLOT_POINTS, _subsample
+        from pipeline import MAX_FILL_POINTS
+
+        self.assertEqual(MAX_PLOT_POINTS, MAX_FILL_POINTS)
+        n = MAX_FILL_POINTS
+        pts = np.zeros((n, 3), dtype=np.float32)
+        pred = np.ones((n,), dtype=np.uint8)
+        kept_pts, kept_pred = _subsample(pts, pred, MAX_PLOT_POINTS)
+        self.assertEqual(kept_pts.shape[0], n)
+        self.assertEqual(int(kept_pred.sum()), n)
+        extra = np.zeros((n + 1, 3), dtype=np.float32)
+        extra_pred = np.ones((n + 1,), dtype=np.uint8)
+        capped, _ = _subsample(extra, extra_pred, MAX_PLOT_POINTS)
+        self.assertEqual(capped.shape[0], MAX_PLOT_POINTS)
+
 
 class GradioReplaceTests(unittest.TestCase):
     """A second OBJ must clear occupancy state (not keep the first mesh)."""

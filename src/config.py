@@ -10,6 +10,7 @@ This module does not read ``.env`` and does not open NPZ files.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, TypedDict
@@ -58,16 +59,22 @@ class YamlKnobs(TypedDict):
 
 def get_device() -> torch.device:
     """
-    Prefer CUDA when a GPU is visible; otherwise CPU.
+    CUDA when a GPU is visible; otherwise CPU.
 
-    Training scripts (later steps) should still refuse a long run on CPU.
-    Config only reports the device that is available right now.
+    Hugging Face CPU Spaces have no CUDA: infer still runs (slower).
+    ``SCATTERINGNET_DEVICE=cpu`` forces CPU even if a GPU exists.
+    ``SCATTERINGNET_DEVICE=cuda`` uses CUDA only when ``is_available()``;
+    otherwise it falls back to CPU (no crash).
 
-    Returns
-    -------
-    torch.device
-        ``cuda`` or ``cpu``.
+    Training scripts should still warn on a long catalog run on CPU.
     """
+    forced = os.environ.get("SCATTERINGNET_DEVICE", "").strip().lower()
+    if forced == "cpu":
+        return torch.device("cpu")
+    if forced == "cuda":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        return torch.device("cpu")
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")

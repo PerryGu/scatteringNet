@@ -19,7 +19,21 @@ Put the Space checkpoint at `models/<run_id>/best.pt`. The demo loads `default_r
 
 ## Hugging Face Space
 
-Create a **Gradio** Space (not Static, not Docker). Set the app file to `src/gradio/app.py` if the Space is this repo; otherwise copy this folder and point `app.py` at a `best.pt`. Hardware: **CPU Basic** is enough for the example cube; **ZeroGPU** if you want CUDA for larger meshes. This demo is not the Three.js inspect UI.
+Create a **Gradio** Space (not Static, not Docker) from **this whole repo**. Set the app file to `src/gradio/app.py`. Install from [`requirements.txt`](requirements.txt) in this folder (includes `torch`). The demo does **not** need Open3D or the training catalog.
+
+**GPU is optional.** Occupancy infer already maps the head with `.to(device)`: CUDA if `torch.cuda.is_available()`, otherwise **CPU**. A CPU Basic Space is the intended free path (example cube is fine; a dense 80k lattice is slower, not broken). Paid GPU / **ZeroGPU** only if you want the inspect-like wait on big meshes.
+
+Force CPU even on a GPU box:
+
+```text
+SCATTERINGNET_DEVICE=cpu
+```
+
+`SCATTERINGNET_DEVICE=cuda` uses CUDA only when it is actually available; otherwise it falls back to CPU (no crash).
+
+**Weights.** Put `models/<run_id>/best.pt` on the Space (inspect id `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6` if you have it). Repo `.gitignore` skips `*.pt` — use Git LFS or the Space files UI; do not expect `git push` of this repo to upload the checkpoint. `config.yaml` `data_dir` can stay as a local path; Gradio infer does not require that folder.
+
+This demo is not the Three.js inspect UI.
 
 ## Why this folder is named `gradio`
 
@@ -27,7 +41,6 @@ It sits next to `src/viewer` on purpose. It is **not** a Python package (no `__i
 
 ## Limits (vs the local viewer)
 
-- Lattice cap **80,000** points (viewer 200,000).
-- The GLB draws at most **25,000** occupancy points.
+- Lattice cap **80,000** points (viewer 200,000). The GLB draws that same set (not a 25k subsample).
 - No NPZ Truth / Errors, no envelope overlay, no recents / IndexedDB.
 - Inside cut recuts stored sigmoid probs (no extra GPU pass), same idea as the inspect slider.

@@ -111,21 +111,24 @@ def resolve_viewer_checkpoint(run_id: str, models_root: Path | str) -> Path:
 
 
 def match_checkpoint_part(ckpt: dict, npz_name: str, mesh_path: str) -> dict | None:
-    """Prefer NPZ filename match, then mesh path, from ``ckpt['parts']``."""
+    """
+    Catalog AABB from ``ckpt['parts']``.
+
+    NPZ: full stored path or the occupancy filename (those stems are unique).
+    Mesh: exact stored path only. Basename matches (``cube.obj``) steal a
+    catalog box for an OOD upload of the same name — Job B must not do that.
+    """
     parts = ckpt.get("parts") or []
     name = Path(str(npz_name or "")).name
-    mesh = str(mesh_path or "").replace("\\", "/")
+    mesh = str(mesh_path or "").replace("\\", "/").strip()
     if name:
         for part in parts:
-            stored = str(part.get("npz") or "")
+            stored = str(part.get("npz") or "").replace("\\", "/")
             if stored == name or Path(stored).name == name:
                 return part
-    mesh_name = Path(mesh).name if mesh else ""
     if mesh:
         for part in parts:
-            stored_m = str(part.get("mesh") or "").replace("\\", "/")
-            if not stored_m:
-                continue
-            if stored_m == mesh or Path(stored_m).name == mesh_name:
+            stored_m = str(part.get("mesh") or "").replace("\\", "/").strip()
+            if stored_m and stored_m == mesh:
                 return part
     return None

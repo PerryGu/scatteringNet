@@ -19,7 +19,11 @@ from geometry.mesh_io import load_obj_triangles
 from geometry.surface import apply_envelope_aabb, project_envelope_dim, sample_surface_points
 from metrics import occupancy_metrics
 from normalize import apply_normalization
-from occupancy_encoder import OccupancyEncoder, envelope_dim_from_ckpt
+from occupancy_encoder import (
+    OccupancyEncoder,
+    envelope_dim_from_ckpt,
+    envelope_seed_from_ckpt,
+)
 from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND
 from occupancy_mlp import OccupancyMLP
 from occupancy_mlp import CHECKPOINT_KIND as MLP_KIND
@@ -145,7 +149,7 @@ def infer_npz(
             vertices,
             faces,
             n_surface,
-            seed=int(cfg.seed),
+            seed=envelope_seed_from_ckpt(ckpt),
             cache_key=cache_key,
         )
         arr = apply_envelope_aabb(world, center, scale)

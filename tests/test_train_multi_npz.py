@@ -200,6 +200,7 @@ class TrainMultiNpzTests(unittest.TestCase):
             self.assertEqual(ckpt["knn_k"], 8)
             self.assertEqual(ckpt["latent_dim"], 8)
             self.assertEqual(ckpt["envelope_dim"], 6)
+            self.assertEqual(ckpt["seed"], 1)
             self.assertNotIn("n_faces", ckpt)
             snap = yaml.safe_load(
                 result.run_dir.joinpath("config.yaml").read_text(encoding="utf-8")

@@ -119,7 +119,8 @@ def _status_md(result: dict, *, cut: float, shown_out: bool) -> str:
         f"Lattice `{result['n']}` pts · spacing `{result['used_spacing']:.3f}` · "
         f"grid `{result['grid']}`  \n"
         f"Times s: fill+forward total `{t.get('server_total', 0):.3f}` · "
-        f"envelope `{t.get('envelope', 0):.3f}` · run `{t.get('forward', 0):.3f}`"
+        f"envelope `{t.get('envelope', 0):.3f}` · run `{t.get('forward', 0):.3f}` · "
+        f"device `{t.get('device', '?')}`"
     )
 
 

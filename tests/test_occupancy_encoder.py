@@ -18,6 +18,7 @@ from occupancy_encoder import (
     OccupancyEncoder,
     SurfaceEncoder,
     envelope_dim_from_ckpt,
+    envelope_seed_from_ckpt,
     knn_offsets,
 )
 
@@ -125,6 +126,10 @@ class OccupancyEncoderTests(unittest.TestCase):
         ckpt = {"state_dict": old.state_dict()}
         self.assertEqual(envelope_dim_from_ckpt(ckpt), 3)
         self.assertEqual(envelope_dim_from_ckpt({"envelope_dim": 6}), 6)
+
+    def test_envelope_seed_from_ckpt_defaults_to_one(self) -> None:
+        self.assertEqual(envelope_seed_from_ckpt({}), 1)
+        self.assertEqual(envelope_seed_from_ckpt({"seed": 7}), 7)
 
     def test_load_old_xyz_checkpoint(self) -> None:
         old = OccupancyEncoder(hidden=8, depth=1, latent_dim=4, envelope_dim=3)

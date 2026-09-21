@@ -144,6 +144,52 @@ class ViewerModelAccessTests(unittest.TestCase):
         self.assertIsNone(match_checkpoint_part(ckpt, "other.npz", "meshes/nope.obj"))
         by_mesh = match_checkpoint_part(ckpt, "other.npz", "meshes/varied/Cone.obj")
         self.assertIsNotNone(by_mesh)
+        self.assertIsNone(match_checkpoint_part(ckpt, "", "Cone.obj"))
+        self.assertIsNone(match_checkpoint_part(ckpt, "", "upload.obj"))
+
+    def test_uploaded_obj_aabb_ignores_catalog_filename(self) -> None:
+        from infer_job import aabb_for_viewer
+
+        ckpt = {
+            "parts": [
+                {
+                    "npz": "exports/dataset/cube__occupancy.npz",
+                    "mesh": "meshes/Primitives/Cube/cube.obj",
+                    "center": [10.0, 10.0, 10.0],
+                    "scale": 99.0,
+                }
+            ]
+        }
+        # Different mesh, same basename as a catalog OBJ.
+        verts = np.array(
+            [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 2.0]],
+            dtype=np.float32,
+        )
+        points = np.array([[1.0, 1.0, 1.0]], dtype=np.float32)
+        center, scale, src = aabb_for_viewer(
+            ckpt,
+            npz_name="",
+            mesh_path="cube.obj",
+            points=points,
+            data_dir=None,
+            vertices=verts,
+            uploaded_obj=True,
+        )
+        self.assertEqual(src, "mesh")
+        self.assertNotAlmostEqual(float(scale), 99.0)
+        self.assertTrue(np.allclose(center, np.array([1.0, 1.0, 1.0], dtype=np.float32)))
+
+        cat_c, cat_s, cat_src = aabb_for_viewer(
+            ckpt,
+            npz_name="cube__occupancy.npz",
+            mesh_path="meshes/Primitives/Cube/cube.obj",
+            points=points,
+            data_dir=None,
+            vertices=verts,
+        )
+        self.assertEqual(cat_src, "checkpoint")
+        self.assertAlmostEqual(float(cat_s), 99.0)
+        self.assertTrue(np.allclose(cat_c, np.array([10.0, 10.0, 10.0], dtype=np.float32)))
 
 
 # Unit cube Wavefront text for AABB lattice tests (12 triangles).
@@ -424,6 +470,11 @@ def _save_encoder_ckpt(models: Path, run_id: str, *, shape_encoder: str) -> None
 class ViewerInferBothEncodersTests(unittest.TestCase):
     """Job A / B rebuild the envelope from the checkpoint."""
 
+    def setUp(self) -> None:
+        from infer_job import clear_model_cache
+
+        clear_model_cache()
+
     def test_infer_npz_surface(self) -> None:
         import numpy as np
         from infer_job import infer_uploaded_npz
@@ -475,6 +526,19 @@ class ViewerInferBothEncodersTests(unittest.TestCase):
             self.assertEqual(out["shape_encoder"], "surface")
             self.assertEqual(out["n"], 2)
             self.assertEqual(out["n_inside"] + out["n_outside"], 2)
+            self.assertIn(out["timings"]["device"], ("cpu", "cuda"))
+            self.assertFalse(out["timings"]["load_cached"])
+            again = infer_uploaded_obj(
+                run_id="surf_job",
+                models_root=models,
+                data_dir=root,
+                obj_name="cube.obj",
+                obj_text=_CUBE_OBJ,
+                points=points,
+                cfg=_viewer_cpu_cfg(root),
+            )
+            self.assertTrue(again["timings"]["load_cached"])
+            self.assertEqual(again["timings"]["device"], out["timings"]["device"])
 
     def test_infer_rejects_mesh_checkpoint(self) -> None:
         import numpy as np

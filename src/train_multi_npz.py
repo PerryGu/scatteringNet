@@ -203,6 +203,7 @@ def _checkpoint_payload(
         "state_dict": model.state_dict(),
         "hidden": int(cfg.hidden),
         "depth": int(cfg.depth),
+        "seed": int(cfg.seed),
         "shape_encoder": str(cfg.shape_encoder),
         "n_surface": int(cfg.n_surface),
         "knn_k": int(cfg.knn_k),

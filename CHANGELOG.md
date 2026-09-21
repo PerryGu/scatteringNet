@@ -6,6 +6,21 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-21 14:00 — Gradio: draw the full 80k lattice
+
+The occupancy GLB used to keep at most 25,000 dots while Fill classified 80,000. Draw cap is now 80,000 so the demo shows the lattice that already ran. Inference, CPU/CUDA, and the Three.js inspect viewer are unchanged.
+
+
+## 2026-09-21 14:00 — Infer: cache the occupancy head; CPU or CUDA
+
+Viewer and Gradio **Run model** keep one ``best.pt`` in process (same path + mtime + device). Warmup fills that slot so the first inspect click is not a second load. ``get_device()`` still prefers CUDA, uses CPU when there is no GPU, and honors ``SCATTERINGNET_DEVICE=cpu`` (Hugging Face CPU Spaces). Gradio ``requirements.txt`` lists torch / trimesh so a Space can install without the conda CUDA stack.
+
+
+## 2026-09-21 13:00 — Fill: checkpoint seed and OBJ AABB
+
+New ``best.pt`` files store ``seed``. Envelope resample uses that value; older checkpoints default to ``1``, not live YAML. Uploaded OBJ Fill (Job B) uses this mesh's AABB and no longer matches catalog ``parts`` by filename (``cube.obj``). Catalog NPZ infer still uses the stored box.
+
+
 ## 2026-09-21 09:00 — Gradio: loading a file keeps the orbit again
 
 Sample / drop / **Load OBJ** was snapping the camera back to the start pose on every click — that undid the earlier “keep the orbit when the mesh changes” fix. Loading a file keeps the current camera again, the same way **Run model** does. **Reset view** is still what returns to 45° / 70°. Occupancy training and the Three.js inspect viewer were left unchanged.

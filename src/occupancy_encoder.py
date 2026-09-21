@@ -99,6 +99,23 @@ def knn_offsets(xyz: Tensor, envelope: Tensor, k: int) -> Tensor:
     return torch.cat([rel_xyz, nbrs[..., 3:]], dim=-1)
 
 
+# Catalog trains used YAML seed 1. Old best.pt files omit ``seed``.
+DEFAULT_ENVELOPE_SEED = 1
+
+
+def envelope_seed_from_ckpt(ckpt: dict) -> int:
+    """
+    Envelope RNG seed this checkpoint was trained with.
+
+    New trains store ``seed`` on ``best.pt``. Older files omit it; do
+    not fall back to live YAML (that knob may have changed since train).
+    """
+    raw = ckpt.get("seed")
+    if raw is None:
+        return DEFAULT_ENVELOPE_SEED
+    return int(raw)
+
+
 def envelope_dim_from_ckpt(ckpt: dict) -> int:
     """
     Envelope channel count this checkpoint was trained with.
