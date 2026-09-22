@@ -8,12 +8,9 @@ from pathlib import Path
 
 import torch
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from infer_multi_npz import load_occupancy_model
-from occupancy_encoder import (
+from scatteringnet.infer_multi_npz import load_occupancy_model
+from scatteringnet.occupancy_encoder import (
     CHECKPOINT_KIND,
     OccupancyEncoder,
     SurfaceEncoder,

@@ -11,11 +11,8 @@ import numpy as np
 
 _REPO = Path(__file__).resolve().parents[1]
 _GRADIO = _REPO / "src" / "gradio"
-_SRC = _REPO / "src"
-_VIEWER = _SRC / "viewer"
-for _p in (_GRADIO, _VIEWER, _SRC):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
+if str(_GRADIO) not in sys.path:
+    sys.path.insert(0, str(_GRADIO))
 
 from pipeline import (  # noqa: E402
     INSPECT_RUN_ID,
@@ -52,7 +49,7 @@ f 2 7 3
 def _cpu_cfg(data_dir: Path):
     """Tiny OccupancyConfig so this test does not read repo config.yaml."""
     import torch
-    from config import OccupancyConfig
+    from scatteringnet.config import OccupancyConfig
 
     return OccupancyConfig(
         data_dir=data_dir,
@@ -72,7 +69,7 @@ def _cpu_cfg(data_dir: Path):
 def _save_encoder_ckpt(models: Path, run_id: str) -> None:
     """Untrained envelope OccupancyEncoder (same keys as the viewer tests)."""
     import torch
-    from occupancy_encoder import CHECKPOINT_KIND, OccupancyEncoder
+    from scatteringnet.occupancy_encoder import CHECKPOINT_KIND, OccupancyEncoder
 
     folder = models / run_id
     folder.mkdir(parents=True)

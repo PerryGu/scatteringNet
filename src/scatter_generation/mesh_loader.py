@@ -12,7 +12,7 @@ import open3d as o3d
 import trimesh
 import yaml
 
-from geometry.trimesh_util import as_trimesh
+from scatteringnet.geometry.trimesh_util import as_trimesh
 
 MESH_EXTENSIONS: frozenset[str] = frozenset(
     {".obj", ".ply", ".stl", ".glb", ".gltf", ".off", ".dae"}
@@ -25,7 +25,7 @@ def project_root() -> Path:
 
     Same folder as ``config.repo_root`` (this file → parents[2]).
     """
-    from config import repo_root
+    from scatteringnet.config import repo_root
 
     return repo_root()
 
@@ -66,7 +66,7 @@ def to_data_relative(path: str | Path, *, data_dir: Path | None = None) -> str:
         Path relative to ``data_dir``, or an absolute POSIX path if ``path``
         is outside that folder.
     """
-    from config import as_data_relative
+    from scatteringnet.config import as_data_relative
 
     root = (data_dir if data_dir is not None else get_data_dir()).resolve()
     resolved = Path(path).expanduser()

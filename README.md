@@ -108,7 +108,7 @@ Training prints accuracy and IoU. Those numbers can look fine while, in reality,
 open_viewer.bat
 ```
 
-Or: `conda activate scatteringNet` then `python src/viewer/serve.py`. Orbit works on CPU. **Run model** needs the GPU and checkpoints at `models/<run_id>/best.pt`. Control-by-control notes: `[src/viewer/README.md](src/viewer/README.md)`.
+Or: `conda activate scatteringNet`, `pip install -e .`, then `python -m scatteringnet.viewer.serve`. Orbit works on CPU. **Run model** needs the GPU and checkpoints at `models/<run_id>/best.pt`. Control-by-control notes: `[src/viewer/README.md](src/viewer/README.md)`.
 
 **What it can do**
 
@@ -459,7 +459,8 @@ open_viewer.bat
 
 ```text
 conda activate scatteringNet
-python src/train_multi_npz.py
+pip install -e .
+python -m scatteringnet.train_multi_npz
 ```
 
 Reads `config.yaml`. Fresh train unless you pass `--resume-run-id` / `--resume` (same head and catalog only).
@@ -467,7 +468,7 @@ Reads `config.yaml`. Fresh train unless you pass `--resume-run-id` / `--resume` 
 #### Build occupancy NPZs from OBJ folders
 
 ```text
-python src/scatter_generation/dataset_builder.py E:/path/to/meshes --out E:/path/to/data/exports/dataset --spacings 0.15 --jitters 0,0.04
+python -m scatteringnet.scatter_generation.dataset_builder E:/path/to/meshes --out E:/path/to/data/exports/dataset --spacings 0.15 --jitters 0,0.04
 ```
 
 Operator note: `[docs/npz_dataset_generation.md](docs/npz_dataset_generation.md)`. Maya mesh scripts: `[docs/maya_batch_scatter_scripts.md](docs/maya_batch_scatter_scripts.md)`.

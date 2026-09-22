@@ -7,7 +7,6 @@ import mimetypes
 import os
 import socket
 import socketserver
-import sys
 import threading
 import time
 import urllib.parse
@@ -24,8 +23,6 @@ MAX_INFER_JSON_BYTES = 80 * 1024 * 1024
 MAX_UI_PREFS_JSON_BYTES = 32_768
 JS_MIME = "text/javascript"
 
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 
 def _norm_static_path(path: object) -> str:
@@ -180,7 +177,7 @@ class Handler(SimpleHTTPRequestHandler):
             models = []
             if self.models_dir is not None:
                 try:
-                    from model_access import list_viewer_models
+                    from scatteringnet.viewer.model_access import list_viewer_models
 
                     models = list_viewer_models(
                         self.models_dir, runs_root=REPO / "runs"
@@ -238,7 +235,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _serve_models(self) -> None:
         try:
-            from model_access import list_viewer_models
+            from scatteringnet.viewer.model_access import list_viewer_models
 
             root = self.models_dir
             models = (
@@ -267,7 +264,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _ui_prefs_get(self) -> None:
         try:
-            from ui_prefs import load_ui_prefs
+            from scatteringnet.viewer.ui_prefs import load_ui_prefs
 
             prefs = load_ui_prefs(ROOT)
         except Exception as exc:
@@ -285,7 +282,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": "invalid JSON: " + str(exc)})
             return
         try:
-            from ui_prefs import save_ui_prefs
+            from scatteringnet.viewer.ui_prefs import save_ui_prefs
 
             prefs = save_ui_prefs(ROOT, payload)
         except PermissionError as exc:
@@ -313,7 +310,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": "missing checkpoint"})
             return
         try:
-            from infer_job import (
+            from scatteringnet.viewer.infer_job import (
                 decode_labels_b64,
                 decode_points_b64,
                 infer_uploaded_npz,
@@ -366,7 +363,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": "invalid JSON: " + str(exc)})
             return
         try:
-            from obj_fill import fill_from_obj_text
+            from scatteringnet.viewer.obj_fill import fill_from_obj_text
 
             spacing = float(payload.get("spacing") or 0)
             result = fill_from_obj_text(str(payload.get("obj_text") or ""), spacing)
@@ -391,7 +388,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": "invalid JSON: " + str(exc)})
             return
         try:
-            from envelope_job import envelope_from_obj_text
+            from scatteringnet.viewer.envelope_job import envelope_from_obj_text
 
             n_surface = int(payload.get("n_surface") or 0)
             result = envelope_from_obj_text(
@@ -427,7 +424,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": "missing checkpoint"})
             return
         try:
-            from infer_job import decode_points_b64, infer_uploaded_obj
+            from scatteringnet.viewer.infer_job import decode_points_b64, infer_uploaded_obj
 
             points = decode_points_b64(str(payload.get("points_b64") or ""))
             result = infer_uploaded_obj(
@@ -472,7 +469,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": "missing path"})
             return
         try:
-            from mesh_access import resolve_viewer_mesh
+            from scatteringnet.viewer.mesh_access import resolve_viewer_mesh
 
             obj_path = resolve_viewer_mesh(stored, self.data_dir)
         except ImportError as exc:
@@ -536,7 +533,7 @@ def main() -> None:
         print("NOTE: Windows often serves .js as text/plain; Chrome then never runs the module.")
     print("warmup: first-click GPU / torch (browser opens after this)…")
     try:
-        from infer_job import warmup_viewer_helper
+        from scatteringnet.viewer.infer_job import warmup_viewer_helper
 
         warmup_viewer_helper(models_dir)
     except Exception as exc:

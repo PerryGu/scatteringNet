@@ -10,7 +10,7 @@ seed: 1           # Same seed as the previous extrude_nr1 train
 data_dir: "E:/Work_stuff/scatteringNet/data"  # Base root directory where all NPZ dataset files are stored
 
 # --- Training Hyperparameters ---
-epochs: 20        # Training epochs for train_multi_npz (same length as knn24-n2048 G5)
+epochs: 10        # Short local smoke (half of the knn24-n2048 G5 length)
 lr: 0.001         # Initial learning rate
 batch_size: 1024  # Points per optimizer step (GPU mini-batch)
 optimizer: adam   # adam | adamw | sgd
@@ -24,8 +24,8 @@ val_fraction: 0.20
 # none = xyz-only OccupancyMLP. surface = envelope (XYZ + face normal) + OccupancyEncoder.
 # Occupancy labels stay in the NPZ. New trains write envelope_dim=6 on best.pt.
 shape_encoder: surface   # none / surface
-n_surface: 2048          # Envelope samples on the joined OBJ (area-weighted face darts)
-knn_k: 24                # Neighbors per query (not envelope count). Same as knn24-n2048 inspect. Fresh train; do not resume that mix-75 best.pt.
+n_surface: 1024          # Envelope samples on the joined OBJ (area-weighted face darts)
+knn_k: 16                # Neighbors per query (not envelope count). Local smoke vs knn24-n2048 inspect. Fresh train; do not resume that mix-75 best.pt.
 # knn_local_dim: 64      # z_local width; omit to use latent_dim / hidden
 # latent_dim: 64         # OccupancyEncoder z width; omit to use hidden
 
@@ -59,7 +59,7 @@ max_files_per_shape: 2
 
 # --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
-run_name: prim_extruded_nr45_knn24_n2048_n6 
+run_name: prim_extruded_nr45_knn16_n1024_n6 
 
 # --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.

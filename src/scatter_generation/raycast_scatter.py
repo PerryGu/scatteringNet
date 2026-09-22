@@ -24,7 +24,7 @@ import numpy as np
 import open3d as o3d
 import trimesh
 
-from scatter_generation.mesh_loader import load_mesh, to_data_relative, trimesh_to_open3d
+from scatteringnet.scatter_generation.mesh_loader import load_mesh, to_data_relative, trimesh_to_open3d
 
 AxisName = Literal["x", "y", "z"]
 ScatterMethod = Literal["raycast", "occupancy"]

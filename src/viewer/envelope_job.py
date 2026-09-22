@@ -6,19 +6,15 @@ Does not import torch. Count is clamped to the UI range.
 from __future__ import annotations
 
 import base64
-import sys
 from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
 
-from obj_fill import triangles_from_obj_text
+from scatteringnet.viewer.obj_fill import triangles_from_obj_text
 
-_SRC = Path(__file__).resolve().parents[1]
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from geometry.surface import sample_surface_points  # noqa: E402
+from scatteringnet.geometry.surface import sample_surface_points  # noqa: E402
 
 N_SURFACE_MIN = 256
 N_SURFACE_MAX = 4096

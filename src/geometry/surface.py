@@ -13,7 +13,7 @@ import trimesh
 from numpy.typing import NDArray
 from trimesh.sample import sample_surface
 
-from normalize import apply_normalization
+from scatteringnet.normalize import apply_normalization
 
 PointsArray = NDArray[np.float32]
 ENVELOPE_XYZ_DIM = 3

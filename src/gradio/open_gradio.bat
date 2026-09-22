@@ -21,6 +21,7 @@ if errorlevel 1 (
   echo.
   echo Gradio demo failed. Close this window, then from Anaconda Prompt:
   echo   conda activate scatteringNet
+  echo   pip install -e "%~dp0..\.."
   echo   pip install -r "%~dp0requirements.txt"
   echo   python "%~dp0app.py"
   pause

@@ -77,6 +77,32 @@ def load_points_labels(path: Path) -> tuple[PointsArray, LabelsArray]:
     return points_f32, labels_f32
 
 
+def count_npz_points(path: Path | str) -> int:
+    """
+    Query count in one NPZ without keeping the arrays.
+
+    Catalog construct uses this so ``len(part)`` / ``n_points`` do not
+    require loading every lattice into RAM.
+    """
+    npz_path = Path(path)
+    if not npz_path.is_file():
+        raise FileNotFoundError(f"NPZ not found: {npz_path}")
+    with np.load(npz_path, allow_pickle=False) as raw:
+        files = set(raw.files)
+        if "points" not in files or "labels" not in files:
+            raise KeyError(
+                f"NPZ must contain 'points' and 'labels', got {sorted(files)} "
+                f"in {npz_path}"
+            )
+        n = int(np.asarray(raw["points"]).shape[0])
+        n_y = int(np.asarray(raw["labels"]).shape[0])
+    if n_y != n:
+        raise ValueError(
+            f"labels must have shape (N,) with N={n}, got N={n_y} in {npz_path}"
+        )
+    return n
+
+
 def read_npz_mesh_path(path: Path | str) -> str:
     """
     Read the stored ``mesh_path`` string from one occupancy NPZ.
@@ -367,7 +393,7 @@ _SAMPLE_RELATIVE = Path("exports") / "dataset_test" / "sphere__raycast_z_raut_s0
 if __name__ == "__main__":
     import sys
 
-    from config import load_config
+    from scatteringnet.config import load_config
 
     cfg = load_config()
     if "--catalog" in sys.argv:
@@ -401,7 +427,7 @@ if __name__ == "__main__":
             f"preview_files={len(preview)} preview_N={n_all} "
             f"preview_inside={n_in} preview_outside={n_all - n_in}"
         )
-        from dataset import OccupancyMultiNpzDataset, make_dataloader
+        from scatteringnet.dataset import OccupancyMultiNpzDataset, make_dataloader
 
         ds = OccupancyMultiNpzDataset(paths)
         loader = make_dataloader(ds.parts[0], batch_size=8, shuffle=False)

@@ -1,8 +1,7 @@
 """PyTorch Dataset for one occupancy NPZ.
 
-Loads ``points`` / ``labels`` via ``data_npz``, AABB-normalizes XYZ in
-``__init__``, and stores ``center`` / ``scale`` for later checkpointing.
-
+Catalog parts index the NPZ and optional OBJ without holding every
+query tensor. ``ensure_queries`` AABB-normalizes XYZ for the train step.
 Item convention (locked here for the rest of the MVP):
 
 - ``xyz``: ``float32`` tensor shape ``(3,)`` → collated ``(B, 3)``
@@ -20,15 +19,17 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
-from data_npz import (
+from scatteringnet.data_npz import (
+    count_npz_points,
     load_points_labels,
-    load_points_labels_mesh,
+    read_npz_mesh_path,
+    resolve_mesh_path,
     resolve_npz_catalog,
     shape_key,
 )
-from geometry.mesh_io import load_obj_triangles
-from geometry.surface import apply_envelope_aabb, undo_envelope_aabb
-from normalize import apply_normalization, compute_center_scale
+from scatteringnet.geometry.mesh_io import load_obj_triangles
+from scatteringnet.geometry.surface import apply_envelope_aabb, undo_envelope_aabb
+from scatteringnet.normalize import apply_normalization, compute_center_scale
 
 DEFAULT_BATCH_SIZE = 1024
 
@@ -50,12 +51,13 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
         data_dir: Path | str | None = None,
         *,
         shape_id: int = 0,
+        load_queries: bool = True,
     ) -> None:
         """
-        Load points, compute AABB ``center`` / ``scale``, store CPU tensors.
+        Join the OBJ when ``data_dir`` is set. Query tensors are optional.
 
-        When ``data_dir`` is set, also resolve ``mesh_path`` and load OBJ
-        triangles. Envelope sampling lives on ``OccupancyEncoderDataset``.
+        ``load_queries=True`` (single-file tests) stores normalized XYZ/y.
+        The catalog passes ``False`` and loads one NPZ when that file trains.
 
         Parameters
         ----------
@@ -67,41 +69,70 @@ class OccupancyPointDataset(Dataset[tuple[Tensor, Tensor]]):
         shape_id:
             Integer id for encode-once. The catalog overwrites this with a
             stable id per mesh identity (not per file).
+        load_queries:
+            When False, only record ``n_queries``; call ``ensure_queries``.
         """
         npz_path = Path(npz_path)
+        self.npz_path = npz_path
+        self.mesh_key = shape_key(npz_path)
+        self.shape_id = int(shape_id)
+        self.n_surface: int | None = None
+        self.envelope: Tensor | None = None
+        self.xyz: Tensor | None = None
+        self.y: Tensor | None = None
+        self.shared_aabb = False
         if data_dir is not None:
-            points, labels, mesh_path = load_points_labels_mesh(npz_path, data_dir)
+            stored = read_npz_mesh_path(npz_path)
+            mesh_path = resolve_mesh_path(stored, data_dir)
             vertices, faces = load_obj_triangles(mesh_path)
             self.mesh_path = mesh_path
             self.vertices = vertices
             self.faces = faces
         else:
-            points, labels = load_points_labels(npz_path)
             self.mesh_path = None
             self.vertices = None
             self.faces = None
-        # Per-file query AABB first. The catalog replaces this with one
-        # mesh-level map so lattice and jitter share a frame.
-        center, scale = compute_center_scale(points)
-        normed = apply_normalization(points, center, scale)
+        self.center = np.zeros(3, dtype=np.float32)
+        self.scale = 1.0
+        if load_queries:
+            self.n_queries = -1
+            self.ensure_queries()
+        else:
+            self.n_queries = count_npz_points(npz_path)
 
-        # CPU tensors: DataLoader workers copy to GPU in the train step, not here.
-        self.xyz = torch.from_numpy(normed)  # (N, 3) float32
-        # Keep a trailing singleton so default collate yields (B, 1), not (B,).
-        self.y = torch.from_numpy(labels).unsqueeze(1)  # (N, 1) float32
-        self.center = center
-        self.scale = scale
-        self.npz_path = npz_path
-        # Same grouping key as the catalog cap (stem before ``__``).
-        self.mesh_key = shape_key(npz_path)
-        self.shape_id = int(shape_id)
-        self.n_surface: int | None = None
-        self.envelope: Tensor | None = None
+    def ensure_queries(self) -> None:
+        """Load this file's XYZ/y and AABB-normalize. No-op if already loaded."""
+        if self.xyz is not None:
+            return
+        points, labels = load_points_labels(self.npz_path)
+        n = int(points.shape[0])
+        if self.n_queries >= 0 and n != int(self.n_queries):
+            raise ValueError(
+                f"NPZ point count changed: {self.npz_path} had {self.n_queries}, now {n}"
+            )
+        self.n_queries = n
+        if self.shared_aabb:
+            center = np.asarray(self.center, dtype=np.float32).reshape(3)
+            scale = float(self.scale)
+        else:
+            # Per-file query AABB. Catalog overwrites via apply_shared_mesh_aabb.
+            center, scale = compute_center_scale(points)
+            self.center = center
+            self.scale = scale
+        self.xyz = torch.from_numpy(apply_normalization(points, center, scale))
+        self.y = torch.from_numpy(labels).unsqueeze(1)
+
+    def release_queries(self) -> None:
+        """Drop XYZ/y tensors. Envelope, AABB, and ``n_queries`` stay."""
+        self.xyz = None
+        self.y = None
 
     def __len__(self) -> int:
-        return int(self.xyz.shape[0])
+        return int(self.n_queries)
 
     def __getitem__(self, index: int) -> OccupancyItem:
+        self.ensure_queries()
+        assert self.xyz is not None and self.y is not None
         return self.xyz[index], self.y[index]
 
 
@@ -111,7 +142,8 @@ class OccupancyMultiNpzDataset:
 
     Each NPZ stays its own :class:`OccupancyPointDataset`. Files are **not**
     concatenated into one point cloud. ``len`` is the file count.
-    After load, parts that share a mesh share ``shape_id`` and AABB.
+    After load, parts that share a mesh share ``shape_id``, AABB, and (when
+    used) one envelope tensor. Query XYZ is loaded per file, not at construct.
     """
 
     def __init__(
@@ -123,7 +155,10 @@ class OccupancyMultiNpzDataset:
         seed: int = 1,
     ) -> None:
         """
-        Load each NPZ as :class:`OccupancyPointDataset` (no point pooling).
+        Index each NPZ without keeping all query tensors.
+
+        Lattice and jitter of one OBJ stay two parts (two query clouds).
+        They share ``shape_id``, AABB, and one envelope tensor.
 
         Parameters
         ----------
@@ -139,10 +174,9 @@ class OccupancyMultiNpzDataset:
         paths = [Path(p) for p in npz_paths]
         if not paths:
             raise ValueError("OccupancyMultiNpzDataset needs at least one NPZ")
-        # One AABB and one reader per file; no ConcatDataset of points.
-        # shape_id is assigned after load: mesh_split_key needs mesh_path.
+        # Paths + mesh join only. Query XYZ loads when that file trains.
         if n_surface is not None:
-            from encoder_dataset import OccupancyEncoderDataset
+            from scatteringnet.encoder_dataset import OccupancyEncoderDataset
 
             parts = [
                 OccupancyEncoderDataset(
@@ -150,12 +184,14 @@ class OccupancyMultiNpzDataset:
                     data_dir=data_dir,
                     n_surface=n_surface,
                     seed=seed,
+                    load_queries=False,
+                    sample_envelope=False,
                 )
                 for path in paths
             ]
         else:
             parts = [
-                OccupancyPointDataset(path, data_dir=data_dir)
+                OccupancyPointDataset(path, data_dir=data_dir, load_queries=False)
                 for path in paths
             ]
         ids = mesh_shape_ids([mesh_split_key(part) for part in parts])
@@ -163,6 +199,8 @@ class OccupancyMultiNpzDataset:
             part.shape_id = sid
         # One AABB per mesh: vertices when joined, else union of that key's queries.
         apply_shared_mesh_aabb(parts)
+        if n_surface is not None:
+            bind_shared_envelopes(parts, n_surface=int(n_surface), seed=int(seed))
         self.parts = parts
         self.npz_paths = [part.npz_path for part in parts]
         self.data_dir = Path(data_dir) if data_dir is not None else None
@@ -261,9 +299,19 @@ def mesh_shape_ids(keys: Sequence[str]) -> list[int]:
 
 def _world_xyz(part: OccupancyPointDataset) -> np.ndarray:
     """Undo the part's current AABB map (queries already live as tensors)."""
+    if part.xyz is None:
+        raise RuntimeError("part has no query tensors")
     xyz = np.asarray(part.xyz.numpy(), dtype=np.float32)
     center = np.asarray(part.center, dtype=np.float32).reshape(3)
     return xyz * np.float32(part.scale) + center
+
+
+def _world_queries_for_aabb(part: OccupancyPointDataset) -> np.ndarray:
+    """World-space query XYZ: undo AABB if loaded, else read the NPZ once."""
+    if part.xyz is not None:
+        return _world_xyz(part)
+    points, _labels = load_points_labels(part.npz_path)
+    return points
 
 
 def _aabb_for_mesh_group(
@@ -273,7 +321,7 @@ def _aabb_for_mesh_group(
     for part in group:
         if part.vertices is not None:
             return compute_center_scale(part.vertices)
-    stacked = np.concatenate([_world_xyz(part) for part in group], axis=0)
+    stacked = np.concatenate([_world_queries_for_aabb(part) for part in group], axis=0)
     return compute_center_scale(stacked)
 
 
@@ -283,6 +331,7 @@ def apply_shared_mesh_aabb(parts: Sequence[OccupancyPointDataset]) -> None:
 
     Lattice and jitter query AABBs differ. The encoder and the occupancy
     head must see one frame per OBJ. Envelope clouds are remapped too.
+    Unloaded query tensors stay unloaded; ``ensure_queries`` uses this AABB.
     """
     groups: dict[str, list[OccupancyPointDataset]] = {}
     for part in parts:
@@ -290,20 +339,54 @@ def apply_shared_mesh_aabb(parts: Sequence[OccupancyPointDataset]) -> None:
     for group in groups.values():
         center, scale = _aabb_for_mesh_group(group)
         for part in group:
-            world_xyz = _world_xyz(part)
-            world_env = None
+            if part.xyz is not None:
+                world_xyz = _world_xyz(part)
+                part.xyz = torch.from_numpy(apply_normalization(world_xyz, center, scale))
             if part.envelope is not None:
                 env = np.asarray(part.envelope.numpy(), dtype=np.float32)
                 old_c = np.asarray(part.center, dtype=np.float32).reshape(3)
                 # Undo/remap XYZ only; unit normals stay directions.
                 world_env = undo_envelope_aabb(env, old_c, float(part.scale))
-            part.xyz = torch.from_numpy(apply_normalization(world_xyz, center, scale))
-            if world_env is not None:
                 part.envelope = torch.from_numpy(
                     apply_envelope_aabb(world_env, center, scale)
                 )
             part.center = center
             part.scale = scale
+            part.shared_aabb = True
+
+
+def bind_shared_envelopes(
+    parts: Sequence[OccupancyPointDataset],
+    *,
+    n_surface: int,
+    seed: int,
+) -> None:
+    """
+    One AABB-normalized envelope tensor per mesh.
+
+    Lattice and jitter NPZs of the same OBJ get the same object, not a copy.
+    """
+    from scatteringnet.geometry.surface import sample_surface_points
+
+    count = int(n_surface)
+    groups: dict[str, list[OccupancyPointDataset]] = {}
+    for part in parts:
+        groups.setdefault(mesh_split_key(part), []).append(part)
+    for group in groups.values():
+        first = group[0]
+        if first.vertices is None or first.faces is None or first.mesh_path is None:
+            raise ValueError("shared envelope requires a mesh join")
+        world = sample_surface_points(
+            first.vertices,
+            first.faces,
+            count,
+            seed=int(seed),
+            cache_key=str(first.mesh_path.resolve()),
+        )
+        env = torch.from_numpy(apply_envelope_aabb(world, first.center, first.scale))
+        for part in group:
+            part.n_surface = count
+            part.envelope = env
 
 
 def split_train_test_by_mesh(
@@ -461,7 +544,8 @@ def make_dataloader(
     """
     Train-style loader: custom occupancy collate, no extra workers.
 
-    Pass **one** file dataset. Do not pass the catalog — that would mix shapes.
+    Pass **one** file dataset (queries already in RAM or loaded by
+    ``ensure_queries``). Do not pass the catalog — that would mix shapes.
 
     Parameters
     ----------
@@ -487,7 +571,7 @@ def make_dataloader(
 
 
 if __name__ == "__main__":
-    from config import load_config
+    from scatteringnet.config import load_config
 
     sample = (
         load_config().data_dir

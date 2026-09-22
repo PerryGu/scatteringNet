@@ -9,6 +9,7 @@ Upload an OBJ → mesh on an XZ **floor** of thin GridHelper-style lines plus RG
 Conda env **scatteringNet** (PyTorch already there):
 
 ```text
+pip install -e .
 pip install -r src/gradio/requirements.txt
 python src/gradio/app.py
 ```
@@ -19,7 +20,7 @@ Put the Space checkpoint at `models/<run_id>/best.pt`. The demo loads `default_r
 
 ## Hugging Face Space
 
-Create a **Gradio** Space (not Static, not Docker) from **this whole repo**. Set the app file to `src/gradio/app.py`. Install from [`requirements.txt`](requirements.txt) in this folder (includes `torch`). The demo does **not** need Open3D or the training catalog.
+Create a **Gradio** Space (not Static, not Docker) from **this whole repo**. Set the app file to `src/gradio/app.py`. Install from [`requirements.txt`](requirements.txt) in this folder (includes `torch` and `-e ../..` so `import scatteringnet` works). The demo does **not** need Open3D or the training catalog.
 
 **GPU is optional.** Occupancy infer already maps the head with `.to(device)`: CUDA if `torch.cuda.is_available()`, otherwise **CPU**. A CPU Basic Space is the intended free path (example cube is fine; a dense 80k lattice is slower, not broken). Paid GPU / **ZeroGPU** only if you want the inspect-like wait on big meshes.
 
@@ -37,7 +38,7 @@ This demo is not the Three.js inspect UI.
 
 ## Why this folder is named `gradio`
 
-It sits next to `src/viewer` on purpose. It is **not** a Python package (no `__init__.py`) so `pip install -e .` does not ship a fake `gradio` library. Always `import gradio` from site-packages **before** putting `src/` on `sys.path`. Launch `app.py` as a script.
+It sits next to `src/viewer` on purpose. It is **not** a Python package (no `__init__.py`) so `pip install -e .` does not ship a fake `gradio` library. Occupancy code is `import scatteringnet…`. This folder only holds the demo scripts (`figure`, `pipeline`, `app`). Launch `app.py` as a script after `import gradio` from site-packages.
 
 ## Limits (vs the local viewer)
 

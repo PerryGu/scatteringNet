@@ -11,12 +11,9 @@ from pathlib import Path
 import torch
 import yaml
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from checkpointing import Checkpointer
-from run_tracking import start_run
+from scatteringnet.checkpointing import Checkpointer
+from scatteringnet.run_tracking import start_run
 
 
 class CheckpointingTests(unittest.TestCase):

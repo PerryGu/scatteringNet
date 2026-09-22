@@ -7,27 +7,20 @@ Does not import Gradio and does not change the Three.js viewer.
 from __future__ import annotations
 
 import base64
-import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-# This file lives in ``src/gradio/``. Occupancy modules are ``src/*.py``;
-# viewer helpers are ``src/viewer/*.py``. Do not put ``src/`` on the path
-# before ``import gradio`` in ``app.py`` (this folder is also named gradio).
+# Occupancy is the installed ``scatteringnet`` package (``pip install -e .``).
+# This folder is not a package so it cannot shadow pip ``gradio``.
 _GRADIO_DIR = Path(__file__).resolve().parent
-_SRC = _GRADIO_DIR.parent
-_VIEWER = _SRC / "viewer"
-_REPO = _SRC.parent
-for _p in (_VIEWER, _SRC):
-    if str(_p) not in sys.path:
-        sys.path.append(str(_p))
+_REPO = _GRADIO_DIR.parents[1]
 
-from config import load_config  # noqa: E402
-from infer_job import infer_uploaded_obj, pred_from_probs  # noqa: E402
-from model_access import list_viewer_models  # noqa: E402
-from obj_fill import (  # noqa: E402
+from scatteringnet.config import load_config
+from scatteringnet.viewer.infer_job import infer_uploaded_obj, pred_from_probs  # noqa: E402
+from scatteringnet.viewer.model_access import list_viewer_models  # noqa: E402
+from scatteringnet.viewer.obj_fill import (  # noqa: E402
     fill_aabb_lattice,
     spacing_from_slider,
     triangles_from_obj_text,

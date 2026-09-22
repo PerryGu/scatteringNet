@@ -1,0 +1,7 @@
+# Keep Python / YAML as LF so Linux (SageMaker, CI) unpacks the same tree.
+* text=auto
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.toml text eol=lf

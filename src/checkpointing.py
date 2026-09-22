@@ -21,8 +21,8 @@ from typing import Any, Mapping
 
 import torch
 
-from config import repo_root
-from run_tracking import RunTracker
+from scatteringnet.config import repo_root
+from scatteringnet.run_tracking import RunTracker
 
 _REPO_ROOT = repo_root()
 
@@ -138,8 +138,8 @@ class Checkpointer:
 
 if __name__ == "__main__":
     # Dummy 3-epoch smoke: no OccupancyMLP. Epoch 2 is the apex.
-    from config import load_config
-    from run_tracking import occupancy_config_snapshot, start_run
+    from scatteringnet.config import load_config
+    from scatteringnet.run_tracking import occupancy_config_snapshot, start_run
     import yaml
 
     cfg = load_config()

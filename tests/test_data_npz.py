@@ -9,11 +9,8 @@ from pathlib import Path
 
 import numpy as np
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from data_npz import load_points_labels, load_points_labels_mesh
+from scatteringnet.data_npz import count_npz_points, load_points_labels, load_points_labels_mesh
 
 
 class LoadPointsLabelsTests(unittest.TestCase):
@@ -30,6 +27,14 @@ class LoadPointsLabelsTests(unittest.TestCase):
         self.assertEqual(out_p.shape, (2, 3))
         self.assertEqual(out_y.shape, (2,))
         np.testing.assert_array_equal(out_y, np.array([0.0, 1.0], dtype=np.float32))
+
+    def test_count_npz_points_matches_rows(self) -> None:
+        points = np.array([[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]], dtype=np.float32)
+        labels = np.array([0, 1], dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sample.npz"
+            np.savez(path, points=points, labels=labels)
+            self.assertEqual(count_npz_points(path), 2)
 
     def test_rejects_bad_points_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -73,8 +78,8 @@ class LoadPointsLabelsTests(unittest.TestCase):
 
     def test_step2_sphere_npz_resolves_obj(self) -> None:
         """Plan test: a Step 2 sphere NPZ yields a loadable OBJ."""
-        from config import load_config
-        from geometry.mesh_io import load_obj_triangles
+        from scatteringnet.config import load_config
+        from scatteringnet.geometry.mesh_io import load_obj_triangles
 
         cfg = load_config()
         candidates = [

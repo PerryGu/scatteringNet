@@ -6,6 +6,21 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-21 18:00 — Config: local smoke knn16 / n1024 / 10 epochs
+
+Live ``config.yaml`` is a shorter local catalog train: ``n_surface: 1024``, ``knn_k: 16``, ``epochs: 10``, ``run_name: prim_extruded_nr45_knn16_n1024_n6``. Catalog globs, unweighted BCE, and ``hidden`` / ``depth`` are unchanged. The SageMaker clone ``scatteringnet-n6-20260921164350`` already has its own snapshot and is not affected.
+
+
+## 2026-09-21 16:00 — Package: ``import scatteringnet``; unittest on push
+
+Occupancy modules install as ``scatteringnet.*`` (``pip install -e .``). Tests, viewer, Gradio pipeline, and SageMaker import that package instead of inserting ``src/`` on ``sys.path``. ``src/gradio`` stays a launch folder so it does not shadow pip Gradio. GitHub Actions runs ``unittest discover``. Train math, viewer Fill, and Gradio draw caps are unchanged.
+
+
+## 2026-09-21 15:00 — Train: one NPZ in RAM, one envelope per mesh
+
+Catalog construct indexes files and joins OBJs without keeping every lattice in memory. Lattice and jitter of the same OBJ still train as two files; they share one envelope tensor and the mesh AABB. Train/val load that NPZ for the inner loop and drop the query tensors afterward. OccupancyEncoder, viewer, and Gradio are unchanged.
+
+
 ## 2026-09-21 14:00 — Gradio: draw the full 80k lattice
 
 The occupancy GLB used to keep at most 25,000 dots while Fill classified 80,000. Draw cap is now 80,000 so the demo shows the lattice that already ran. Inference, CPU/CUDA, and the Three.js inspect viewer are unchanged.

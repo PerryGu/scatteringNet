@@ -10,13 +10,10 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from data_npz import load_points_labels
-from scatter_generation.mesh_loader import iter_mesh_files, load_mesh, to_data_relative
-from scatter_generation.raycast_scatter import (
+from scatteringnet.data_npz import load_points_labels
+from scatteringnet.scatter_generation.mesh_loader import iter_mesh_files, load_mesh, to_data_relative
+from scatteringnet.scatter_generation.raycast_scatter import (
     _occupancy_labels,
     export_occupancy_npz,
     scatter_volume,

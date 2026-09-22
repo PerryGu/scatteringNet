@@ -1,4 +1,6 @@
 # Extra pip packages for the SageMaker training image.
-# The PyTorch DLC already provides torch. Local conda uses environment.yaml.
+# The PyTorch DLC already provides torch. Install this repo as scatteringnet.
 trimesh>=4.0
 pyyaml>=6.0
+tensorboard
+-e .

@@ -84,8 +84,8 @@ def apply_normalization(
 
 
 if __name__ == "__main__":
-    from config import load_config
-    from data_npz import load_points_labels
+    from scatteringnet.config import load_config
+    from scatteringnet.data_npz import load_points_labels
 
     sample = (
         load_config().data_dir

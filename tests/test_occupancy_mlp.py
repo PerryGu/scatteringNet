@@ -8,12 +8,9 @@ from pathlib import Path
 
 import torch
 
-# Allow `from occupancy_mlp import OccupancyMLP` without installing a package.
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
+# Allow `from scatteringnet.occupancy_mlp import OccupancyMLP` without installing a package.
 
-from occupancy_mlp import OccupancyMLP, build_mlp
+from scatteringnet.occupancy_mlp import OccupancyMLP, build_mlp
 
 
 class OccupancyMLPTests(unittest.TestCase):

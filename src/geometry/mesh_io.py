@@ -11,7 +11,7 @@ import numpy as np
 import trimesh
 from numpy.typing import NDArray
 
-from geometry.trimesh_util import as_trimesh
+from scatteringnet.geometry.trimesh_util import as_trimesh
 
 VerticesArray = NDArray[np.float32]
 FacesArray = NDArray[np.int32]

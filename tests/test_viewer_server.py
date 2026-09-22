@@ -11,11 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
-_VIEWER = Path(__file__).resolve().parents[1] / "src" / "viewer"
-if str(_VIEWER) not in sys.path:
-    sys.path.insert(0, str(_VIEWER))
 
-from mesh_access import resolve_viewer_mesh
+from scatteringnet.viewer.mesh_access import resolve_viewer_mesh
 
 
 class ResolveViewerMeshTests(unittest.TestCase):
@@ -76,7 +73,7 @@ class ViewerModelAccessTests(unittest.TestCase):
             (new / "best.pt").write_bytes(b"new")
             os.utime(old / "best.pt", (1_000_000, 1_000_000))
             os.utime(new / "best.pt", (2_000_000, 2_000_000))
-            from model_access import list_viewer_models
+            from scatteringnet.viewer.model_access import list_viewer_models
 
             ids = [row["id"] for row in list_viewer_models(root)]
             self.assertEqual(ids, ["run_new", "run_old"])
@@ -94,13 +91,13 @@ class ViewerModelAccessTests(unittest.TestCase):
             (snap / "config.yaml").write_text(
                 "shape_encoder: mesh\nhidden: 64\n", encoding="utf-8"
             )
-            from model_access import list_viewer_models
+            from scatteringnet.viewer.model_access import list_viewer_models
 
             rows = list_viewer_models(models, runs_root=runs)
             self.assertEqual(rows[0]["shape_encoder"], "mesh")
 
     def test_list_missing_dir_is_empty(self) -> None:
-        from model_access import list_viewer_models
+        from scatteringnet.viewer.model_access import list_viewer_models
 
         self.assertEqual(list_viewer_models(Path(tempfile.gettempdir()) / "no-such-models"), [])
 
@@ -111,7 +108,7 @@ class ViewerModelAccessTests(unittest.TestCase):
             run.mkdir()
             best = run / "best.pt"
             best.write_bytes(b"x")
-            from model_access import resolve_viewer_checkpoint
+            from scatteringnet.viewer.model_access import resolve_viewer_checkpoint
 
             got = resolve_viewer_checkpoint("a_run", root)
             self.assertEqual(got.resolve(), best.resolve())
@@ -120,13 +117,13 @@ class ViewerModelAccessTests(unittest.TestCase):
 
     def test_resolve_rejects_parent_escape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            from model_access import resolve_viewer_checkpoint
+            from scatteringnet.viewer.model_access import resolve_viewer_checkpoint
 
             with self.assertRaises(ValueError):
                 resolve_viewer_checkpoint("../secret", Path(tmp))
 
     def test_match_part_by_npz_name(self) -> None:
-        from model_access import match_checkpoint_part
+        from scatteringnet.viewer.model_access import match_checkpoint_part
 
         ckpt = {
             "parts": [
@@ -148,7 +145,7 @@ class ViewerModelAccessTests(unittest.TestCase):
         self.assertIsNone(match_checkpoint_part(ckpt, "", "upload.obj"))
 
     def test_uploaded_obj_aabb_ignores_catalog_filename(self) -> None:
-        from infer_job import aabb_for_viewer
+        from scatteringnet.viewer.infer_job import aabb_for_viewer
 
         ckpt = {
             "parts": [
@@ -222,7 +219,7 @@ class ObjFillTests(unittest.TestCase):
 
     def test_fill_does_not_import_torch(self) -> None:
         had_torch = "torch" in sys.modules
-        import obj_fill
+        import scatteringnet.viewer.obj_fill as obj_fill
 
         self.assertEqual("torch" in sys.modules, had_torch)
         src = Path(obj_fill.__file__).read_text(encoding="utf-8")
@@ -230,7 +227,7 @@ class ObjFillTests(unittest.TestCase):
         self.assertNotIn("scatter_volume", src)
 
     def test_spacing_slider_maps_coarse_to_dense(self) -> None:
-        from obj_fill import spacing_from_slider
+        from scatteringnet.viewer.obj_fill import spacing_from_slider
 
         self.assertAlmostEqual(spacing_from_slider(0), 0.40)
         self.assertAlmostEqual(spacing_from_slider(100), 0.05)
@@ -238,7 +235,7 @@ class ObjFillTests(unittest.TestCase):
         self.assertAlmostEqual(spacing_from_slider(71), 0.1515, places=4)
 
     def test_clamp_spacing_rejects_out_of_range(self) -> None:
-        from obj_fill import clamp_spacing
+        from scatteringnet.viewer.obj_fill import clamp_spacing
 
         with self.assertRaises(ValueError):
             clamp_spacing(0.01)
@@ -247,13 +244,13 @@ class ObjFillTests(unittest.TestCase):
         self.assertAlmostEqual(clamp_spacing(0.15), 0.15)
 
     def test_empty_obj_text_raises(self) -> None:
-        from obj_fill import fill_from_obj_text
+        from scatteringnet.viewer.obj_fill import fill_from_obj_text
 
         with self.assertRaises(ValueError):
             fill_from_obj_text("  \n", 0.15)
 
     def test_fill_cube_returns_lattice_bytes(self) -> None:
-        from obj_fill import fill_from_obj_text
+        from scatteringnet.viewer.obj_fill import fill_from_obj_text
 
         out = fill_from_obj_text(_CUBE_OBJ, 0.40)
         self.assertGreater(out["n"], 8)
@@ -273,7 +270,7 @@ class EnvelopeOverlayTests(unittest.TestCase):
         self.assertNotRegex(text, r"(?m)^(import torch|from torch\b)")
 
     def test_clamp_n_surface(self) -> None:
-        from envelope_job import clamp_n_surface
+        from scatteringnet.viewer.envelope_job import clamp_n_surface
 
         self.assertEqual(clamp_n_surface(1024), 1024)
         with self.assertRaises(ValueError):
@@ -282,7 +279,7 @@ class EnvelopeOverlayTests(unittest.TestCase):
             clamp_n_surface(99_000)
 
     def test_envelope_cube_count(self) -> None:
-        from envelope_job import envelope_from_obj_text
+        from scatteringnet.viewer.envelope_job import envelope_from_obj_text
 
         out = envelope_from_obj_text(_CUBE_OBJ, 256)
         self.assertEqual(out["n"], 256)
@@ -300,7 +297,7 @@ class ViewerStaticMimeTests(unittest.TestCase):
     """Windows paths must still map .js to text/javascript for ES modules."""
 
     def test_js_url_and_windows_path(self) -> None:
-        from serve import Handler, JS_MIME, mime_for_static
+        from scatteringnet.viewer.serve import Handler, JS_MIME, mime_for_static
 
         self.assertEqual(mime_for_static("/"), "text/html")
         self.assertEqual(mime_for_static("/js/load_obj.js"), JS_MIME)
@@ -315,7 +312,7 @@ class ViewerStaticMimeTests(unittest.TestCase):
 
 class UiPrefsTests(unittest.TestCase):
     def test_missing_file_is_defaults(self) -> None:
-        from ui_prefs import DEFAULTS, load_ui_prefs
+        from scatteringnet.viewer.ui_prefs import DEFAULTS, load_ui_prefs
 
         with tempfile.TemporaryDirectory() as tmp:
             prefs = load_ui_prefs(tmp)
@@ -324,7 +321,7 @@ class UiPrefsTests(unittest.TestCase):
         self.assertEqual(prefs["model_id"], "")
 
     def test_clamp_and_roundtrip(self) -> None:
-        from ui_prefs import load_ui_prefs, save_ui_prefs
+        from scatteringnet.viewer.ui_prefs import load_ui_prefs, save_ui_prefs
 
         with tempfile.TemporaryDirectory() as tmp:
             saved = save_ui_prefs(
@@ -347,33 +344,33 @@ class UiPrefsTests(unittest.TestCase):
             self.assertEqual(loaded, saved)
 
     def test_clamp_inside_cut(self) -> None:
-        from ui_prefs import clamp_ui_prefs
+        from scatteringnet.viewer.ui_prefs import clamp_ui_prefs
 
         self.assertEqual(clamp_ui_prefs({"inside_cut": 999})["inside_cut"], 100)
         self.assertEqual(clamp_ui_prefs({"inside_cut": -3})["inside_cut"], 0)
         self.assertEqual(clamp_ui_prefs({})["inside_cut"], 50)
 
     def test_clamp_envelope_n(self) -> None:
-        from ui_prefs import clamp_ui_prefs
+        from scatteringnet.viewer.ui_prefs import clamp_ui_prefs
 
         self.assertEqual(clamp_ui_prefs({"envelope_n": 99999})["envelope_n"], 4096)
         self.assertEqual(clamp_ui_prefs({"envelope_n": 10})["envelope_n"], 256)
         self.assertEqual(clamp_ui_prefs({})["envelope_n"], 1024)
 
     def test_rejects_stale_envelope_mix(self) -> None:
-        from ui_prefs import clamp_ui_prefs
+        from scatteringnet.viewer.ui_prefs import clamp_ui_prefs
 
         out = clamp_ui_prefs({"envelope_mix": 75})
         self.assertNotIn("envelope_mix", out)
 
     def test_rejects_unsafe_model_id(self) -> None:
-        from ui_prefs import clamp_ui_prefs
+        from scatteringnet.viewer.ui_prefs import clamp_ui_prefs
 
         out = clamp_ui_prefs({"model_id": "../secret"})
         self.assertEqual(out["model_id"], "")
 
     def test_model_labels_keep_safe_suffix(self) -> None:
-        from ui_prefs import clamp_ui_prefs
+        from scatteringnet.viewer.ui_prefs import clamp_ui_prefs
 
         out = clamp_ui_prefs(
             {
@@ -394,7 +391,7 @@ class UiPrefsTests(unittest.TestCase):
         )
 
     def test_invalid_json_is_defaults(self) -> None:
-        from ui_prefs import DEFAULTS, PREFS_NAME, load_ui_prefs
+        from scatteringnet.viewer.ui_prefs import DEFAULTS, PREFS_NAME, load_ui_prefs
 
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / PREFS_NAME).write_text("{not json", encoding="utf-8")
@@ -404,13 +401,8 @@ class UiPrefsTests(unittest.TestCase):
 
 def _viewer_cpu_cfg(data_dir: Path):
     """Tiny OccupancyConfig so infer tests do not read repo config.yaml."""
-    import sys
-
-    src = Path(__file__).resolve().parents[1] / "src"
-    if str(src) not in sys.path:
-        sys.path.insert(0, str(src))
     import torch
-    from config import OccupancyConfig
+    from scatteringnet.config import OccupancyConfig
 
     return OccupancyConfig(
         data_dir=data_dir,
@@ -429,14 +421,9 @@ def _viewer_cpu_cfg(data_dir: Path):
 
 def _save_encoder_ckpt(models: Path, run_id: str, *, shape_encoder: str) -> None:
     """Untrained OccupancyEncoder weights with the viewer checkpoint keys."""
-    import sys
-
-    src = Path(__file__).resolve().parents[1] / "src"
-    if str(src) not in sys.path:
-        sys.path.insert(0, str(src))
     import numpy as np
     import torch
-    from occupancy_encoder import CHECKPOINT_KIND, OccupancyEncoder
+    from scatteringnet.occupancy_encoder import CHECKPOINT_KIND, OccupancyEncoder
 
     folder = models / run_id
     folder.mkdir(parents=True)
@@ -471,13 +458,13 @@ class ViewerInferBothEncodersTests(unittest.TestCase):
     """Job A / B rebuild the envelope from the checkpoint."""
 
     def setUp(self) -> None:
-        from infer_job import clear_model_cache
+        from scatteringnet.viewer.infer_job import clear_model_cache
 
         clear_model_cache()
 
     def test_infer_npz_surface(self) -> None:
         import numpy as np
-        from infer_job import infer_uploaded_npz
+        from scatteringnet.viewer.infer_job import infer_uploaded_npz
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -505,7 +492,7 @@ class ViewerInferBothEncodersTests(unittest.TestCase):
 
     def test_infer_obj_surface(self) -> None:
         import numpy as np
-        from infer_job import infer_uploaded_obj
+        from scatteringnet.viewer.infer_job import infer_uploaded_obj
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -543,12 +530,8 @@ class ViewerInferBothEncodersTests(unittest.TestCase):
     def test_infer_rejects_mesh_checkpoint(self) -> None:
         import numpy as np
         import torch
-        from infer_job import infer_uploaded_npz
-
-        src = Path(__file__).resolve().parents[1] / "src"
-        if str(src) not in sys.path:
-            sys.path.insert(0, str(src))
-        from occupancy_encoder import CHECKPOINT_KIND
+        from scatteringnet.viewer.infer_job import infer_uploaded_npz
+        from scatteringnet.occupancy_encoder import CHECKPOINT_KIND
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

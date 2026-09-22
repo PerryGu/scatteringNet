@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from occupancy_mlp import build_mlp
+from scatteringnet.occupancy_mlp import build_mlp
 
 # Distinct from OccupancyMLP so infer can tell the checkpoint apart.
 CHECKPOINT_KIND = "occupancy_encoder"

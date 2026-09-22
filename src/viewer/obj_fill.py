@@ -9,17 +9,13 @@ from __future__ import annotations
 
 import base64
 import os
-import sys
 import tempfile
 from pathlib import Path
 
 import numpy as np
 
-_SRC = Path(__file__).resolve().parents[1]
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from geometry.mesh_io import load_obj_triangles  # noqa: E402
+from scatteringnet.geometry.mesh_io import load_obj_triangles  # noqa: E402
 
 MAX_FILL_POINTS = 200_000
 SPACING_MIN = 0.04

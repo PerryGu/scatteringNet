@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,12 +9,9 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from geometry.mesh_io import _TRIANGLE_CACHE, clear_triangle_cache, load_obj_triangles
-from geometry import clear_geometry_caches
+from scatteringnet.geometry.mesh_io import _TRIANGLE_CACHE, clear_triangle_cache, load_obj_triangles
+from scatteringnet.geometry import clear_geometry_caches
 
 
 def _write_box_obj(folder: Path) -> Path:

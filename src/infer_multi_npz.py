@@ -13,20 +13,20 @@ from typing import Any
 import numpy as np
 import torch
 
-from config import OccupancyConfig, as_data_relative, load_config, repo_root
-from data_npz import load_points_labels, load_points_labels_mesh
-from geometry.mesh_io import load_obj_triangles
-from geometry.surface import apply_envelope_aabb, project_envelope_dim, sample_surface_points
-from metrics import occupancy_metrics
-from normalize import apply_normalization
-from occupancy_encoder import (
+from scatteringnet.config import OccupancyConfig, as_data_relative, load_config, repo_root
+from scatteringnet.data_npz import load_points_labels, load_points_labels_mesh
+from scatteringnet.geometry.mesh_io import load_obj_triangles
+from scatteringnet.geometry.surface import apply_envelope_aabb, project_envelope_dim, sample_surface_points
+from scatteringnet.metrics import occupancy_metrics
+from scatteringnet.normalize import apply_normalization
+from scatteringnet.occupancy_encoder import (
     OccupancyEncoder,
     envelope_dim_from_ckpt,
     envelope_seed_from_ckpt,
 )
-from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND
-from occupancy_mlp import OccupancyMLP
-from occupancy_mlp import CHECKPOINT_KIND as MLP_KIND
+from scatteringnet.occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND
+from scatteringnet.occupancy_mlp import OccupancyMLP
+from scatteringnet.occupancy_mlp import CHECKPOINT_KIND as MLP_KIND
 
 
 def resolve_best_pt(

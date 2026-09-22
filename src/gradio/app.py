@@ -40,7 +40,7 @@ from pipeline import (  # noqa: E402
     default_run_id,
     fill_and_infer,
 )
-from obj_fill import triangles_from_obj_text  # noqa: E402
+from scatteringnet.viewer.obj_fill import triangles_from_obj_text  # noqa: E402
 
 # Shipped sample meshes in examples/ (cube plus a few catalog shapes).
 _EXAMPLE_OBJS = (

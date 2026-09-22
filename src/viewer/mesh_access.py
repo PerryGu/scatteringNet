@@ -6,14 +6,9 @@ under ``data_dir`` (no arbitrary filesystem reads).
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-_SRC = Path(__file__).resolve().parents[1]
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
-
-from data_npz import resolve_mesh_path
+from scatteringnet.data_npz import resolve_mesh_path
 
 
 def resolve_viewer_mesh(stored: str, data_dir: Path | str) -> Path:

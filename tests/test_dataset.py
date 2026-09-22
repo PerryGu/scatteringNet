@@ -10,13 +10,10 @@ from pathlib import Path
 import numpy as np
 import torch
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
 import trimesh
 
-from dataset import (
+from scatteringnet.dataset import (
     OccupancyPointDataset,
     make_dataloader,
     mesh_shape_ids,
@@ -26,7 +23,7 @@ from dataset import (
     split_train_test_files,
     split_train_val_indices,
 )
-from encoder_dataset import OccupancyEncoderDataset
+from scatteringnet.encoder_dataset import OccupancyEncoderDataset
 
 
 def _write_npz(path: Path, n: int = 32) -> None:

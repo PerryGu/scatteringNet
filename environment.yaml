@@ -23,6 +23,8 @@ dependencies:
   - pyyaml=6.0.3
   - pip
   - pip:
+    # Occupancy package: import scatteringnet (not src on sys.path).
+    - -e .
     # Mesh IO + occupancy queries for NPZ generation (not PyTorch).
     - open3d>=0.18
     - trimesh>=4.0

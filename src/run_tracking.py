@@ -27,7 +27,7 @@ from typing import Any, Mapping, Sequence
 import yaml
 from torch.utils.tensorboard import SummaryWriter
 
-from config import OccupancyConfig, as_data_relative, as_repo_relative, gpu_name, repo_root
+from scatteringnet.config import OccupancyConfig, as_data_relative, as_repo_relative, gpu_name, repo_root
 
 # Repo root: src/run_tracking.py → parents[1].
 _REPO_ROOT = repo_root()
@@ -371,7 +371,7 @@ def _has_tfevents(path: Path) -> bool:
 
 if __name__ == "__main__":
     # Dummy 3-epoch smoke: metrics only, no OccupancyMLP, no .pt.
-    from config import load_config
+    from scatteringnet.config import load_config
 
     cfg = load_config()
     with start_run("dummy") as run:

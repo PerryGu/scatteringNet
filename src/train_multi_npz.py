@@ -19,8 +19,8 @@ from typing import Sequence
 import numpy as np
 import torch
 import torch.nn as nn
-from checkpointing import Checkpointer
-from config import (
+from scatteringnet.checkpointing import Checkpointer
+from scatteringnet.config import (
     OccupancyConfig,
     as_data_relative,
     encoder_knn_local_dim,
@@ -28,20 +28,20 @@ from config import (
     gpu_name,
     load_config,
 )
-from dataset import (
+from scatteringnet.dataset import (
     OccupancyMultiNpzDataset,
     OccupancyPointDataset,
     make_dataloader,
     mesh_split_key,
     split_train_test_by_mesh,
 )
-from infer_multi_npz import load_occupancy_model, resolve_best_pt
-from metrics import occupancy_counts, occupancy_metrics_from_counts
-from occupancy_encoder import OccupancyEncoder
-from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND
-from occupancy_mlp import OccupancyMLP
-from occupancy_mlp import CHECKPOINT_KIND as MLP_KIND
-from run_tracking import occupancy_config_snapshot, start_run
+from scatteringnet.infer_multi_npz import load_occupancy_model, resolve_best_pt
+from scatteringnet.metrics import occupancy_counts, occupancy_metrics_from_counts
+from scatteringnet.occupancy_encoder import OccupancyEncoder
+from scatteringnet.occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND
+from scatteringnet.occupancy_mlp import OccupancyMLP
+from scatteringnet.occupancy_mlp import CHECKPOINT_KIND as MLP_KIND
+from scatteringnet.run_tracking import occupancy_config_snapshot, start_run
 
 OccupancyModel = OccupancyMLP | OccupancyEncoder
 
@@ -94,17 +94,21 @@ def _eval_parts(
     model.eval()
     with torch.no_grad():
         for part in parts:
-            loader = make_dataloader(
-                part, batch_size=batch_size, shuffle=False, pin_memory=pin
-            )
-            for batch in loader:
-                logits, y = _forward_batch(model, batch, device)
-                c_tp, c_fp, c_fn, c_ok, c_n = occupancy_counts(logits, y)
-                tp += c_tp
-                fp += c_fp
-                fn += c_fn
-                correct += c_ok
-                n += c_n
+            part.ensure_queries()
+            try:
+                loader = make_dataloader(
+                    part, batch_size=batch_size, shuffle=False, pin_memory=pin
+                )
+                for batch in loader:
+                    logits, y = _forward_batch(model, batch, device)
+                    c_tp, c_fp, c_fn, c_ok, c_n = occupancy_counts(logits, y)
+                    tp += c_tp
+                    fp += c_fp
+                    fn += c_fn
+                    correct += c_ok
+                    n += c_n
+            finally:
+                part.release_queries()
     scores = occupancy_metrics_from_counts(
         tp=tp, fp=fp, fn=fn, correct=correct, n=n
     )
@@ -447,23 +451,27 @@ def train_multi_npz(
             order = torch.randperm(len(train_parts)).tolist()
             for part_i in order:
                 part = train_parts[part_i]
-                loader = make_dataloader(
-                    part,
-                    batch_size=cfg.batch_size,
-                    shuffle=True,
-                    pin_memory=pin_memory,
-                )
-                for batch in loader:
-                    logits, y = _forward_batch(model, batch, cfg.device)
-                    optimizer.zero_grad(set_to_none=True)
-                    loss = criterion(logits, y)
-                    loss.backward()
-                    optimizer.step()
-                    running_loss += float(loss.item())
-                    _tp, _fp, _fn, ok, n_pts = occupancy_counts(logits.detach(), y)
-                    train_correct += ok
-                    train_n += n_pts
-                    n_batches += 1
+                part.ensure_queries()
+                try:
+                    loader = make_dataloader(
+                        part,
+                        batch_size=cfg.batch_size,
+                        shuffle=True,
+                        pin_memory=pin_memory,
+                    )
+                    for batch in loader:
+                        logits, y = _forward_batch(model, batch, cfg.device)
+                        optimizer.zero_grad(set_to_none=True)
+                        loss = criterion(logits, y)
+                        loss.backward()
+                        optimizer.step()
+                        running_loss += float(loss.item())
+                        _tp, _fp, _fn, ok, n_pts = occupancy_counts(logits.detach(), y)
+                        train_correct += ok
+                        train_n += n_pts
+                        n_batches += 1
+                finally:
+                    part.release_queries()
             mean_loss = running_loss / max(n_batches, 1)
             mean_acc = train_correct / max(train_n, 1.0)
             val_acc, _prec, _rec, val_iou, val_f1 = _eval_parts(
@@ -525,7 +533,8 @@ def train_multi_npz(
         )
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """CLI: train occupancy on the YAML catalog."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Train occupancy on the YAML catalog")
@@ -552,3 +561,7 @@ if __name__ == "__main__":
         resume_checkpoint=args.resume,
         resume_run_id=args.resume_run_id,
     )
+
+
+if __name__ == "__main__":
+    main()

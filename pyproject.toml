@@ -5,35 +5,43 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "scatteringnet"
 version = "0.1.0"
-description = "3D occupancy training for ScatteringNet"
+description = "3D occupancy fill: envelope encoder and catalog training"
 requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pyyaml",
+    "trimesh>=4.0",
+    "tensorboard",
+]
 
-# Optional Hugging Face Gradio demo (src/gradio). Occupancy train does not need this.
 [project.optional-dependencies]
 gradio = [
     "gradio>=4.44",
 ]
-
-# Flat src modules stay importable as `from config import …` after
-# `pip install -e .`. Existing test sys.path injection is unchanged.
-[tool.setuptools]
-package-dir = {"" = "src"}
-py-modules = [
-    "checkpointing",
-    "config",
-    "data_npz",
-    "dataset",
-    "encoder_dataset",
-    "infer_multi_npz",
-    "metrics",
-    "normalize",
-    "occupancy_encoder",
-    "occupancy_mlp",
-    "run_tracking",
-    "train_multi_npz",
+dev = [
+    "gradio>=4.44",
+    "open3d",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
-# src/gradio is an app folder, not the pip `gradio` package.
-exclude = ["gradio", "gradio.*"]
+[project.scripts]
+scatteringnet-train = "scatteringnet.train_multi_npz:main"
+scatteringnet-viewer = "scatteringnet.viewer.serve:main"
+
+# src/ is the scatteringnet package. src/gradio is a launch folder, not pip gradio.
+[tool.setuptools]
+package-dir = { "scatteringnet" = "src" }
+packages = [
+    "scatteringnet",
+    "scatteringnet.geometry",
+    "scatteringnet.scatter_generation",
+    "scatteringnet.viewer",
+]
+
+[tool.setuptools.package-data]
+scatteringnet = [
+    "viewer/index.html",
+    "viewer/css/*",
+    "viewer/js/*",
+    "viewer/vendor/**/*",
+    "viewer/ui_prefs.example.json",
+]

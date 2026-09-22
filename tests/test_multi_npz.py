@@ -11,13 +11,10 @@ import numpy as np
 import torch
 import trimesh
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from data_npz import resolve_npz_catalog, shape_key
-from dataset import OccupancyMultiNpzDataset, OccupancyPointDataset, make_dataloader
-from normalize import compute_center_scale
+from scatteringnet.data_npz import resolve_npz_catalog, shape_key
+from scatteringnet.dataset import OccupancyMultiNpzDataset, OccupancyPointDataset, make_dataloader
+from scatteringnet.normalize import compute_center_scale
 
 
 def _write_npz(
@@ -65,6 +62,8 @@ class MultiNpzCatalogTests(unittest.TestCase):
             ds = OccupancyMultiNpzDataset(paths)
             self.assertEqual(len(ds), 2)
             self.assertEqual(ds.n_points, 25)
+            self.assertIsNone(ds.parts[0].xyz)
+            self.assertIsNone(ds.parts[1].xyz)
             xyz, y = ds.parts[0][0]
             self.assertEqual(tuple(xyz.shape), (3,))
             self.assertEqual(tuple(y.shape), (1,))
@@ -155,6 +154,7 @@ class MultiNpzCatalogTests(unittest.TestCase):
             self.assertEqual(len(ds), 2)
             self.assertEqual(ds.n_points, 12)
             self.assertEqual(ds.n_meshes, 1)
+            self.assertIsNone(ds.parts[0].xyz)
             self.assertIsNotNone(ds.parts[0].mesh_path)
             self.assertEqual(ds.parts[0].faces.shape[1], 3)
             self.assertEqual(ds.parts[0].shape_id, ds.parts[1].shape_id)
@@ -211,6 +211,15 @@ class MultiNpzCatalogTests(unittest.TestCase):
                     ds.parts[1].envelope.numpy(),
                 )
             )
+            self.assertIs(ds.parts[0].envelope, ds.parts[1].envelope)
+            self.assertIsNone(ds.parts[0].xyz)
+            ds.parts[0].ensure_queries()
+            ds.parts[1].ensure_queries()
+            self.assertIsNotNone(ds.parts[0].xyz)
+            ds.parts[0].release_queries()
+            ds.parts[1].release_queries()
+            self.assertIsNone(ds.parts[0].xyz)
+            self.assertIs(ds.parts[0].envelope, ds.parts[1].envelope)
 
     def test_shared_aabb_union_without_mesh(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

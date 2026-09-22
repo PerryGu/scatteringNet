@@ -13,12 +13,9 @@ from pathlib import Path
 import torch
 import yaml
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from config import OccupancyConfig
-from run_tracking import format_duration, occupancy_config_snapshot, start_run
+from scatteringnet.config import OccupancyConfig
+from scatteringnet.run_tracking import format_duration, occupancy_config_snapshot, start_run
 
 
 def _cpu_cfg() -> OccupancyConfig:

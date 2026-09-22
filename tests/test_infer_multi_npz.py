@@ -11,14 +11,11 @@ import numpy as np
 import torch
 import trimesh
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from config import OccupancyConfig
-from infer_multi_npz import infer_npz, resolve_best_pt
-from occupancy_mlp import CHECKPOINT_KIND
-from train_multi_npz import train_multi_npz
+from scatteringnet.config import OccupancyConfig
+from scatteringnet.infer_multi_npz import infer_npz, resolve_best_pt
+from scatteringnet.occupancy_mlp import CHECKPOINT_KIND
+from scatteringnet.train_multi_npz import train_multi_npz
 
 
 def _write_box_obj(folder: Path, name: str) -> Path:

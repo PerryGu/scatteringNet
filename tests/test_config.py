@@ -10,11 +10,8 @@ from pathlib import Path
 import torch
 import yaml
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from config import (
+from scatteringnet.config import (
     OccupancyConfig,
     as_data_relative,
     as_repo_relative,

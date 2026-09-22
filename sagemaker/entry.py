@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -25,11 +24,8 @@ elif (_HERE.parent / "src").is_dir():
 else:
     raise RuntimeError(f"cannot find src/ next to or above {_HERE}")
 _SRC = _CODE / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
-# Occupancy imports ``geometry.mesh_io``. That directory must exist on this
-# box (not an S3 key with a Windows backslash, which Linux will not unpack
-# as ``src/geometry/``).
+# Occupancy lives at ``src/geometry/mesh_io.py`` (not an S3 key with a
+# Windows backslash, which Linux will not unpack as a folder).
 if not (_SRC / "geometry" / "mesh_io.py").is_file():
     names = sorted(p.name for p in _SRC.iterdir()) if _SRC.is_dir() else []
     raise RuntimeError(
@@ -37,8 +33,8 @@ if not (_SRC / "geometry" / "mesh_io.py").is_file():
         f"src entries={names}"
     )
 
-from config import load_config, require_data_dir
-from train_multi_npz import train_multi_npz
+from scatteringnet.config import load_config, require_data_dir
+from scatteringnet.train_multi_npz import train_multi_npz
 
 
 def _training_channel() -> Path:

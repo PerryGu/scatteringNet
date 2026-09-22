@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,16 +12,13 @@ import torch
 import trimesh
 import yaml
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
 from dataclasses import replace
 
-from config import OccupancyConfig
-from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND
-from occupancy_mlp import CHECKPOINT_KIND
-from train_multi_npz import train_multi_npz
+from scatteringnet.config import OccupancyConfig
+from scatteringnet.occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND
+from scatteringnet.occupancy_mlp import CHECKPOINT_KIND
+from scatteringnet.train_multi_npz import train_multi_npz
 
 
 def _write_box_obj(folder: Path, name: str = "box.obj") -> Path:

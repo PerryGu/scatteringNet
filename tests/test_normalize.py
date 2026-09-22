@@ -8,11 +8,8 @@ from pathlib import Path
 
 import numpy as np
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from normalize import apply_normalization, compute_center_scale
+from scatteringnet.normalize import apply_normalization, compute_center_scale
 
 
 class NormalizeTests(unittest.TestCase):

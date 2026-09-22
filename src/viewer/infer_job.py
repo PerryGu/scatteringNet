@@ -8,37 +8,33 @@ are rejected. Does not modify occupancy train/infer modules.
 from __future__ import annotations
 
 import base64
-import sys
 import threading
 import time
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from config import OccupancyConfig
+    from scatteringnet.config import OccupancyConfig
 
 import numpy as np
 
-_SRC = Path(__file__).resolve().parents[1]
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from infer_multi_npz import load_occupancy_model  # noqa: E402
-from geometry.mesh_io import load_obj_triangles  # noqa: E402
-from geometry.surface import (  # noqa: E402
+from scatteringnet.infer_multi_npz import load_occupancy_model  # noqa: E402
+from scatteringnet.geometry.mesh_io import load_obj_triangles  # noqa: E402
+from scatteringnet.geometry.surface import (  # noqa: E402
     apply_envelope_aabb,
     project_envelope_dim,
     sample_surface_points,
 )
-from metrics import occupancy_metrics  # noqa: E402
-from normalize import apply_normalization, compute_center_scale  # noqa: E402
-from occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND  # noqa: E402
-from occupancy_encoder import envelope_dim_from_ckpt  # noqa: E402
-from occupancy_encoder import envelope_seed_from_ckpt  # noqa: E402
+from scatteringnet.metrics import occupancy_metrics  # noqa: E402
+from scatteringnet.normalize import apply_normalization, compute_center_scale  # noqa: E402
+from scatteringnet.occupancy_encoder import CHECKPOINT_KIND as ENCODER_KIND  # noqa: E402
+from scatteringnet.occupancy_encoder import envelope_dim_from_ckpt  # noqa: E402
+from scatteringnet.occupancy_encoder import envelope_seed_from_ckpt  # noqa: E402
 
-from mesh_access import resolve_viewer_mesh  # noqa: E402
-from model_access import match_checkpoint_part, resolve_viewer_checkpoint  # noqa: E402
-from obj_fill import triangles_from_obj_text  # noqa: E402
+from scatteringnet.viewer.mesh_access import resolve_viewer_mesh  # noqa: E402
+from scatteringnet.viewer.model_access import match_checkpoint_part, resolve_viewer_checkpoint  # noqa: E402
+from scatteringnet.viewer.obj_fill import triangles_from_obj_text  # noqa: E402
 
 MAX_POINTS = 2_000_000
 
@@ -188,7 +184,7 @@ def _runtime_cfg(cfg: OccupancyConfig | None):
     """Use the caller cfg (tests) or load repo YAML for device / batch / seed."""
     if cfg is not None:
         return cfg
-    from config import load_config
+    from scatteringnet.config import load_config
 
     return load_config()
 
@@ -498,8 +494,8 @@ def warmup_viewer_helper(models_root: Path) -> None:
     print("warmup: torch / CUDA…", flush=True)
     import torch
 
-    from config import load_config
-    from obj_fill import fill_aabb_lattice
+    from scatteringnet.config import load_config
+    from scatteringnet.viewer.obj_fill import fill_aabb_lattice
 
     cfg = load_config()
     print("warmup: occupancy device=" + str(cfg.device), flush=True)
@@ -516,7 +512,7 @@ def warmup_viewer_helper(models_root: Path) -> None:
     if int(points.shape[0]) < 1:
         points = np.array([[0.2, 0.2, 0.2], [0.8, 0.2, 0.2]], dtype=np.float32)
 
-    from model_access import list_viewer_models
+    from scatteringnet.viewer.model_access import list_viewer_models
 
     rows = list_viewer_models(models_root)
     if not rows:

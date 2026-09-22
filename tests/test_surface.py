@@ -9,11 +9,8 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from geometry.surface import (
+from scatteringnet.geometry.surface import (
     _ENVELOPE_CACHE,
     apply_envelope_aabb,
     clear_envelope_cache,

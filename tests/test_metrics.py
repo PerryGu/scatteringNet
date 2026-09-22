@@ -8,11 +8,8 @@ from pathlib import Path
 
 import torch
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from metrics import (
+from scatteringnet.metrics import (
     accuracy_from_logits,
     occupancy_counts,
     occupancy_metrics,

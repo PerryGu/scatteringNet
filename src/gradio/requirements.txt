@@ -1,5 +1,7 @@
 # Occupancy Gradio demo (optional extra; not required to train).
 # Hugging Face CPU Spaces: pip CPU torch is enough. Do not pin pytorch-cuda here.
+# Occupancy imports: install the repo package (path is relative to this file).
+-e ../..
 gradio>=4.44
 numpy
 pyyaml

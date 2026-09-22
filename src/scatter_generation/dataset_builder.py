@@ -1,9 +1,9 @@
 """
 Batch-build occupancy NPZ files from a folder of meshes (conda, not Maya).
 
-Example (from repo root, with src on PYTHONPATH):
+Example (from repo root, after ``pip install -e .``):
 
-  python src/scatter_generation/dataset_builder.py E:/Work_stuff/scatteringNet/data/meshes/Primitives/Sphere \\
+  python -m scatteringnet.scatter_generation.dataset_builder E:/Work_stuff/scatteringNet/data/meshes/Primitives/Sphere \\
     --out E:/Work_stuff/scatteringNet/data/exports/dataset_test \\
     --method occupancy --spacings 0.15 --random-ranges 0 --limit 1 --seed 1
 
@@ -22,17 +22,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
-_SRC = Path(__file__).resolve().parents[1]
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
 
-from scatter_generation.mesh_loader import (
+from scatteringnet.scatter_generation.mesh_loader import (
     iter_mesh_files,
     load_mesh,
     project_root,
     to_data_relative,
 )
-from scatter_generation.raycast_scatter import export_scatter_npz, scatter_volume
+from scatteringnet.scatter_generation.raycast_scatter import export_scatter_npz, scatter_volume
 
 _AXES = ("x", "y", "z")
 _METHODS = ("raycast", "occupancy")
