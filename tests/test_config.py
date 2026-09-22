@@ -59,7 +59,23 @@ class OccupancyConfigTests(unittest.TestCase):
         )
 
     def test_load_config_resolves_data_dir_and_device(self) -> None:
-        cfg = load_config()
+        # Live YAML points at this PC's catalog (E:/...). CI has no that disk.
+        # require_data_dir still raises for a real train; this test only needs
+        # a folder that exists so OccupancyConfig can resolve.
+        knobs = load_yaml_knobs(_YAML)
+        live = Path(knobs["data_dir"])
+        if live.is_dir():
+            self._assert_resolved_config(load_config())
+            return
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            yaml_path = data / "config.yaml"
+            disk = yaml.safe_load(_YAML.read_text(encoding="utf-8"))
+            disk["data_dir"] = data.as_posix()
+            yaml_path.write_text(yaml.safe_dump(disk), encoding="utf-8")
+            self._assert_resolved_config(load_config(yaml_path))
+
+    def _assert_resolved_config(self, cfg: OccupancyConfig) -> None:
         self.assertIsInstance(cfg, OccupancyConfig)
         self.assertTrue(cfg.data_dir.is_dir())
         self.assertIsInstance(cfg.device, torch.device)

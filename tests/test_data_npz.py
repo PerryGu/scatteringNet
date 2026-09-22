@@ -78,9 +78,15 @@ class LoadPointsLabelsTests(unittest.TestCase):
 
     def test_step2_sphere_npz_resolves_obj(self) -> None:
         """Plan test: a Step 2 sphere NPZ yields a loadable OBJ."""
-        from scatteringnet.config import load_config
+        from scatteringnet.config import load_config, load_yaml_knobs
         from scatteringnet.geometry.mesh_io import load_obj_triangles
 
+        # Skip on CI (no E:/ catalog). Local machines with data_dir still run.
+        knobs = load_yaml_knobs(
+            Path(__file__).resolve().parents[1] / "config.yaml"
+        )
+        if not Path(knobs["data_dir"]).is_dir():
+            self.skipTest(f"no catalog at {knobs['data_dir']}")
         cfg = load_config()
         candidates = [
             cfg.data_dir

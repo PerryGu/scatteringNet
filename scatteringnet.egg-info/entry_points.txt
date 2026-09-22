@@ -1,3 +1,0 @@
-[console_scripts]
-scatteringnet-train = scatteringnet.train_multi_npz:main
-scatteringnet-viewer = scatteringnet.viewer.serve:main

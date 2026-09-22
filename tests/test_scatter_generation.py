@@ -12,12 +12,26 @@ import trimesh
 
 
 from scatteringnet.data_npz import load_points_labels
-from scatteringnet.scatter_generation.mesh_loader import iter_mesh_files, load_mesh, to_data_relative
-from scatteringnet.scatter_generation.raycast_scatter import (
-    _occupancy_labels,
-    export_occupancy_npz,
-    scatter_volume,
-)
+
+# Open3D wheels need libGL. GitHub's Ubuntu image often lacks it; skip the
+# module instead of failing discover. Local conda still runs these tests.
+try:
+    import open3d  # noqa: F401
+    from scatteringnet.scatter_generation.mesh_loader import (
+        iter_mesh_files,
+        load_mesh,
+        to_data_relative,
+    )
+    from scatteringnet.scatter_generation.raycast_scatter import (
+        _occupancy_labels,
+        export_occupancy_npz,
+        scatter_volume,
+    )
+except ImportError as exc:  # pragma: no cover - runner without libGL
+    open3d = None
+    _OPEN3D_IMPORT_ERROR = exc
+else:
+    _OPEN3D_IMPORT_ERROR = None
 
 
 def _write_box_obj(folder: Path, extents: tuple[float, float, float] = (2.0, 2.0, 2.0)) -> Path:
@@ -27,6 +41,10 @@ def _write_box_obj(folder: Path, extents: tuple[float, float, float] = (2.0, 2.0
     return path
 
 
+@unittest.skipIf(
+    _OPEN3D_IMPORT_ERROR is not None,
+    f"open3d unavailable ({_OPEN3D_IMPORT_ERROR})",
+)
 class OccupancyNpzGenerationTests(unittest.TestCase):
     def test_npz_contract_and_phase1_loader(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

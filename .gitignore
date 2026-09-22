@@ -20,4 +20,4 @@ venv/
 
 # Viewer UI sliders/checkboxes (rewritten by the helper while you work)
 src/viewer/ui_prefs.json
-src/viewer/ui_prefs.json.tmp
+src/viewer/ui_prefs.json.tmpscatteringnet.egg-info/

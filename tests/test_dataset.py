@@ -217,6 +217,9 @@ class OccupancyPointDatasetTests(unittest.TestCase):
         ]
         _xyz, _y, envelope, _sid = occupancy_collate(batch)
         self.assertTrue(envelope.is_contiguous())
+        # pin_memory() needs a CUDA/accelerator device. CI is CPU-only.
+        if not torch.cuda.is_available():
+            self.skipTest("pin_memory requires CUDA")
         pinned = envelope.pin_memory()
         self.assertTrue(pinned.is_pinned())
 
