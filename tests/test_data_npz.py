@@ -10,7 +10,12 @@ from pathlib import Path
 import numpy as np
 
 
-from scatteringnet.data_npz import count_npz_points, load_points_labels, load_points_labels_mesh
+from scatteringnet.data_npz import (
+    count_npz_labels,
+    count_npz_points,
+    load_points_labels,
+    load_points_labels_mesh,
+)
 
 
 class LoadPointsLabelsTests(unittest.TestCase):
@@ -35,6 +40,14 @@ class LoadPointsLabelsTests(unittest.TestCase):
             path = Path(tmp) / "sample.npz"
             np.savez(path, points=points, labels=labels)
             self.assertEqual(count_npz_points(path), 2)
+
+    def test_count_npz_labels_outside_inside(self) -> None:
+        points = np.zeros((4, 3), dtype=np.float32)
+        labels = np.array([0, 0, 1, 0], dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sample.npz"
+            np.savez(path, points=points, labels=labels)
+            self.assertEqual(count_npz_labels(path), (3, 1))
 
     def test_rejects_bad_points_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

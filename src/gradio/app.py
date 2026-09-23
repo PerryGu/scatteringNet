@@ -42,9 +42,9 @@ from pipeline import (  # noqa: E402
 )
 from scatteringnet.viewer.obj_fill import triangles_from_obj_text  # noqa: E402
 
-# Shipped sample meshes in examples/ (cube plus a few catalog shapes).
+# Shipped sample meshes in examples/ (catalog shapes).
 _EXAMPLE_OBJS = (
-    "cube.obj",
+    "Obese.obj",
     "horse.obj",
     "Player.obj",
     "dog.obj",
@@ -187,17 +187,23 @@ def preview_upload(file_obj, mesh_opacity=DEFAULT_MESH_OPACITY):
         return None, str(empty_figure(str(exc))), f"**Error:** {exc}"
 
 
-def accept_obj(file_obj, mesh_opacity=DEFAULT_MESH_OPACITY, reset_n=0):
+def accept_obj(
+    file_obj,
+    mesh_opacity=DEFAULT_MESH_OPACITY,
+    reset_n=0,
+    current_glb=None,
+):
     """
     Load an OBJ, then clear the File box so the next drop can fire change.
 
-    Keep ``reset_n`` so orbit.js does not reframe (examples / drop / Load
-    OBJ stay on the default camera). **Reset view** is the only bump.
-    Do not bind File.clear — emptying the box must not wipe the view.
+    Keep ``reset_n`` so orbit.js does not reframe. Clearing the picker
+    (``file_obj is None``) must not write a new empty GLB — that changed
+    the cmd path and made the camera reload. **Reset view** is the only bump.
     """
     keep = int(reset_n or 0)
     if file_obj is None:
-        yield None, str(empty_figure()), keep, "Upload an OBJ, then click **Run model**.", None, None
+        glb = current_glb or str(empty_figure())
+        yield None, str(glb), keep, "Upload an OBJ, then click **Run model**.", None, None
         return
     held = _held_path(file_obj)
     state, glb, md = preview_upload(file_obj, mesh_opacity)
@@ -231,9 +237,12 @@ def accept_obj_ui(
     reset_n=0,
     point_size=DEFAULT_POINT_SIZE,
     wire=False,
+    glb_held=None,
 ):
     """accept_obj plus the #sn-cmd span orbit.js reads."""
-    for state, glb, nxt, md, cleared, held in accept_obj(file_obj, mesh_opacity, reset_n):
+    for state, glb, nxt, md, cleared, held in accept_obj(
+        file_obj, mesh_opacity, reset_n, current_glb=glb_held
+    ):
         yield state, glb, nxt, _cmd_html(glb, nxt, point_size, wire), md, cleared, held
 
 
@@ -352,9 +361,11 @@ then **Run model**.
         _run_out = [state, glb_held, cmd, status, obj_in, obj_held]
         _style_out = [glb_held, cmd, status]
         if example_list:
+            # One file column; the other inputs keep the live sliders / Wireframe.
+            # inputs=obj_in alone called accept_obj_ui with wire=False.
             gr.Examples(
-                examples=example_list,
-                inputs=obj_in,
+                examples=[[p] for p in example_list],
+                inputs=[obj_in, opacity_in, reset_n, psize_in, wire_in, glb_held],
                 outputs=_accept_out,
                 fn=accept_obj_ui,
                 run_on_click=True,
@@ -366,7 +377,7 @@ then **Run model**.
         # Do not bind File.clear — we empty the box on purpose so DND stays.
         obj_in.upload(
             accept_obj_ui,
-            inputs=[obj_in, opacity_in, reset_n, psize_in, wire_in],
+            inputs=[obj_in, opacity_in, reset_n, psize_in, wire_in, glb_held],
             outputs=_accept_out,
         )
         run_btn.click(

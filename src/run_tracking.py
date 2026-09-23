@@ -117,6 +117,8 @@ def occupancy_config_snapshot(
         "knn_k": int(cfg.knn_k),
         "knn_local_dim": cfg.knn_local_dim,
         "shape_encoder": str(cfg.shape_encoder),
+        "pos_weight": cfg.pos_weight,
+        "pos_weight_auto": bool(cfg.pos_weight_auto),
     }
     # Explicit list knob: only snapshot it when it actually replaced the glob.
     explicit = [as_data_relative(p, cfg.data_dir) for p in cfg.npz_paths]

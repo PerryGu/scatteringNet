@@ -21,6 +21,7 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 
 | Run id                                          | Name                                                       | Score                      |
 | ----------------------------------------------- | ---------------------------------------------------------- | -------------------------- |
+| `2026-09-22_10-08-18_prim_extruded_nr45_knn24_n2048_n6_pw` | Same knn24 n2048 area-only, BCE `pos_weight: auto`   | IoU 0.971 · acc 0.995 @ 14 |
 | `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6` | Same knn24 n2048 catalog, area-only envelope (no Mix 75) | IoU 0.974 · acc 0.996 @ 20 |
 | `2026-09-14_19-00-37_prim_nr45_knn16_n6_nosmooth` | Same n6 head, catalog without smooth `extruded_*`        | IoU 0.978 · acc 0.996 @ 17 |
 | `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6` | Same knn24 n6, denser envelope (`n_surface: 2048`)    | IoU 0.974 · acc 0.996 @ 20 |
@@ -43,6 +44,105 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 | `2026-08-29_19-43-15_extrude_nr1_surface`       | Envelope + xyz, file holdout                               | IoU 0.691 · acc 0.970 @ 18 |
 | `2026-08-29_09-28-54_extrude_nr1`               | Xyz-only, pooled point split                               | acc 0.853 @ 20             |
 
+
+---
+
+## 2026-09-23 10:00 — knn24 n2048 pos_weight auto
+
+Fresh train. Same catalog, seed, mesh val, `h64/d4`, `knn_k: 24`, `n_surface: 2048`, area-only envelope as [`2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`](#2026-09-17-1000--knn24-n2048-area-only-drop-mix-75). **Not** a resume of that `best.pt` or of [`2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`](#2026-09-14-2100--knn24-n2048-envelope-2048). The only train knob is BCE `pos_weight: auto` (`n_outside / n_inside` on the train split = **4.280**). Local k-NN is still max-pool (section 6 option 1 was not applied). Job `scatteringnet-n6-20260922130300`. Goal: does up-weighting the rare inside class clean OOD Fill vs the unweighted knn24 / 2048 inspect? Success is **viewer Fill**, not a higher val IoU.
+
+Run id (Artifacts, not the heading): `2026-09-22_10-08-18_prim_extruded_nr45_knn24_n2048_n6_pw`. Stills are in the **Fill** table immediately below — open **Preview**, not the outline.
+
+### Fill (viewer) — 23 Sep 2026 — unweighted 09-14 vs pos_weight
+
+Same geometries, same lattice. Left is the knn24 / 2048 inspect (`2026-09-14_07-43-34_…_n6`). Right is this run (`pos_weight: auto`). Overlay Count does not change infer.
+
+**User conclusion.** The older unweighted checkpoint is better. `pos_weight` did not help Fill — it added leaks and new holes on thin parts and joins.
+
+**None of these stills were training identities** (dog / Doguinho / mongoose / Human1 / player2 / mix). The thin-spike extrude is catalog family (`nr5`), not this exact mesh.
+
+<table>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_ref_dog.png"><img src="media/2026-09-23_ref_dog.png" alt="Dog unweighted 09-14" width="100%"/></a><br/>Dog — unweighted 09-14 (26,999 inside; clean muzzle)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_pw_dog.png"><img src="media/2026-09-23_pw_dog.png" alt="Dog pos_weight" width="100%"/></a><br/>Dog — pos_weight (27,030 inside; spray in front of the nose)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_ref_human1.png"><img src="media/2026-09-23_ref_human1.png" alt="Human1 unweighted 09-14" width="100%"/></a><br/>Human1 — unweighted 09-14 (10,064 inside)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_pw_human1.png"><img src="media/2026-09-23_pw_human1.png" alt="Human1 pos_weight" width="100%"/></a><br/>Human1 — pos_weight (10,110 inside; same class of body fill)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_ref_doguinho.png"><img src="media/2026-09-23_ref_doguinho.png" alt="Doguinho unweighted 09-14" width="100%"/></a><br/>Doguinho — unweighted 09-14 (24,224 inside; a few specks on the nose)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_pw_doguinho.png"><img src="media/2026-09-23_pw_doguinho.png" alt="Doguinho pos_weight" width="100%"/></a><br/>Doguinho — pos_weight (25,316 inside; hole in the head)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_ref_player2.png"><img src="media/2026-09-23_ref_player2.png" alt="player2 unweighted 09-14" width="100%"/></a><br/>player2 — unweighted 09-14 (22,147 inside; small leftover at one foot)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_pw_player2.png"><img src="media/2026-09-23_pw_player2.png" alt="player2 pos_weight" width="100%"/></a><br/>player2 — pos_weight (22,850 inside; holes at both hands and a foot)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_ref_mongoose.png"><img src="media/2026-09-23_ref_mongoose.png" alt="Mongoose unweighted 09-14" width="100%"/></a><br/>Mongoose — unweighted 09-14 (22,318 inside)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_pw_mongoose.png"><img src="media/2026-09-23_pw_mongoose.png" alt="Mongoose pos_weight" width="100%"/></a><br/>Mongoose — pos_weight (22,544 inside; same class of body fill)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_ref_mix.png"><img src="media/2026-09-23_ref_mix.png" alt="mix unweighted 09-14" width="100%"/></a><br/>mix primitives — unweighted 09-14 (29,699 inside; small gap at the cone / cylinder)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_pw_mix.png"><img src="media/2026-09-23_pw_mix.png" alt="mix pos_weight" width="100%"/></a><br/>mix primitives — pos_weight (29,804 inside; larger empty band at that join)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_ref_extrude.png"><img src="media/2026-09-23_ref_extrude.png" alt="extrude unweighted 09-14" width="100%"/></a><br/>Thin-spike extrude — unweighted 09-14 (6,470 inside; one thin leftover)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-23_pw_extrude.png"><img src="media/2026-09-23_pw_extrude.png" alt="extrude pos_weight" width="100%"/></a><br/>Thin-spike extrude — pos_weight (7,147 inside; empty arm tips)</td>
+</tr>
+</table>
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` via `sagemaker/entry.py` (from scratch; not a resume) |
+| Catalog | Same YAML `npz_catalog` as area-only knn24 n2048 (primitives + smooth `extruded_*` + capped `nr1`/`nr4`/`nr5`) |
+| `run_name` | `prim_extruded_nr45_knn24_n2048_n6_pw` |
+| Files | 2454 NPZs, 1227 unique OBJs |
+| Points | 41.99M (train 35.07M / val 6.92M) |
+| Geometry | `n_surface=2048`, area-weighted envelope (no `envelope_mix`), `knn_k=24`, `shape_encoder=surface`, `envelope_dim=6` |
+| Loss | `BCEWithLogitsLoss(pos_weight=4.280)` (`pos_weight_auto`; train `n_out=28,425,357` / `n_in=6,642,067`) |
+| Split | **Mesh** identity (`n_train_meshes=982` / `n_val_meshes=245`, seed 1) |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; local pool over 24 offsets + neighbor normals |
+| Device | `cuda` / NVIDIA A10G (`ml.g5.xlarge`, `eu-north-1`) |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **9h 37m 09.81s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-22_10-08-18_prim_extruded_nr45_knn24_n2048_n6_pw/`
+- Weights: `models/2026-09-22_10-08-18_prim_extruded_nr45_knn24_n2048_n6_pw/best.pt`
+- S3: `s3://scatteringnet-sagemaker-bucket/scatteringNet/output/scatteringnet-n6-20260922130300/output/`
+- Wall: **9h 37m 09.81s** (`started=2026-09-22T10:08:07` → `finished=2026-09-22T19:45:16`)
+- `best_epoch: 14`, `best_metric: 0.970916` (val_iou); epochs 15–20 did not replace it
+- Snapshot `gpu: NVIDIA A10G`; `pos_weight: 4.27959504172421`; `pos_weight_auto: true`; `data_dir` is the Linux channel (`/opt/ml/input/data/training`)
+
+### Vs unweighted knn24 n2048 (same catalog / split)
+
+| | **09-14 best @ 20** | **09-16 best @ 20** | **this run best @ 14** |
+|---|---|---|---|
+| val_acc | 0.996 | 0.996 | 0.995 |
+| val_iou / val_f1 | 0.974 / 0.987 | 0.974 / 0.987 | 0.971 / 0.985 |
+| train_acc | 0.997 | 0.998 | 0.996 |
+| loss | 0.0072 | 0.0062 | 0.0152 |
+| `pos_weight` | 1 (unweighted) | 1 (unweighted) | **4.280** |
+| wall | 9h 29m | 9h 24m | **9h 37m** |
+| meshes / NPZs | 1227 / 2454 | same | same |
+| val points | 6.92M | same | same |
+
+Same box, catalog, seed, and mesh split as `18-09-31`. Wall is the same class (~9.5 h); `pos_weight` is a loss scalar, not extra k-NN. Val IoU **dropped** (0.974 → 0.971) and `best.pt` stopped at epoch 14 while later ticks got worse. Do not read the extra inside counts on some stills as a Fill win — those meshes also grew holes and spray. A resume is not justified.
+
+**Not shown by this run**
+
+- That keeping 24 neighbor directions (section 6 option 1) would recover the 09-14 Fill
+- That a smaller hand-set `pos_weight` (not `auto`) would help
+
+**Bottom line:** `pos_weight: auto` **hurt** Fill vs the unweighted knn24 / 2048 inspect (`07-43-34`). Keep using that older `best.pt` for viewer / Gradio. Do not pick this run from val IoU. Leave `pos_weight` off for the next catalog train unless a new A/B says otherwise.
 
 ---
 

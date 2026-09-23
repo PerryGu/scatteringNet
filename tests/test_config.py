@@ -57,6 +57,16 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertEqual(
             knobs["shape_encoder"], str(disk["shape_encoder"]).strip().lower()
         )
+        disk_pw = disk.get("pos_weight")
+        if disk_pw is None:
+            self.assertIsNone(knobs["pos_weight"])
+            self.assertFalse(knobs["pos_weight_auto"])
+        elif isinstance(disk_pw, str) and str(disk_pw).strip().lower() == "auto":
+            self.assertIsNone(knobs["pos_weight"])
+            self.assertTrue(knobs["pos_weight_auto"])
+        else:
+            self.assertAlmostEqual(float(knobs["pos_weight"]), float(disk_pw))
+            self.assertFalse(knobs["pos_weight_auto"])
 
     def test_load_config_resolves_data_dir_and_device(self) -> None:
         # Live YAML points at this PC's catalog (E:/...). CI has no that disk.
@@ -100,6 +110,8 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertNotIn("envelope_mix=", rendered)
         self.assertIn("knn_k=", rendered)
         self.assertIn("shape_encoder=", rendered)
+        self.assertIn("pos_weight=", rendered)
+        self.assertIn("pos_weight_auto=", rendered)
         self.assertIsNone(gpu_name(torch.device("cpu")))
         name = gpu_name(cfg.device)
         if cfg.device.type == "cuda":
@@ -223,6 +235,71 @@ class OccupancyConfigTests(unittest.TestCase):
             self.assertEqual(knobs["latent_dim"], 16)
             self.assertNotIn("envelope_mix", knobs)
             self.assertEqual(knobs["knn_k"], 0)
+            self.assertIsNone(knobs["pos_weight"])
+            self.assertFalse(knobs["pos_weight_auto"])
+
+    def test_pos_weight_yaml_auto_and_float(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            auto_path = root / "auto.yaml"
+            auto_path.write_text(
+                "\n".join(
+                    [
+                        "hidden: 64",
+                        "depth: 4",
+                        "seed: 1",
+                        f'data_dir: "{root.as_posix()}"',
+                        "epochs: 2",
+                        "lr: 0.001",
+                        "val_fraction: 0.2",
+                        "pos_weight: auto",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            auto = load_yaml_knobs(auto_path)
+            self.assertIsNone(auto["pos_weight"])
+            self.assertTrue(auto["pos_weight_auto"])
+            num_path = root / "num.yaml"
+            num_path.write_text(
+                "\n".join(
+                    [
+                        "hidden: 64",
+                        "depth: 4",
+                        "seed: 1",
+                        f'data_dir: "{root.as_posix()}"',
+                        "epochs: 2",
+                        "lr: 0.001",
+                        "val_fraction: 0.2",
+                        "pos_weight: 4.5",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            num = load_yaml_knobs(num_path)
+            self.assertAlmostEqual(float(num["pos_weight"]), 4.5)
+            self.assertFalse(num["pos_weight_auto"])
+            bad_path = root / "bad.yaml"
+            bad_path.write_text(
+                "\n".join(
+                    [
+                        "hidden: 64",
+                        "depth: 4",
+                        "seed: 1",
+                        f'data_dir: "{root.as_posix()}"',
+                        "epochs: 2",
+                        "lr: 0.001",
+                        "val_fraction: 0.2",
+                        "pos_weight: 0",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                load_yaml_knobs(bad_path)
 
     def test_stale_envelope_mix_yaml_is_ignored(self) -> None:
         """Old run snapshots still load; mix is no longer a knob."""
@@ -246,6 +323,8 @@ class OccupancyConfigTests(unittest.TestCase):
             )
             knobs = load_yaml_knobs(yaml_path)
             self.assertNotIn("envelope_mix", knobs)
+            self.assertIsNone(knobs["pos_weight"])
+            self.assertFalse(knobs["pos_weight_auto"])
 
     def test_get_device_cpu_env_override(self) -> None:
         import os

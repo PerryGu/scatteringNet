@@ -18,6 +18,7 @@ venv/
 .vscode/
 .idea/
 
-# Viewer UI sliders/checkboxes (rewritten by the helper while you work)
+# Viewer UI sliders/checkboxes 
 src/viewer/ui_prefs.json
-src/viewer/ui_prefs.json.tmpscatteringnet.egg-info/
+src/viewer/ui_prefs.json.tmp
+scatteringnet.egg-info/

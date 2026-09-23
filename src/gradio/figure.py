@@ -32,7 +32,6 @@ DEFAULT_MESH_OPACITY = 50
 DEFAULT_POINT_SIZE = 8
 # Match pipeline.MAX_FILL_POINTS so the GLB is not a random subset of the lattice.
 MAX_PLOT_POINTS = 80_000
-MAX_MESH_VERTS = 80_000
 FLOOR_DIVS = 20
 
 
@@ -183,26 +182,44 @@ def _subsample(points: np.ndarray, pred: np.ndarray, cap: int) -> tuple[np.ndarr
     return points[idx], pred[idx]
 
 
+def _placeholder_geom() -> trimesh.Trimesh:
+    """Tiny triangle so trimesh can export when the draw list is empty."""
+    dummy = trimesh.Trimesh(
+        vertices=np.array([[0.0, 0.0, 0.0], [1e-4, 0.0, 0.0], [0.0, 0.0, 1e-4]]),
+        faces=np.array([[0, 1, 2]], dtype=np.int64),
+        process=False,
+    )
+    dummy.metadata["name"] = "occ_empty"
+    return dummy
+
+
 def _export_glb(geoms: list) -> Path:
     """Write a unique GLB so the orbit fetch is not served from a stale cache."""
     folder = Path(tempfile.gettempdir()) / "scatteringnet_gradio"
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"view_{uuid.uuid4().hex[:10]}.glb"
     scene = trimesh.Scene()
+    added = 0
     for i, geom in enumerate(geoms):
         if geom is None:
             continue
         meta = getattr(geom, "metadata", None) or {}
         name = str(meta["name"]) if isinstance(meta, dict) and meta.get("name") else f"g{i}"
         scene.add_geometry(geom, node_name=name)
+        added += 1
+    if added < 1:
+        scene.add_geometry(_placeholder_geom(), node_name="occ_empty")
     scene.export(path)
     return path
 
 
 def empty_figure(message: str = "", **_kwargs) -> Path:
-    """Empty world: XZ floor + RGB axes. ``message`` kept for call-site compat."""
+    """
+    Placeholder GLB so the cmd path can change. The visible floor lives
+    in orbit.js and is never replaced (a per-mesh grid was the camera jump).
+    """
     _ = message
-    return _export_glb([_grid_mesh(None), _axis_mesh(None)])
+    return _export_glb([])
 
 
 def occupancy_figure(
@@ -216,13 +233,12 @@ def occupancy_figure(
     mesh_opacity: float = DEFAULT_MESH_OPACITY,
     **_kwargs,
 ) -> Path:
-    """Mesh + floor + occupancy points as one GLB."""
+    """Mesh + occupancy points as one GLB. Floor stays in orbit.js."""
     _ = title
     verts = np.asarray(vertices, dtype=np.float32) if vertices is not None else np.zeros((0, 3), np.float32)
     tris = np.asarray(faces, dtype=np.int32) if faces is not None else np.zeros((0, 3), np.int32)
-    mesh_verts = verts if verts.size else None
-    geoms: list = [_grid_mesh(mesh_verts), _axis_mesh(mesh_verts)]
-    if verts.ndim == 2 and verts.shape[0] > 0 and verts.shape[0] <= MAX_MESH_VERTS:
+    geoms: list = []
+    if verts.ndim == 2 and verts.shape[0] > 0:
         if tris.ndim == 2 and tris.shape[0] > 0 and tris.shape[1] == 3:
             geoms.append(_shell_mesh(verts, tris, mesh_opacity))
     xyz = np.asarray(points, dtype=np.float32)

@@ -55,6 +55,9 @@ class YamlKnobs(TypedDict):
     knn_k: int
     knn_local_dim: int | None
     shape_encoder: str
+    # Explicit BCE pos_weight; None when omitted or when auto is set.
+    pos_weight: float | None
+    pos_weight_auto: bool
 
 
 def get_device() -> torch.device:
@@ -133,6 +136,28 @@ def _as_positive_float(name: str, value: Any) -> float:
     if parsed <= 0.0 or parsed != parsed:
         raise ValueError(f"{name} must be > 0, got {parsed}")
     return parsed
+
+
+def _as_pos_weight_pair(raw: Mapping[str, Any]) -> tuple[float | None, bool]:
+    """
+    YAML ``pos_weight``: omit / null → unweighted BCE.
+
+    ``auto`` → compute n_outside / n_inside on the train split at train time.
+    A finite float > 0 is used as-is (1.0 is unweighted).
+    """
+    if "pos_weight" not in raw:
+        return None, False
+    value = raw["pos_weight"]
+    if value is None or value is False:
+        return None, False
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in ("", "none", "off", "false"):
+            return None, False
+        if text == "auto":
+            return None, True
+    parsed = _as_positive_float("pos_weight", value)
+    return parsed, False
 
 
 def _as_open_unit_interval(name: str, value: Any) -> float:
@@ -339,6 +364,7 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
     missing = [k for k in _REQUIRED_YAML_KEYS if k not in raw]
     if missing:
         raise ValueError(f"Config YAML missing keys: {', '.join(missing)}")
+    pos_weight, pos_weight_auto = _as_pos_weight_pair(raw)
     return {
         "hidden": _as_positive_int("hidden", raw["hidden"]),
         "depth": _as_positive_int("depth", raw["depth"]),
@@ -396,6 +422,8 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             if "shape_encoder" in raw
             else "none"
         ),
+        "pos_weight": pos_weight,
+        "pos_weight_auto": pos_weight_auto,
     }
 
 
@@ -460,6 +488,9 @@ class OccupancyConfig:
     knn_local_dim: int | None = None
     # ``none`` keeps OccupancyMLP; ``surface`` uses the envelope PointNet.
     shape_encoder: str = "none"
+    # BCE inside-class weight. None + auto=False = unweighted (legacy).
+    pos_weight: float | None = None
+    pos_weight_auto: bool = False
 
 
 def load_config(
@@ -513,6 +544,8 @@ def load_config(
         knn_k=knobs["knn_k"],
         knn_local_dim=knobs["knn_local_dim"],
         shape_encoder=knobs["shape_encoder"],
+        pos_weight=knobs["pos_weight"],
+        pos_weight_auto=knobs["pos_weight_auto"],
     )
 
 
@@ -568,6 +601,8 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  knn_k={cfg.knn_k}\n"
         f"  knn_local_dim={cfg.knn_local_dim}\n"
         f"  shape_encoder={cfg.shape_encoder}\n"
+        f"  pos_weight={cfg.pos_weight}\n"
+        f"  pos_weight_auto={cfg.pos_weight_auto}\n"
         f")"
     )
 

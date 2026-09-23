@@ -6,6 +6,45 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-23 10:00 — Train: knn24 n2048 pos_weight auto
+
+``2026-09-22_10-08-18_prim_extruded_nr45_knn24_n2048_n6_pw`` — val IoU 0.971 @ 14, 9h 37m (G5). ``pos_weight: auto`` (4.280) vs unweighted knn24 / 2048. Viewer Fill is worse than ``2026-09-14_07-43-34_…_n6``. Write-up: [docs/training_log.md](docs/training_log.md#2026-09-23-1000--knn24-n2048-pos_weight-auto).
+
+## 2026-09-22 18:00 — Gradio: Sample OBJ uses Obese instead of cube
+
+The sample row is ``Obese.obj``, horse, Player, dog, Helix_bend, TorusX3_box. ``cube.obj`` stays on disk for tests.
+
+## 2026-09-22 18:00 — Gradio: start camera further back
+
+Default / **Reset view** radius is 60 so a full sample mesh (horse / dog / torus) fits with headroom. Loads still keep the current orbit.
+
+## 2026-09-22 18:00 — Gradio: Sample OBJ keeps Wireframe
+
+Clicking a sample now passes the live Wireframe / opacity / dot-size into ``accept_obj_ui``. A checked Wireframe no longer resets to off on that load.
+
+## 2026-09-22 18:00 — Gradio: large OBJ shells draw on Load
+
+``occupancy_figure`` no longer drops a mesh above 80k vertices (Human2.obj showed the empty-scene error on Load, then only fill points after **Run model**). An empty draw list writes the placeholder GLB instead of crashing. Occupancy training is unchanged.
+
+## 2026-09-22 18:00 — Gradio: larger fixed floor
+
+The world grid is 32 units across (axes 4) so it sits under typical uploaded meshes. Camera and load behavior are unchanged.
+
+## 2026-09-22 17:00 — Gradio: floor is fixed; loads do not move the camera
+
+The XZ grid and RGB axes live in ``orbit.js`` and stay at world origin. A new OBJ only swaps the mesh — the GLB no longer ships a resized floor (that was the grid jump). The camera is frozen across ImportMeshAsync. **Reset view** is still 45° / 70° / radius 7. Occupancy training is unchanged.
+
+
+## 2026-09-22 12:00 — Train: optional BCE ``pos_weight``
+
+``BCEWithLogitsLoss`` can weight inside queries. YAML ``pos_weight: auto`` uses n_outside / n_inside on the train split; a float is used as-is; omit keeps unweighted BCE. OccupancyEncoder (k-NN max-pool) is unchanged.
+
+
+## 2026-09-22 09:00 — CI: tests do not require E: catalog, CUDA pin, or libGL
+
+GitHub ``unittest`` no longer errors when live ``data_dir`` is missing, when ``pin_memory`` has no GPU, or when Open3D cannot load ``libGL``. ``load_config()`` still refuses a missing catalog for train. Occupancy math, viewer, Gradio, and SageMaker entry are unchanged.
+
+
 ## 2026-09-21 18:00 — Config: local smoke knn16 / n1024 / 10 epochs
 
 Live ``config.yaml`` is a shorter local catalog train: ``n_surface: 1024``, ``knn_k: 16``, ``epochs: 10``, ``run_name: prim_extruded_nr45_knn16_n1024_n6``. Catalog globs, unweighted BCE, and ``hidden`` / ``depth`` are unchanged. The SageMaker clone ``scatteringnet-n6-20260921164350`` already has its own snapshot and is not affected.

@@ -8,10 +8,20 @@
  * The canvas host HTML is never updated, so the Engine is not remounted.
  */
 (async function () {
+  /* Gradio can re-run launch(js=) when the cmd span updates. A second
+     Engine would start at 45°/70° and snapshotCam() would wipe the orbit. */
+  if (window.__snOrbit && window.__snOrbit.alive && window.__snOrbit.alive()) {
+    return;
+  }
   const BG = [42 / 255, 42 / 255, 50 / 255, 1];
   const START_ALPHA = 45;
   const START_BETA = 70;
-  const START_RADIUS = 8;
+  /* Pull back so samples (dog / horse / torus) fit in frame. Load still
+     does not move the camera; Reset view returns here. */
+  const START_RADIUS = 60;
+  const GRID_HALF = 16;
+  const GRID_DIVS = 20;
+  const AXIS_LEN = 4;
   const BABYLON_SRCS = [
     [
       "https://cdn.babylonjs.com/babylon.js",
@@ -212,6 +222,13 @@
   waitFor("sn-orbit-host").then(bindViewDrop);
   waitFor("sn-load-obj").then(bindLoadBtn);
   await loadBabylon();
+  if (window.BABYLON && window.BABYLON.SceneLoader) {
+    window.BABYLON.SceneLoader.OnPluginActivatedObservable.add(function (plugin) {
+      if (plugin && String(plugin.name || "").toLowerCase() === "gltf") {
+        plugin.loadCameras = false;
+      }
+    });
+  }
   let canvas = document.getElementById("sn-orbit");
   if (!canvas) {
     /* Gradio may strip <canvas> from HTML; the host div is enough. */
@@ -260,50 +277,52 @@
   const light = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0.2, 1, 0.15), scene);
   light.intensity = 0.95;
 
+  /* Fixed world floor. Not part of the GLB — a per-mesh grid is what
+     made the camera look like it jumped when a new OBJ loaded. */
+  (function addWorldHelpers() {
+    const half = GRID_HALF;
+    const n = GRID_DIVS;
+    const mid = n / 2;
+    const cell = new BABYLON.Color3(85 / 255, 102 / 255, 119 / 255);
+    const center = new BABYLON.Color3(170 / 255, 187 / 255, 204 / 255);
+    for (let i = 0; i <= n; i += 1) {
+      const t = -half + (2 * half * i) / n;
+      const col = i === mid ? center : cell;
+      const gx = BABYLON.MeshBuilder.CreateLines(
+        "sn_gx_" + i,
+        { points: [new BABYLON.Vector3(t, 0, -half), new BABYLON.Vector3(t, 0, half)] },
+        scene
+      );
+      gx.color = col;
+      const gz = BABYLON.MeshBuilder.CreateLines(
+        "sn_gz_" + i,
+        { points: [new BABYLON.Vector3(-half, 0, t), new BABYLON.Vector3(half, 0, t)] },
+        scene
+      );
+      gz.color = col;
+    }
+    const axis = [
+      [new BABYLON.Vector3(AXIS_LEN, 0, 0), new BABYLON.Color3(1, 0, 0)],
+      [new BABYLON.Vector3(0, AXIS_LEN, 0), new BABYLON.Color3(0, 1, 0)],
+      [new BABYLON.Vector3(0, 0, AXIS_LEN), new BABYLON.Color3(0, 0, 1)],
+    ];
+    for (let i = 0; i < axis.length; i += 1) {
+      const line = BABYLON.MeshBuilder.CreateLines(
+        "sn_ax_" + i,
+        { points: [BABYLON.Vector3.Zero(), axis[i][0]] },
+        scene
+      );
+      line.color = axis[i][1];
+    }
+  })();
+
   let imported = [];
   let lastPath = "";
   let lastReset = null;
   let lastPsize = null;
   let lastWire = null;
   let loadGen = 0;
-  const CAM_KEY = "sn-orbit-cam";
-
-  function persistCam(shot) {
-    try {
-      window.sessionStorage.setItem(CAM_KEY, JSON.stringify(shot));
-    } catch (err) {
-      /* private mode / blocked storage — in-memory snapshot is enough */
-    }
-  }
-
-  function readPersistedCam() {
-    try {
-      const raw = window.sessionStorage.getItem(CAM_KEY);
-      if (!raw) {
-        return null;
-      }
-      const shot = JSON.parse(raw);
-      if (!shot || !Number.isFinite(shot.a) || !Number.isFinite(shot.r)) {
-        return null;
-      }
-      return shot;
-    } catch (err) {
-      return null;
-    }
-  }
-
-  function snapshotCam() {
-    const shot = {
-      a: camera.alpha,
-      b: camera.beta,
-      r: camera.radius,
-      tx: camera.target.x,
-      ty: camera.target.y,
-      tz: camera.target.z,
-    };
-    persistCam(shot);
-    return shot;
-  }
+  let loadBusy = false;
 
   function applyCam(shot) {
     if (!shot) {
@@ -323,7 +342,6 @@
     camera.radius = shot.r;
     camera.setTarget(new BABYLON.Vector3(shot.tx, shot.ty, shot.tz));
     scene.activeCamera = camera;
-    persistCam(shot);
   }
 
   function applyDefaultCam() {
@@ -424,18 +442,41 @@
     imported = [];
   }
 
-  async function loadGlb(url, keepShot, px, wire) {
-    const pose = keepShot || readPersistedCam() || snapshotCam();
+  async function loadGlb(url, px, wire) {
+    /* Freeze the orbit. Import must not frame, target, or replace the camera. */
+    const pose = {
+      a: camera.alpha,
+      b: camera.beta,
+      r: camera.radius,
+      tx: camera.target.x,
+      ty: camera.target.y,
+      tz: camera.target.z,
+    };
     const gen = (loadGen += 1);
-    const result = await BABYLON.SceneLoader.ImportMeshAsync("", url, "", scene);
+    let result;
+    try {
+      result = await BABYLON.SceneLoader.ImportMeshAsync("", url, "", scene);
+    } catch (err) {
+      applyCam(pose);
+      throw err;
+    }
     if (gen !== loadGen) {
       (result.meshes || []).forEach(function (m) {
         m.dispose(false, true);
       });
+      applyCam(pose);
       return;
     }
     clearImported();
-    imported = (result.meshes || []).slice();
+    imported = [];
+    (result.meshes || []).forEach(function (m) {
+      const n = String(m.name || "");
+      if (n.indexOf("occ_empty") >= 0) {
+        m.dispose(false, true);
+        return;
+      }
+      imported.push(m);
+    });
     (result.cameras || []).forEach(function (cam) {
       if (cam && cam.dispose) {
         cam.dispose();
@@ -444,12 +485,13 @@
     scene.activeCamera = camera;
     applyPointSize(px);
     applyWireframe(wire);
-    /* Always restore the pre-load orbit. Do not fit the mesh (that jump
-       was the original bug) and do not snap to start unless Reset view. */
     applyCam(pose);
   }
 
   async function tick() {
+    if (loadBusy) {
+      return;
+    }
     const path = fieldPath();
     const resetN = fieldReset();
     const px = fieldPsize();
@@ -468,18 +510,17 @@
       return;
     }
     if (pathChanged) {
-      /* Keep the current orbit on a new GLB (samples / drop / Run).
-         lastPath used to be required — a remount left it empty and the
-         camera snapped. Snapshot (plus sessionStorage) survives that. */
-      const keep = snapshotCam() || readPersistedCam();
       lastPath = path;
       lastReset = resetN;
       lastPsize = px;
       lastWire = wire;
+      loadBusy = true;
       try {
-        await loadGlb(fileUrl(path), keep, px, wire);
+        await loadGlb(fileUrl(path), px, wire);
       } catch (err) {
         console.error("sn-orbit load", err);
+      } finally {
+        loadBusy = false;
       }
       return;
     }
@@ -504,20 +545,19 @@
     scene.render();
   });
 
-  const bootCam = readPersistedCam();
-  if (bootCam) {
-    applyCam(bootCam);
-  }
-  canvas.addEventListener("pointerup", function () {
-    snapshotCam();
-  });
-  canvas.addEventListener(
-    "wheel",
-    function () {
-      snapshotCam();
+  applyDefaultCam();
+
+  window.__snOrbit = {
+    alive: function () {
+      return !!(
+        engine &&
+        !engine.isDisposed &&
+        canvas &&
+        canvas.isConnected &&
+        engine.getRenderingCanvas() === canvas
+      );
     },
-    { passive: true }
-  );
+  };
 
   await tick();
   window.setInterval(tick, 200);

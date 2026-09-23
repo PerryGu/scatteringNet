@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Sequence
@@ -28,6 +28,7 @@ from scatteringnet.config import (
     gpu_name,
     load_config,
 )
+from scatteringnet.data_npz import count_npz_labels
 from scatteringnet.dataset import (
     OccupancyMultiNpzDataset,
     OccupancyPointDataset,
@@ -216,6 +217,8 @@ def _checkpoint_payload(
         "envelope_dim": (
             int(model.envelope_dim) if isinstance(model, OccupancyEncoder) else None
         ),
+        "pos_weight": cfg.pos_weight,
+        "pos_weight_auto": bool(cfg.pos_weight_auto),
         "npz_paths": [as_data_relative(p, cfg.data_dir) for p in dataset.npz_paths],
         "parts": parts,
         "optimizer": None if optimizer is None else optimizer.state_dict(),
@@ -238,6 +241,47 @@ def _selection_score(
         f"unsupported checkpoint_metric {metric_name!r} "
         "(train_multi_npz logs val_acc and val_iou)"
     )
+
+
+def _train_label_counts(parts: Sequence[OccupancyPointDataset]) -> tuple[int, int]:
+    """Outside / inside totals on the train split (labels only, not XYZ)."""
+    n_out = 0
+    n_in = 0
+    for part in parts:
+        outside, inside = count_npz_labels(part.npz_path)
+        n_out += outside
+        n_in += inside
+    return n_out, n_in
+
+
+def resolve_bce_pos_weight(
+    cfg: OccupancyConfig,
+    train_parts: Sequence[OccupancyPointDataset],
+) -> tuple[float | None, int, int]:
+    """
+    BCE ``pos_weight`` for inside queries.
+
+    ``auto`` uses n_outside / n_inside on ``train_parts``. Explicit YAML
+    floats are used as-is. Omit / null keeps unweighted BCE.
+    """
+    n_out, n_in = _train_label_counts(train_parts)
+    if cfg.pos_weight_auto:
+        if n_in < 1:
+            raise ValueError(
+                "pos_weight auto needs at least one inside label in the train split"
+            )
+        return float(n_out) / float(n_in), n_out, n_in
+    if cfg.pos_weight is None:
+        return None, n_out, n_in
+    return float(cfg.pos_weight), n_out, n_in
+
+
+def _bce_criterion(pos_weight: float | None, device: torch.device) -> nn.Module:
+    """Unweighted BCE, or inside-class ``pos_weight`` on ``device``."""
+    if pos_weight is None:
+        return nn.BCEWithLogitsLoss()
+    weight = torch.tensor([float(pos_weight)], device=device, dtype=torch.float32)
+    return nn.BCEWithLogitsLoss(pos_weight=weight)
 
 
 def train_multi_npz(
@@ -314,6 +358,9 @@ def train_multi_npz(
     train_parts = [dataset.parts[int(i)] for i in train_idx.tolist()]
     val_parts = [dataset.parts[int(i)] for i in val_idx.tolist()]
     pin_memory = cfg.device.type == "cuda"
+    # Resolve auto n_out/n_in here (train split only). Architecture is unchanged.
+    resolved_pw, n_train_out, n_train_in = resolve_bce_pos_weight(cfg, train_parts)
+    cfg = replace(cfg, pos_weight=resolved_pw)
 
     resume_ckpt: dict | None = None
     resume_path: Path | None = None
@@ -343,7 +390,7 @@ def train_multi_npz(
         ).to(cfg.device)
     else:
         model = OccupancyMLP(hidden=cfg.hidden, depth=cfg.depth).to(cfg.device)
-    criterion = nn.BCEWithLogitsLoss()
+    criterion = _bce_criterion(cfg.pos_weight, cfg.device)
     optimizer = _make_optimizer(cfg.optimizer, model, lr)
     if resume_ckpt is not None and resume_ckpt.get("optimizer"):
         optimizer.load_state_dict(resume_ckpt["optimizer"])
@@ -367,7 +414,10 @@ def train_multi_npz(
         f"hidden={cfg.hidden} depth={cfg.depth} "
         f"shape_encoder={cfg.shape_encoder} n_surface={cfg.n_surface} "
         f"knn_k={cfg.knn_k} "
-        f"latent_dim={encoder_latent_dim(cfg)}"
+        f"latent_dim={encoder_latent_dim(cfg)} "
+        f"pos_weight={cfg.pos_weight} "
+        f"pos_weight_auto={cfg.pos_weight_auto} "
+        f"n_train_out={n_train_out} n_train_in={n_train_in}"
     )
     last_epoch = start_epoch + n_epochs - 1
     print(
@@ -404,6 +454,8 @@ def train_multi_npz(
                 "n_val": n_val,
                 "n_test": n_val,
                 "split": "mesh",
+                "n_train_out": n_train_out,
+                "n_train_in": n_train_in,
             }
         )
         saver = Checkpointer(

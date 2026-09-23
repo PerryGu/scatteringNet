@@ -112,25 +112,20 @@ class GradioFigureTests(unittest.TestCase):
 
         path = empty_figure()
         self.assertTrue(path.is_file())
-        self.assertGreater(path.stat().st_size, 500)
+        self.assertGreater(path.stat().st_size, 20)
         self.assertEqual(path.suffix, ".glb")
         a = empty_figure()
         b = empty_figure()
         self.assertNotEqual(a.name, b.name)
 
-    def test_floor_grid_exports_lines(self) -> None:
-        """Inspect GridHelper is GL_LINES, not a thick box waffle."""
-        import json
-        import struct
-
-        from figure import empty_figure
-
-        data = empty_figure().read_bytes()
-        chunk_len = struct.unpack_from("<I", data, 12)[0]
-        header = json.loads(data[20 : 20 + chunk_len].rstrip(b" \x00"))
-        modes = [p.get("mode", 4) for m in header["meshes"] for p in m["primitives"]]
-        self.assertTrue(modes)
-        self.assertTrue(all(m == 1 for m in modes))
+    def test_floor_grid_lives_in_orbit_js(self) -> None:
+        """Floor is a fixed Babylon helper, not a per-mesh GLB grid."""
+        text = (_GRADIO / "orbit.js").read_text(encoding="utf-8")
+        self.assertIn("addWorldHelpers", text)
+        self.assertIn("sn_gx_", text)
+        self.assertIn("CreateLines", text)
+        self.assertIn("GRID_HALF = 16", text)
+        self.assertIn("START_RADIUS = 60", text)
 
     def test_shell_opacity_writes_blend_material(self) -> None:
         import json
@@ -199,6 +194,39 @@ class GradioFigureTests(unittest.TestCase):
         self.assertIn("occ_points", names)
         self.assertIn("occ_shell", names)
 
+    def test_large_shell_is_exported(self) -> None:
+        """Load OBJ must draw Human2-scale meshes (old 80k cap wrote an empty GLB)."""
+        import json
+        import struct
+
+        from figure import occupancy_figure
+
+        n = 80_001
+        verts = np.zeros((n, 3), dtype=np.float32)
+        verts[:, 0] = np.linspace(0.0, 1.0, n, dtype=np.float32)
+        faces = np.array([[0, 1, 2]], dtype=np.int32)
+        data = occupancy_figure(
+            verts,
+            faces,
+            np.zeros((0, 3), dtype=np.float32),
+            np.zeros((0,), dtype=np.uint8),
+        ).read_bytes()
+        chunk_len = struct.unpack_from("<I", data, 12)[0]
+        header = json.loads(data[20 : 20 + chunk_len].rstrip(b" \x00"))
+        names = [node.get("name") for node in header.get("nodes", [])]
+        self.assertIn("occ_shell", names)
+
+    def test_empty_occupancy_does_not_raise(self) -> None:
+        from figure import occupancy_figure
+
+        path = occupancy_figure(
+            np.zeros((0, 3), dtype=np.float32),
+            np.zeros((0, 3), dtype=np.int32),
+            np.zeros((0, 3), dtype=np.float32),
+            np.zeros((0,), dtype=np.uint8),
+        )
+        self.assertTrue(path.is_file())
+
     def test_draw_cap_matches_fill_lattice(self) -> None:
         """GLB subsample must not drop points the 80k fill already classified."""
         from figure import MAX_PLOT_POINTS, _subsample
@@ -239,6 +267,9 @@ class GradioReplaceTests(unittest.TestCase):
         self.assertIn("cube.obj", last[3])
         self.assertIsNone(last[4])
         self.assertTrue(str(last[5]).replace("\\", "/").endswith("cube.obj"))
+        held = str(last[1])
+        cleared = list(accept_obj(None, 50, current_glb=held))
+        self.assertEqual(str(cleared[-1][1]), held)
 
     def test_orbit_js_keeps_one_engine(self) -> None:
         """Page JS must swap meshes, not construct a new Engine per GLB."""
@@ -246,10 +277,14 @@ class GradioReplaceTests(unittest.TestCase):
 
         text = (_GRADIO / "orbit.js").read_text(encoding="utf-8")
         self.assertIn("ImportMeshAsync", text)
-        self.assertIn("snapshotCam", text)
         self.assertIn("applyCam", text)
         self.assertIn("applyDefaultCam", text)
-        self.assertIn("sn-orbit-cam", text)
+        self.assertIn("addWorldHelpers", text)
+        self.assertIn("__snOrbit", text)
+        self.assertIn("loadCameras = false", text)
+        self.assertIn("lastPath", text)
+        self.assertIn("loadBusy", text)
+        self.assertNotIn("sessionStorage", text)
         self.assertNotIn("span * 1.6", text)
         self.assertNotIn("forceDefault || !keep", text)
         self.assertNotIn("lastPath && !resetChanged", text)
@@ -276,8 +311,11 @@ class GradioReplaceTests(unittest.TestCase):
         self.assertNotIn("gr.UploadButton", app_text)
         self.assertIn("Drop an OBJ file here", app_text)
         self.assertIn("_EXAMPLE_OBJS", app_text)
+        self.assertIn("inputs=[obj_in, opacity_in, reset_n, psize_in, wire_in, glb_held]", app_text)
         from app import _EXAMPLE_OBJS
 
+        self.assertEqual(_EXAMPLE_OBJS[0], "Obese.obj")
+        self.assertNotIn("cube.obj", _EXAMPLE_OBJS)
         for name in _EXAMPLE_OBJS:
             self.assertTrue((_GRADIO / "examples" / name).is_file(), name)
 

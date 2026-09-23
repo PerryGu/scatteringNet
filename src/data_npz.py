@@ -103,6 +103,25 @@ def count_npz_points(path: Path | str) -> int:
     return n
 
 
+def count_npz_labels(path: Path | str) -> tuple[int, int]:
+    """
+    Outside / inside counts in one NPZ without keeping the point cloud.
+
+    Used for ``pos_weight: auto`` (n_outside / n_inside on the train split).
+    """
+    npz_path = Path(path)
+    if not npz_path.is_file():
+        raise FileNotFoundError(f"NPZ not found: {npz_path}")
+    with np.load(npz_path, allow_pickle=False) as raw:
+        if "labels" not in set(raw.files):
+            raise KeyError(f"NPZ must contain 'labels', got {sorted(raw.files)} in {npz_path}")
+        labels = np.asarray(raw["labels"]).reshape(-1)
+    # Labels are 0/1 occupancy; nonzero is inside.
+    n_in = int(np.count_nonzero(labels))
+    n_out = int(labels.size) - n_in
+    return n_out, n_in
+
+
 def read_npz_mesh_path(path: Path | str) -> str:
     """
     Read the stored ``mesh_path`` string from one occupancy NPZ.

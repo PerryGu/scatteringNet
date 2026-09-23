@@ -132,6 +132,49 @@ class TrainMultiNpzTests(unittest.TestCase):
             self.assertIn("test_acc", row)
             self.assertIn("best_epoch", row)
             self.assertNotIn("smoke_epochs", snap)
+            self.assertIsNone(snap.get("pos_weight"))
+            self.assertFalse(snap.get("pos_weight_auto"))
+
+    def test_explicit_pos_weight_is_snapshotted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            a, b = _two_mesh_npzs(root)
+            cfg = replace(_cpu_cfg(root), pos_weight=3.5, pos_weight_auto=False)
+            result = train_multi_npz(
+                cfg,
+                npz_paths=[a, b],
+                epochs=1,
+                root=root,
+                run_name="pw",
+            )
+            snap = yaml.safe_load(
+                result.run_dir.joinpath("config.yaml").read_text(encoding="utf-8")
+            )
+            self.assertAlmostEqual(float(snap["pos_weight"]), 3.5)
+            self.assertFalse(snap["pos_weight_auto"])
+            ckpt = torch.load(result.best_path, map_location="cpu", weights_only=False)
+            self.assertAlmostEqual(float(ckpt["pos_weight"]), 3.5)
+
+    def test_auto_pos_weight_is_n_out_over_n_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            a, b = _two_mesh_npzs(root)
+            cfg = replace(_cpu_cfg(root), pos_weight=None, pos_weight_auto=True)
+            result = train_multi_npz(
+                cfg,
+                npz_paths=[a, b],
+                epochs=1,
+                root=root,
+                run_name="pw_auto",
+            )
+            snap = yaml.safe_load(
+                result.run_dir.joinpath("config.yaml").read_text(encoding="utf-8")
+            )
+            self.assertTrue(snap["pos_weight_auto"])
+            n_out = int(snap["n_train_out"])
+            n_in = int(snap["n_train_in"])
+            self.assertGreater(n_in, 0)
+            self.assertAlmostEqual(float(snap["pos_weight"]), n_out / n_in)
 
     def test_same_mesh_files_stay_on_one_side(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

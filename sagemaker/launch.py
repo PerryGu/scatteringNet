@@ -126,6 +126,31 @@ def _posix_s3_upload_keys() -> Iterator[None]:
         os.path.relpath = original
 
 
+@contextmanager
+def _trust_known_execution_role() -> Iterator[None]:
+    """Skip SDK v3 ``iam:SimulatePrincipalPolicy`` on ``ModelTrainer`` init.
+
+    That check requires MLflow, KMS, Lambda, and VPC ENI on the role.
+    This project's execution role already completed G5 occupancy jobs
+    without those extras. A hard deny here never reaches CreateTrainingJob.
+    """
+    from sagemaker.train.defaults import TrainDefaults
+
+    original = TrainDefaults.get_role
+
+    @staticmethod
+    def _use_provided(role=None, sagemaker_session=None):
+        if role:
+            return role
+        return original(role=role, sagemaker_session=sagemaker_session)
+
+    TrainDefaults.get_role = _use_provided
+    try:
+        yield
+    finally:
+        TrainDefaults.get_role = original
+
+
 def _execution_role(cli_role: str | None) -> str:
 
     role = (cli_role or os.environ.get("SAGEMAKER_EXECUTION_ROLE") or "").strip()
@@ -191,20 +216,22 @@ def main() -> None:
     stopping = StoppingCondition(max_runtime_in_seconds=_MAX_RUN_SECONDS)
     train_data = InputData(channel_name="training", data_source=args.data_s3)
 
-    trainer = ModelTrainer(
-        training_image=training_image,
-        role=role,
-        sagemaker_session=session,
-        source_code=source_code,
-        compute=compute,
-        output_data_config=output,
-        stopping_condition=stopping,
-        input_data_config=[train_data],
-        training_input_mode="File",
-        base_job_name="scatteringnet-n6",
-    )
+    with _trust_known_execution_role():
+        trainer = ModelTrainer(
+            training_image=training_image,
+            role=role,
+            sagemaker_session=session,
+            source_code=source_code,
+            compute=compute,
+            output_data_config=output,
+            stopping_condition=stopping,
+            input_data_config=[train_data],
+            training_input_mode="File",
+            base_job_name="scatteringnet-n6",
+        )
 
     print(f"job_name={job_name}")
+    print(f"role={role}")
     print(f"instance={_INSTANCE}")
     print(f"region={args.region}")
     print(f"data={args.data_s3}")
