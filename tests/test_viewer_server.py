@@ -101,6 +101,37 @@ class ViewerModelAccessTests(unittest.TestCase):
 
         self.assertEqual(list_viewer_models(Path(tempfile.gettempdir()) / "no-such-models"), [])
 
+    def test_inspect_run_id_matches_pointer_file(self) -> None:
+        from scatteringnet.viewer.model_access import inspect_run_id
+
+        self.assertEqual(
+            inspect_run_id(),
+            "2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6",
+        )
+
+    def test_locked_holdout_lists_inspect_objs(self) -> None:
+        from scatteringnet.viewer.model_access import locked_holdout_objs
+
+        names = locked_holdout_objs()
+        for name in (
+            "Human1.obj",
+            "dog.obj",
+            "Doguinho.obj",
+            "player2.obj",
+            "mongoose.obj",
+            "mix.obj",
+            "extrude_sx5_sy5_sz5_nr5_v11.obj",
+            "Helix_ffd.obj",
+            "Helix_bend.obj",
+            "Human_ffd.obj",
+            "TorusX3_box.obj",
+            "Aepycamelus.obj",
+            "horse.obj",
+            "Shark.obj",
+            "TorusX4.obj",
+        ):
+            self.assertIn(name, names)
+
     def test_resolve_checkpoint_under_models(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

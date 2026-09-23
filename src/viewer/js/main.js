@@ -1196,8 +1196,9 @@ async function fillModelSelect(preferredId) {
   }
   const previous = (preferredId && String(preferredId)) || selModel.value;
   try {
-    const models = await fetchModelList();
-    modelRows = Array.isArray(models) ? models : [];
+    const payload = await fetchModelList();
+    modelRows = Array.isArray(payload.models) ? payload.models : [];
+    const inspectId = payload.inspectId ? String(payload.inspectId) : "";
     selModel.innerHTML = "";
     if (!modelRows.length) {
       const opt = document.createElement("option");
@@ -1217,6 +1218,8 @@ async function fillModelSelect(preferredId) {
     });
     if (previous && modelRows.some((row) => row.id === previous)) {
       selModel.value = previous;
+    } else if (inspectId && modelRows.some((row) => row.id === inspectId)) {
+      selModel.value = inspectId;
     }
   } catch (err) {
     modelRows = [];

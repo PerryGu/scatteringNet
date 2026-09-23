@@ -138,12 +138,16 @@ export function decodeProbB64(body, n) {
 }
 
 /**
- * @returns {Promise<{id: string, path: string, shape_encoder?: string}[]>}
+ * @returns {Promise<{
+ *   models: {id: string, path: string, shape_encoder?: string}[],
+ *   inspectId: string
+ * }>}
  */
 export async function fetchModelList() {
   const res = await fetch("/api/models");
   const body = await readHelperJson(res);
-  return Array.isArray(body.models) ? body.models : [];
+  const models = Array.isArray(body.models) ? body.models : [];
+  return { models, inspectId: String(body.inspect_id || "") };
 }
 
 /**

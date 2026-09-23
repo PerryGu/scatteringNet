@@ -19,15 +19,15 @@ _REPO = _GRADIO_DIR.parents[1]
 
 from scatteringnet.config import load_config
 from scatteringnet.viewer.infer_job import infer_uploaded_obj, pred_from_probs  # noqa: E402
-from scatteringnet.viewer.model_access import list_viewer_models  # noqa: E402
+from scatteringnet.viewer.model_access import inspect_run_id, list_viewer_models  # noqa: E402
 from scatteringnet.viewer.obj_fill import (  # noqa: E402
     fill_aabb_lattice,
     spacing_from_slider,
     triangles_from_obj_text,
 )
 
-# Same inspect checkpoint named in the repo README.
-INSPECT_RUN_ID = "2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6"
+# INSPECT alias from docs/inspect_checkpoint.yaml (not the newest best.pt).
+INSPECT_RUN_ID = inspect_run_id()
 # Viewer allows 200k; Plotly + Spaces need a tighter lattice.
 MAX_FILL_POINTS = 80_000
 MAX_OBJ_BYTES = 32 * 1024 * 1024
@@ -48,10 +48,11 @@ def list_run_ids(root: Path | None = None) -> list[str]:
 
 
 def default_run_id(root: Path | None = None) -> str:
-    """Inspect weights if present, else the newest checkpoint, else empty."""
+    """INSPECT pointer if that ``best.pt`` exists, else newest, else empty."""
     ids = list_run_ids(root)
-    if INSPECT_RUN_ID in ids:
-        return INSPECT_RUN_ID
+    wanted = inspect_run_id()
+    if wanted and wanted in ids:
+        return wanted
     return ids[0] if ids else ""
 
 

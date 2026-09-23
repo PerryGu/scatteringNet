@@ -42,7 +42,7 @@ from pipeline import (  # noqa: E402
 )
 from scatteringnet.viewer.obj_fill import triangles_from_obj_text  # noqa: E402
 
-# Shipped sample meshes in examples/ (catalog shapes).
+# Shipped sample meshes in examples/ (not in the training catalog).
 _EXAMPLE_OBJS = (
     "Obese.obj",
     "horse.obj",
@@ -363,6 +363,9 @@ then **Run model**.
         if example_list:
             # One file column; the other inputs keep the live sliders / Wireframe.
             # inputs=obj_in alone called accept_obj_ui with wire=False.
+            gr.Markdown(
+                "These geometries were not in the model's training catalog."
+            )
             gr.Examples(
                 examples=[[p] for p in example_list],
                 inputs=[obj_in, opacity_in, reset_n, psize_in, wire_in, glb_held],

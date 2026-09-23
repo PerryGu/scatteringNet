@@ -1,0 +1,31 @@
+# Frozen evaluation / sanity-check OBJ set (INSPECT holdout).
+#
+# These meshes are the standard human Fill inspect list. They must never
+# be added to npz_catalog or to any training / catalog-val split.
+# Mesh-identity val that picks best.pt is a different list; it does not
+# replace this holdout.
+#
+# Names are OBJ basenames (case-insensitive on Windows). Gradio sample
+# rows may overlap (for example dog.obj, horse.obj, Helix_bend.obj) for
+# demos only — overlap is not a license to catalog the mesh.
+#
+# Train does not read this file yet. It is the locked list for humans
+# and for a unit test. Do not add these names to the catalog by hand.
+
+never_add_to_catalog: true
+objs:
+  - Human1.obj
+  - dog.obj
+  - Doguinho.obj
+  - player2.obj
+  - mongoose.obj
+  - mix.obj
+  - extrude_sx5_sy5_sz5_nr5_v11.obj
+  - Helix_ffd.obj
+  - Helix_bend.obj
+  - Human_ffd.obj
+  - TorusX3_box.obj
+  - Aepycamelus.obj
+  - horse.obj
+  - Shark.obj
+  - TorusX4.obj

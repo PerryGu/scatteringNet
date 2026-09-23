@@ -4,13 +4,13 @@ Inspect trained occupancy models in the browser. This folder is the viewer only;
 
 The page is Three.js. A localhost helper (`serve.py`) lists `models/<run_id>/best.pt`, fetches OBJ files under `config.yaml` `data_dir`, fills an unlabeled AABB lattice, and runs inference (needs conda env **scatteringNet** with PyTorch). The inspect color in this page is display only. The model labels points; another host (for example a Maya plugin) can draw those labels however it wants.
 
-Gradio (viewer Step 8) is skipped; use `open_viewer.bat`.
+Gradio is a separate Job B UI (`src/gradio`, `open_gradio.bat`). Do not merge the two. Both default to the **INSPECT** alias in [`docs/inspect_checkpoint.yaml`](../../docs/inspect_checkpoint.yaml). Use `open_viewer.bat` for this page.
 
 ## How to open
 
-**Double-click** `open_viewer.bat` (repo root or this folder). Close any old black console first, or the browser may still talk to a Python that has no `torch`. Keep the new console open: it **warms** CUDA / torch, a tiny fill, and one dummy infer on the newest `best.pt` **before** the browser opens (often ~8 s), so the first **Run model** is not the cold start. If the console already printed `warmup: done` but the page stays on “3D script never started”, close that tab and the console, then run the bat again (stale `text/plain` on a `.js` module).
+**Double-click** `open_viewer.bat` (repo root or this folder). Close any old black console first, or the browser may still talk to a Python that has no `torch`. Keep the new console open: it **warms** CUDA / torch, a tiny fill, and one dummy infer on the **INSPECT** `best.pt` (else newest) **before** the browser opens (often ~8 s), so the first **Run model** is not the cold start. If the console already printed `warmup: done` but the page stays on “3D script never started”, close that tab and the console, then run the bat again (stale `text/plain` on a `.js` module).
 
-Put checkpoints at `models/<run_id>/best.pt`. The Model list is that folder.
+Put checkpoints at `models/<run_id>/best.pt`. The Model list is that folder. With no saved `model_id` in `ui_prefs.json`, the list selects the INSPECT pointer. `09-16` and `pos_weight` stay in the list as A/B logs.
 
 ## The page
 

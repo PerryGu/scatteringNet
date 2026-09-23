@@ -1,0 +1,5 @@
+# INSPECT checkpoint alias (single source of truth).
+# Both the Three.js inspect viewer and Gradio default to this run when
+# models/<id>/best.pt exists. Do not call this alias "best".
+# 2026-09-16 area-only and the pos_weight run are documented A/B logs only.
+run_id: "2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6"

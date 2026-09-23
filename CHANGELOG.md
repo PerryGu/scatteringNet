@@ -6,6 +6,26 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-23 13:00 — Space: root requirements + README frontmatter
+
+Hugging Face Space ``guyPerry/scatteringnet``: root ``requirements.txt`` (``-e .``) and README ``app_file: src/gradio/app.py``. Occupancy train / infer math is unchanged.
+
+## 2026-09-23 12:00 — Gradio: sample row catalog note
+
+A one-line Markdown above **Sample OBJ** states those meshes were not in the training catalog.
+
+## 2026-09-23 12:00 — Org: inspect + holdout as YAML
+
+Replaced the two ``.txt`` pointers with [docs/inspect_checkpoint.yaml](docs/inspect_checkpoint.yaml) (``run_id``) and [docs/locked_holdout_objs.yaml](docs/locked_holdout_objs.yaml) (``objs``). Viewers still read the inspect alias. Train still does not enforce the holdout list.
+
+## 2026-09-23 12:00 — Org: expand locked holdout list
+
+Added Helix_ffd, Helix_bend, Human_ffd, TorusX3_box, Aepycamelus, horse, Shark, TorusX4 to [docs/locked_holdout_objs.yaml](docs/locked_holdout_objs.yaml). Human1 was already on the list (not duplicated). These names still must not enter ``npz_catalog``.
+
+## 2026-09-23 11:00 — Org: locked holdout + INSPECT alias
+
+Frozen inspect OBJ list: [docs/locked_holdout_objs.yaml](docs/locked_holdout_objs.yaml) (never add to ``npz_catalog``). Single INSPECT pointer: [docs/inspect_checkpoint.yaml](docs/inspect_checkpoint.yaml) → ``2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6``. README, Three.js viewer, and Gradio default to that alias. ``09-16`` and ``pos_weight`` stay documented A/B logs. The two UIs are not merged. Occupancy train / infer math is unchanged.
+
 ## 2026-09-23 10:00 — Train: knn24 n2048 pos_weight auto
 
 ``2026-09-22_10-08-18_prim_extruded_nr45_knn24_n2048_n6_pw`` — val IoU 0.971 @ 14, 9h 37m (G5). ``pos_weight: auto`` (4.280) vs unweighted knn24 / 2048. Viewer Fill is worse than ``2026-09-14_07-43-34_…_n6``. Write-up: [docs/training_log.md](docs/training_log.md#2026-09-23-1000--knn24-n2048-pos_weight-auto).

@@ -488,7 +488,7 @@ _WARM_OBJ = (
 def warmup_viewer_helper(models_root: Path) -> None:
     """
     Pay first-click costs before the browser opens: torch, CUDA, trimesh
-    fill, load newest ``best.pt``, tiny envelope + forward.
+    fill, load the INSPECT ``best.pt`` (else newest), tiny envelope + forward.
     """
     t0 = time.perf_counter()
     print("warmup: torch / CUDA…", flush=True)
@@ -512,14 +512,17 @@ def warmup_viewer_helper(models_root: Path) -> None:
     if int(points.shape[0]) < 1:
         points = np.array([[0.2, 0.2, 0.2], [0.8, 0.2, 0.2]], dtype=np.float32)
 
-    from scatteringnet.viewer.model_access import list_viewer_models
+    from scatteringnet.viewer.model_access import inspect_run_id, list_viewer_models
 
     rows = list_viewer_models(models_root)
     if not rows:
         print("warmup: no models/; skip infer", flush=True)
         print("warmup: done in %.1fs" % (time.perf_counter() - t0), flush=True)
         return
-    run_id = str(rows[0]["id"])
+    ids = [str(row["id"]) for row in rows]
+    wanted = inspect_run_id()
+    # Warm the inspect alias when that folder exists; otherwise newest.
+    run_id = wanted if wanted in ids else ids[0]
     print("warmup: infer " + run_id + "…", flush=True)
     infer_uploaded_obj(
         run_id=run_id,

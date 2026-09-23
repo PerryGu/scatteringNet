@@ -8,6 +8,55 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
+# Repo root: this file lives at src/viewer/model_access.py.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+# Pointers (YAML). Occupancy train / infer math does not read these.
+INSPECT_POINTER = _REPO_ROOT / "docs" / "inspect_checkpoint.yaml"
+HOLDOUT_POINTER = _REPO_ROOT / "docs" / "locked_holdout_objs.yaml"
+# Same id as the committed pointer; used if that file is missing.
+_INSPECT_FALLBACK = "2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6"
+
+
+def inspect_run_id() -> str:
+    """INSPECT alias: ``run_id`` in ``docs/inspect_checkpoint.yaml``.
+
+    Viewers use this as the default ``models/<id>/best.pt`` when that file
+    exists. Occupancy train / infer math is unchanged.
+    """
+    try:
+        raw = yaml.safe_load(INSPECT_POINTER.read_text(encoding="utf-8"))
+    except OSError:
+        return _INSPECT_FALLBACK
+    if not isinstance(raw, dict):
+        return _INSPECT_FALLBACK
+    token = str(raw.get("run_id") or "").strip()
+    return token[:200] if token else _INSPECT_FALLBACK
+
+
+def locked_holdout_objs() -> list[str]:
+    """OBJ basenames from ``docs/locked_holdout_objs.yaml``.
+
+    Train / catalog construction does not consult this list. It is the
+    locked inspect set for humans and for tests.
+    """
+    try:
+        raw = yaml.safe_load(HOLDOUT_POINTER.read_text(encoding="utf-8"))
+    except OSError:
+        return []
+    if not isinstance(raw, dict):
+        return []
+    objs = raw.get("objs") or []
+    if not isinstance(objs, list):
+        return []
+    names: list[str] = []
+    for item in objs:
+        name = str(item or "").strip()
+        if name:
+            names.append(name)
+    return names
+
 
 def _shape_encoder_from_run(runs_root: Path | None, run_id: str) -> str:
     """Read ``shape_encoder`` from ``runs/<id>/config.yaml`` (no torch)."""

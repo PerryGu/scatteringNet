@@ -1,0 +1,8 @@
+# Hugging Face Space install (pip cwd is the repo root).
+# Local Gradio can keep using src/gradio/requirements.txt.
+-e .
+gradio>=4.44
+numpy
+pyyaml
+trimesh>=4.0
+torch

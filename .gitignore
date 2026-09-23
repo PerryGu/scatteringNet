@@ -22,3 +22,5 @@ venv/
 src/viewer/ui_prefs.json
 src/viewer/ui_prefs.json.tmp
 scatteringnet.egg-info/
+
+

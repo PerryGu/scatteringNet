@@ -1,11 +1,23 @@
+---
+title: scatteringNet
+emoji: 🧊
+colorFrom: gray
+colorTo: yellow
+sdk: gradio
+app_file: src/gradio/app.py
+pinned: false
+license: mit
+short_description: Occupancy network that fills a 3D mesh with points labeled inside the solid.
+---
+
 # scatteringNet — Occupancy Fill
 
 ## TL;DR
 
 - PyTorch occupancy network that labels 3D query points **inside** a mesh volume (not on the surface, not outside).
 - Input is an OBJ (or a labeled occupancy NPZ). Output is an inside / outside point cloud. How you display it is up to the host tool.
-- Best **out-of-catalog Fill** so far: envelope of **2048** skin dots and **24** nearest neighbors (`2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`).
-- Trained on CAD primitives and extrudes only. Humans, animals, and combo meshes were **not** in the catalog; they are the inspect test.
+- **INSPECT** Fill (the one alias both UIs default to): envelope of **2048** skin dots and **24** nearest neighbors (`2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`). Pointer: [`docs/inspect_checkpoint.yaml`](docs/inspect_checkpoint.yaml). Area-only `09-16` and `pos_weight` are documented A/B logs, not this alias.
+- Trained on CAD primitives and extrudes only. The frozen inspect OBJ list ([`docs/locked_holdout_objs.yaml`](docs/locked_holdout_objs.yaml)) must never enter `npz_catalog`.
 - This is **not** how you should fill a volume in production. There are plenty of tools and libraries that do this quickly and accurately. This repo exists because I had already built that plugin, and I wanted to see the same job done with a network.
 
 ---
@@ -21,8 +33,8 @@
 
 ## Image Gallery
 
-Fill stills below are the **best current checkpoint** (`knn_k: 24`, `n_surface: 2048`, area-only: `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`).  
-The PNGs are the mix-75 twin (`07-43-34`); leftover class is the same. **None of the human / animal / combo stills were in the training catalog.** Gear is in-catalog. Helix is a catalog *family*, but not these bent / FFD meshes. Extrudes are a catalog family (`nr4` / `nr5`).
+Fill stills below are the **INSPECT** checkpoint (`knn_k: 24`, `n_surface: 2048`, mix-75: `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`).  
+Area-only `09-16` and `pos_weight` are A/B logs only. **None of the human / animal / combo stills were in the training catalog.** Gear is in-catalog. Helix is a catalog *family*, but not these bent / FFD meshes. Extrudes are a catalog family (`nr4` / `nr5`). The inspect OBJ names are locked in [`docs/locked_holdout_objs.yaml`](docs/locked_holdout_objs.yaml).
 
 
 |                                                                             |                                                                                                  |                                                                                             |
@@ -117,7 +129,9 @@ Or: `conda activate scatteringNet`, `pip install -e .`, then `python -m scatteri
 - **NPZ check.** The file already has points and Truth. **Run model** classifies those same coordinates. **Prediction** / **Errors** compare to the labels.
 - **Look.** Mesh / wireframe, inside / outside, opacity, point size, **Inside cut** (drag re-cuts the last Run in the browser, no extra GPU pass). Right-click a model row to append a note (`*`); that does not rename `models/`.
 
-Typical inspect path: **Open** an OBJ → pick a model → **Run model**.
+Typical inspect path: **Open** an OBJ → pick a model → **Run model**. With no saved `model_id`, the list defaults to the **INSPECT** alias in [`docs/inspect_checkpoint.yaml`](docs/inspect_checkpoint.yaml).
+
+**Gradio is a separate UI** (`src/gradio`, `open_gradio.bat`). It is not merged into this Three.js page. Both tools read the same INSPECT pointer when that `best.pt` exists.
 
 ---
 
@@ -251,17 +265,20 @@ Side-by-side viewer Fill on the same OOD set (woman, dog, man, CAD extrudes, com
 | -------------------------------------- | -------------- | ------- | ----------- | --------------- | ------------------------------------------------------------------------------------------------- |
 | `2026-09-05_12-18-28_…_n6`             | GTX 1080       | 16      | 1024        | 0.965           | Strong baseline. Cleaner woman hands than SageMaker k=16. More dog bleed.                         |
 | `2026-09-13_11-23-44_…_n6`             | SageMaker A10G | 16      | 1024        | 0.967           | Same YAML as the 1080 n6. Trades leftovers (woman left-hand leak; tighter dog).                   |
-| `2026-09-14_07-43-34_…_knn24_n2048_n6` | SageMaker A10G | **24**  | **2048**    | 0.974           | Mix 75. Inside points stay inside the wire on humans, extrudes, and combos.                       |
-| `2026-09-16_18-09-31_…_knn24_n2048_n6` | SageMaker A10G | **24**  | **2048**    | 0.974           | **Best Fill.** Area-only envelope. Slight extrude improvement; leftover class otherwise the same. |
+| `2026-09-14_07-43-34_…_knn24_n2048_n6` | SageMaker A10G | **24**  | **2048**    | 0.974           | **INSPECT** (mix 75). The alias both UIs default to. Inside points stay inside the wire on humans, extrudes, and combos. |
+| `2026-09-16_18-09-31_…_knn24_n2048_n6` | SageMaker A10G | **24**  | **2048**    | 0.974           | A/B log: area-only envelope vs mix-75. Slight extrude improvement; leftover class otherwise the same. Not the inspect alias. |
+| `2026-09-22_10-08-18_…_n6_pw`          | SageMaker A10G | **24**  | **2048**    | 0.971           | A/B log: `pos_weight: auto` (4.280). Viewer Fill worse than INSPECT. Not the inspect alias. |
 
 
 **What that comparison is not.** The two k=16 runs are the same recipe, not the same weights. Seed 1 does not pin cuDNN or TF32. Ampere (A10G) uses TF32 for FP32 matmuls by default; the 1080 does not. Val IoU 0.967 vs 0.965 is noise. Fill leftovers swap (hand vs ear) because catalog val never saw those meshes.
 
 **User conclusion (15 Sep 2026).** The two k=16 models are close: one wins a still, the other wins the next. If you want the **best** result on this inspect set, use 2048 envelope dots and 24 neighbors. Train wall and **Run model** are slower (k-NN scales with envelope `N`; that A10G train was ~9h 29m vs ~5h for SageMaker k=16 / 1024, ~10h on the 1080).
 
-**User conclusion (17 Sep 2026).** Area-only `18-09-31` matches that mix-75 Fill (slightly better on extrudes). Mix 75 is not required. Inspect weights are `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`.
+**User conclusion (17 Sep 2026).** Area-only `18-09-31` matches that mix-75 Fill (slightly better on extrudes). Mix 75 is not required. That run is a documented A/B log, not the inspect alias.
 
-**Catalog caveat (agreed).** None of those inspect shapes were training identities. If humans / animals had been in `npz_catalog`, k=16 / 1024 might have been enough, and this upgrade might not have been justified. Putting them in now would also end the OOD test: the next stills would be in-catalog, not a rerun of this grid.
+**INSPECT alias (23 Sep 2026).** One pointer: [`docs/inspect_checkpoint.yaml`](docs/inspect_checkpoint.yaml) → `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`. Area-only `18-09-31` and `pos_weight` `09-22` stay as A/B logs. The Three.js inspect page and Gradio stay separate; both default to that alias.
+
+**Catalog caveat (agreed).** None of those inspect shapes were training identities. The frozen list is [`docs/locked_holdout_objs.yaml`](docs/locked_holdout_objs.yaml) — do not add those names to `npz_catalog`. If humans / animals had been in the catalog, k=16 / 1024 might have been enough, and this upgrade might not have been justified. Putting them in now would also end the OOD test: the next stills would be in-catalog, not a rerun of this grid.
 
 **What not to do next.** Do not pick a default from val IoU. Do not resume a `best.pt` across a head or catalog change. Raising `knn_k` and `n_surface` **did** help this OOD Fill; more neighbors and a denser envelope (for example 32 and 4096) might help again. That is an open trade against train wall and infer time, not a closed door. A leftover remains: slight dog-ear spray, and fingers that are tighter (sometimes thinner inside) rather than bleeding out.
 
@@ -502,7 +519,7 @@ hidden/depth  : 64 / 4
 checkpoint_metric : val_iou
 ```
 
-Live `config.yaml` is the **next experiment**, not always the best Fill weights. Best Fill as of this README: `models/2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6/best.pt`.
+Live `config.yaml` is the **next experiment**, not always the inspect weights. INSPECT as of this README: `models/2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6/best.pt` ([`docs/inspect_checkpoint.yaml`](docs/inspect_checkpoint.yaml)).
 
 ---
 
@@ -510,7 +527,7 @@ Live `config.yaml` is the **next experiment**, not always the best Fill weights.
 
 - OOD Fill still leaks or under-fills thin structure (dog ear, some fingers, thin extrude spikes).
 - Catalog val can match while Fill leftovers swap across two trains of the same YAML (GPU / TF32 / non-deterministic CUDA).
-- Mesh-identity val selects `best.pt`; it is **not** a locked organic holdout (Phase 3 Step 12 still open).
+- Mesh-identity val still selects `best.pt`; that split is **not** the inspect holdout. The frozen inspect OBJ list is [`docs/locked_holdout_objs.yaml`](docs/locked_holdout_objs.yaml) and must stay out of `npz_catalog`.
 - Viewer Fill lattice is capped at 200,000 points (spacing coarsens if needed).
 - Envelope overlay **Count** does not change infer (display-only).
 - Face-token (`shape_encoder: mesh`) checkpoints are no longer loaded.
@@ -522,9 +539,9 @@ Live `config.yaml` is the **next experiment**, not always the best Fill weights.
 
 Personal occupancy research repo, wrapped at a Fill result that is willing to be shown: CAD catalog in, OOD volume fill out, with an honest leftover.
 
-More geometry families (combos, or organics in the train catalog — that ends the OOD inspect), `knn_k` 24→32, and a locked holdout that never selected `best.pt` are possible. I am not running those. For me the project has run its course.
+More geometry families (combos, or organics in the train catalog — that ends the OOD inspect) and `knn_k` 24→32 are possible. I am not running those. For me the project has run its course.
 
-Best inspect weights: `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6` (`knn_k: 24`, `n_surface: 2048`, `envelope_dim=6`, area-only).  
+INSPECT weights: `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6` (`knn_k: 24`, `n_surface: 2048`, `envelope_dim=6`, mix-75). Pointer: [`docs/inspect_checkpoint.yaml`](docs/inspect_checkpoint.yaml).  
 The cheaper n6 baseline (`knn_k: 16`, `n_surface: 1024`, `2026-09-05_12-18-28_…` on the 1080) remains the recipe that first made organics fill.
 
 Not a Maya plugin and not a hosted API. The production way to fill a volume is still geometry; this repo is the network detour I chose to take on purpose.

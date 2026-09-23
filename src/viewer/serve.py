@@ -235,7 +235,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _serve_models(self) -> None:
         try:
-            from scatteringnet.viewer.model_access import list_viewer_models
+            from scatteringnet.viewer.model_access import inspect_run_id, list_viewer_models
 
             root = self.models_dir
             models = (
@@ -246,7 +246,10 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as exc:
             self._send_json(500, {"error": str(exc)})
             return
-        self._send_json(200, {"ok": True, "models": models})
+        # inspect_id is the docs/inspect_checkpoint.yaml alias (default pick).
+        self._send_json(
+            200, {"ok": True, "models": models, "inspect_id": inspect_run_id()}
+        )
 
     def _read_json_body(self, max_bytes: int | None = None) -> dict:
         length_raw = self.headers.get("Content-Length")

@@ -311,6 +311,10 @@ class GradioReplaceTests(unittest.TestCase):
         self.assertNotIn("gr.UploadButton", app_text)
         self.assertIn("Drop an OBJ file here", app_text)
         self.assertIn("_EXAMPLE_OBJS", app_text)
+        self.assertIn(
+            "These geometries were not in the model's training catalog.",
+            app_text,
+        )
         self.assertIn("inputs=[obj_in, opacity_in, reset_n, psize_in, wire_in, glb_held]", app_text)
         from app import _EXAMPLE_OBJS
 
@@ -322,6 +326,15 @@ class GradioReplaceTests(unittest.TestCase):
 
 class GradioPipelineTests(unittest.TestCase):
     """Job B through the Gradio wrapper; Gradio UI is not started."""
+
+    def test_inspect_pointer_is_09_14_mix75(self) -> None:
+        """Gradio INSPECT alias matches docs/inspect_checkpoint.yaml."""
+        self.assertEqual(
+            INSPECT_RUN_ID,
+            "2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6",
+        )
+        pointer = (_REPO / "docs" / "inspect_checkpoint.yaml").read_text(encoding="utf-8")
+        self.assertIn(INSPECT_RUN_ID, pointer)
 
     def test_list_and_default_run_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
