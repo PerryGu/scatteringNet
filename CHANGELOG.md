@@ -6,6 +6,40 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-23 18:00 — Docs: Gradio link under Video Showcase
+
+Root [`README.md`](README.md) links the Hugging Face Space under Video Showcase (before Image Gallery). Occupancy code unchanged.
+
+## 2026-09-23 18:00 — Docs: Gradio README controls + inspiration
+
+[`src/gradio/README.md`](src/gradio/README.md) adds the curiosity / scatteringNode note and a control table for every button and slider. Occupancy code unchanged.
+
+## 2026-09-23 17:00 — Docs: rewrite Gradio README
+
+[`src/gradio/README.md`](src/gradio/README.md) is now a short description of the demo (what it does, local launch, Space, vs inspect). Occupancy code unchanged.
+
+## 2026-09-23 17:00 — Docs: drop HF YAML from root README
+
+Root [`README.md`](README.md) no longer starts with Space frontmatter (`sdk: gradio`, …). That card belongs on [`space/README.md`](space/README.md) only.
+
+
+## 2026-09-23 15:00 — Gradio: remove CPU header note
+
+Dropped the “runs on CPU, not GPU” line. Hardware is not customarily advertised in the hero text.
+
+
+## 2026-09-23 15:00 — Space: do not pin Gradio
+
+HF Gradio Spaces already install Gradio 6. Pinning ``gradio==4.44.1`` made pip fail (6 vs 4.44). Space ``requirements.txt`` now lists only torch / numpy / pyyaml / trimesh.
+
+## 2026-09-23 14:00 — Space: Gradio 6 launch on Hugging Face
+
+Gradio 6 rejects ``js`` / ``css`` on ``Blocks()`` — those go through a wrapped ``demo.launch()`` so orbit JS still loads. HF looks for a module-level ``demo`` and runs ``app.py`` as a script: skip ``launch()`` when ``SPACE_ID`` is set and the process exits 0 (runtime error); a second ``launch()`` double-starts the app (invalid file descriptor). The working shape is ``demo = build_demo()`` at module scope, one ``launch()`` on ``0.0.0.0`` when ``SPACE_ID`` or ``PORT`` is set (not 127.0.0.1).
+
+## 2026-09-23 13:00 — Space: slim Gradio push and HF pip
+
+``python space/push_space.py`` assembles Gradio + occupancy infer (no ``docs/media``, SageMaker, or ``*.pt``) and force-pushes that tree to ``guyPerry/scatteringnet``. Upload INSPECT ``best.pt`` in the Space Files UI. HF ``pip -r`` runs from ``/tmp``, so ``-e .`` and ``-e /home/user/app`` both fail (no ``pyproject.toml`` on that cwd). The slim tree mirrors occupancy modules as ``scatteringnet/`` and ``app.py`` puts the Space root on ``sys.path``.
+
 ## 2026-09-23 13:00 — Space: root requirements + README frontmatter
 
 Hugging Face Space ``guyPerry/scatteringnet``: root ``requirements.txt`` (``-e .``) and README ``app_file: src/gradio/app.py``. Occupancy train / infer math is unchanged.

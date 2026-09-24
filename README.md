@@ -1,15 +1,3 @@
----
-title: scatteringNet
-emoji: 🧊
-colorFrom: gray
-colorTo: yellow
-sdk: gradio
-app_file: src/gradio/app.py
-pinned: false
-license: mit
-short_description: Occupancy network that fills a 3D mesh with points labeled inside the solid.
----
-
 # scatteringNet — Occupancy Fill
 
 ## TL;DR
@@ -25,9 +13,11 @@ short_description: Occupancy network that fills a 3D mesh with points labeled in
 ## Video Showcase
 
 <a href="https://www.youtube.com/watch?v=vU45O0Mu0o4">
-  <img src="https://img.youtube.com/vi/vU45O0Mu0o4/hqdefault.jpg" alt="Occupancy fill with a neural net" width="100%" />
+  <img src="docs/media/2026-09-23_youtube_occupancy_fill.png" alt="Occupancy fill with a neural net" width="100%" />
 </a>
 <p align="center"><strong>Occupancy fill with a neural net</strong></p>
+
+**Gradio demo:** [huggingface.co/spaces/guyPerry/scatteringnet](https://huggingface.co/spaces/guyPerry/scatteringnet) — upload an OBJ (or pick a sample) and **Run model**. How to run it locally: [`src/gradio/README.md`](src/gradio/README.md).
 
 ---
 
@@ -161,6 +151,8 @@ Meshes are loaded with **trimesh**. Occupancy and ray queries go through **Open3
 
 Main flags (occupancy path):
 
+<details>
+<summary>Flags — click to expand</summary>
 
 | Flag                            | Default                     | Meaning                                                               |
 | ------------------------------- | --------------------------- | --------------------------------------------------------------------- |
@@ -174,9 +166,13 @@ Main flags (occupancy path):
 | `--limit` / `--skip`            | —                           | Cap / resume a long run                                               |
 | `--glob`                        | all meshes                  | Filename filter, e.g. `*_nr5_*.obj`                                   |
 
+</details>
+
 
 Keys in each file (`np.savez`, uncompressed). Training reads `points` and `labels`. `**mesh_path` is stored too**: the OBJ as a path relative to `data_dir` (forward slashes), so the mesh can be loaded again for envelope join without baking the geometry into the NPZ.
 
+<details>
+<summary>Keys — click to expand</summary>
 
 | Key             | Shape / type     | Meaning                                |
 | --------------- | ---------------- | -------------------------------------- |
@@ -187,9 +183,13 @@ Keys in each file (`np.savez`, uncompressed). Training reads `points` and `label
 | `point_spacing` | float32          | Lattice step (may have been coarsened) |
 | `random_range`  | float32          | Jitter half-width (`0` = lattice)      |
 
+</details>
+
 
 Example from `sphere_r0p5_sa16_sh16__occupancy_s0.15_inout.npz` (spacing `0.15`, no jitter):
 
+<details>
+<summary>Example metadata — click to expand</summary>
 
 | Key             | Value                                                |
 | --------------- | ---------------------------------------------------- |
@@ -198,9 +198,10 @@ Example from `sphere_r0p5_sa16_sh16__occupancy_s0.15_inout.npz` (spacing `0.15`,
 | `point_spacing` | `0.15`                                               |
 | `random_range`  | `0`                                                  |
 
+</details>
 
-Point rows (five inside, then five outside) — click to expand
-
+<details>
+<summary>Point rows (five inside, then five outside) — click to expand</summary>
 
 | #   | x       | y       | z       | label |
 | --- | ------- | ------- | ------- | ----- |
@@ -214,6 +215,8 @@ Point rows (five inside, then five outside) — click to expand
 | 2   | −0.6500 | −0.6500 | −0.3250 | 0     |
 | 3   | −0.6500 | −0.6500 | −0.1625 | 0     |
 | 4   | −0.6500 | −0.6500 | 0.0000  | 0     |
+
+</details>
 
 
 Index `0` is a bounding-box corner (outside). Index `121` sits near this sphere’s origin (inside).
@@ -371,10 +374,12 @@ flowchart TD
 
 ## Project Structure
 
-![](docs/media/icons/folder.svg) **scatteringNet/** — click to expand the tree
+<details>
+<summary>![](docs/media/icons/folder.svg) <strong>scatteringNet/</strong> — click to expand the tree</summary>
 
 - ![](docs/media/icons/file.svg) `config.yaml`
 - ![](docs/media/icons/file.svg) `environment.yaml`
+- ![](docs/media/icons/file.svg) `pyproject.toml`
 - ![](docs/media/icons/file.svg) `open_viewer.bat`
 - ![](docs/media/icons/file.svg) `CHANGELOG.md`
 - ![](docs/media/icons/file.svg) `README.md`
@@ -383,12 +388,14 @@ flowchart TD
   - ![](docs/media/icons/file.svg) `sagemaker.md`
   - ![](docs/media/icons/file.svg) `maya_batch_scatter_scripts.md`
   - ![](docs/media/icons/file.svg) `npz_dataset_generation.md`
+  - ![](docs/media/icons/file.svg) `inspect_checkpoint.yaml`
+  - ![](docs/media/icons/file.svg) `locked_holdout_objs.yaml`
   - ![](docs/media/icons/folder.svg) `media/`
 - ![](docs/media/icons/folder.svg) `models/`
-  - ![](docs/media/icons/folder.svg) `/`
+  - ![](docs/media/icons/folder.svg) `<run_id>/`
     - ![](docs/media/icons/file.svg) `best.pt`
 - ![](docs/media/icons/folder.svg) `runs/`
-  - ![](docs/media/icons/folder.svg) `/`
+  - ![](docs/media/icons/folder.svg) `<run_id>/`
     - ![](docs/media/icons/file.svg) `config.yaml`
     - ![](docs/media/icons/file.svg) `catalog.txt`
     - ![](docs/media/icons/file.svg) `metrics.jsonl`
@@ -396,6 +403,11 @@ flowchart TD
   - ![](docs/media/icons/file.svg) `entry.py`
   - ![](docs/media/icons/file.svg) `launch.py`
   - ![](docs/media/icons/file.svg) `requirements.txt`
+- ![](docs/media/icons/folder.svg) `space/` — slim Hugging Face Space push (`python space/push_space.py`)
+  - ![](docs/media/icons/file.svg) `push_space.py`
+  - ![](docs/media/icons/file.svg) `README.md`
+  - ![](docs/media/icons/file.svg) `requirements.txt`
+  - ![](docs/media/icons/file.svg) `pyproject.toml`
 - ![](docs/media/icons/folder.svg) `src/`
   - ![](docs/media/icons/file.svg) `occupancy_encoder.py`
   - ![](docs/media/icons/file.svg) `occupancy_mlp.py`
@@ -426,11 +438,23 @@ flowchart TD
     - ![](docs/media/icons/file.svg) `infer_job.py`
     - ![](docs/media/icons/file.svg) `envelope_job.py`
     - ![](docs/media/icons/file.svg) `obj_fill.py`
+    - ![](docs/media/icons/file.svg) `model_access.py`
     - ![](docs/media/icons/file.svg) `index.html`
+    - ![](docs/media/icons/file.svg) `README.md`
     - ![](docs/media/icons/folder.svg) `js/`
     - ![](docs/media/icons/folder.svg) `css/`
     - ![](docs/media/icons/folder.svg) `vendor/`
-- ![](docs/media/icons/folder.svg) `tests/` — stdlib `unittest` modules for the occupancy pipeline
+  - ![](docs/media/icons/folder.svg) `gradio/` — public occupancy fill demo (not the inspect viewer)
+    - ![](docs/media/icons/file.svg) `app.py`
+    - ![](docs/media/icons/file.svg) `pipeline.py`
+    - ![](docs/media/icons/file.svg) `figure.py`
+    - ![](docs/media/icons/file.svg) `orbit.js`
+    - ![](docs/media/icons/file.svg) `open_gradio.bat`
+    - ![](docs/media/icons/file.svg) `README.md`
+    - ![](docs/media/icons/folder.svg) `examples/`
+- ![](docs/media/icons/folder.svg) `tests/` — stdlib `unittest` modules for occupancy, viewer, and Gradio pipeline
+
+</details>
 
 ---
 
@@ -545,6 +569,16 @@ INSPECT weights: `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6` (`knn_k
 The cheaper n6 baseline (`knn_k: 16`, `n_surface: 1024`, `2026-09-05_12-18-28_…` on the 1080) remains the recipe that first made organics fill.
 
 Not a Maya plugin and not a hosted API. The production way to fill a volume is still geometry; this repo is the network detour I chose to take on purpose.
+
+---
+
+## Gradio (Hugging Face)
+
+Public fill demo: [huggingface.co/spaces/guyPerry/scatteringnet](https://huggingface.co/spaces/guyPerry/scatteringnet). Same Job B path as the inspect viewer (OBJ → lattice → INSPECT `best.pt`). It is **not** the Three.js page.
+
+Edit the app in [`src/gradio`](src/gradio/README.md). Local: `open_gradio.bat` or `python src/gradio/app.py` → `http://127.0.0.1:7860`. To update the Space, from the repo root: `python space/push_space.py` (slim tree only; then upload INSPECT `best.pt` in the Space Files UI). `space/` is that ship kit, not a second UI.
+
+How to run, samples, and limits: [`src/gradio/README.md`](src/gradio/README.md).
 
 ---
 

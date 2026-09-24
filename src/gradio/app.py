@@ -18,12 +18,22 @@ import sys
 import tempfile
 from pathlib import Path
 
+# ZeroGPU scans for ``@spaces.GPU`` at import. Import this before torch.
+try:
+    import spaces
+except ImportError:
+    spaces = None
+
 import numpy as np
 
 # Pip package first — this directory must not shadow it.
 import gradio as gr
 
 _HERE = Path(__file__).resolve().parent
+# Repo root (Space ships ``scatteringnet/`` here; local uses pip ``-e .``).
+_ROOT = _HERE.parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
@@ -63,6 +73,47 @@ _ORBIT_HOST = (
     '<div id="sn-drop-hint">Drop an OBJ file here</div>'
     "</div>"
 )
+# Shared by Blocks (Hugging Face finds ``demo``) and local launch().
+_ORBIT_CSS = (
+    "#sn-cmd-wrap { display: none !important; }"
+    "#sn-obj-file-slot {"
+    " position: fixed !important; left: -100vw !important; top: 0 !important;"
+    " width: 8px !important; height: 8px !important; overflow: hidden !important;"
+    " opacity: 0 !important; pointer-events: none !important;"
+    "}"
+    "#sn-obj-file-slot .file-preview-holder, #sn-obj-file-slot table,"
+    " #sn-obj-file-slot .filename { display: none !important; }"
+    "#sn-orbit-host.sn-drop-over { outline: 2px solid #f5a623; outline-offset: -2px; }"
+    "#sn-drop-hint {"
+    " position: absolute; left: 0; right: 0; top: 12px;"
+    " text-align: center; pointer-events: none; z-index: 2;"
+    " font-size: 13px; line-height: 1.3; color: #aabbcc;"
+    " text-shadow: 0 1px 2px #1a1a20;"
+    "}"
+)
+
+
+def _make_blocks() -> gr.Blocks:
+    """Gradio 6 moved ``js`` / ``css`` off Blocks onto ``launch()``."""
+    return gr.Blocks(title="scatteringNet occupancy")
+
+
+def _patch_launch(blocks: gr.Blocks) -> None:
+    """HF calls ``demo.launch()`` with no kwargs; inject orbit JS / CSS."""
+    orbit_js = _ORBIT_JS.read_text(encoding="utf-8")
+    orig = blocks.launch
+
+    def launch(*args, **kwargs):
+        kwargs.setdefault("js", orbit_js)
+        kwargs.setdefault("css", _ORBIT_CSS)
+        kwargs.setdefault("allowed_paths", [str(_glb_dir())])
+        try:
+            return orig(*args, **kwargs)
+        except TypeError:
+            kwargs.pop("js", None)
+            return orig(*args, **kwargs)
+
+    blocks.launch = launch
 
 
 def _glb_dir() -> Path:
@@ -246,6 +297,14 @@ def accept_obj_ui(
         yield state, glb, nxt, _cmd_html(glb, nxt, point_size, wire), md, cleared, held
 
 
+def _maybe_gpu(fn):
+    """ZeroGPU requires at least one ``@spaces.GPU`` at startup. No-op locally."""
+    if spaces is None:
+        return fn
+    return spaces.GPU(duration=30)(fn)
+
+
+@_maybe_gpu
 def run_model_ui(
     file_obj, obj_held, density, cut, show_outside, mesh_opacity, reset_n, point_size, wire
 ):
@@ -280,14 +339,15 @@ def build_demo() -> gr.Blocks:
     ] or None
     empty_glb = empty_figure()
 
-    with gr.Blocks(title="scatteringNet occupancy") as demo:
+    with _make_blocks() as demo:
         gr.Markdown(
             """
 # scatteringNet — occupancy fill
 
 A trained occupancy network that fills a 3D mesh with points it labels
-**inside** the solid (not outside). Drop an OBJ on the view (or **Load OBJ**),
-then **Run model**.
+**inside** the solid (not outside).
+
+[Code](https://github.com/PerryGu/scatteringNet) · [Video](https://youtu.be/vU45O0Mu0o4)
             """.strip()
         )
         state = gr.State(None)
@@ -423,40 +483,18 @@ then **Run model**.
     return demo
 
 
+# HF / ZeroGPU look for a module-level ``demo`` and for ``@spaces.GPU``.
+demo = build_demo()
+demo.queue()
+_patch_launch(demo)
+
+
 def main() -> None:
     """Local binds localhost; Spaces set ``PORT`` and need ``0.0.0.0``."""
-    demo = build_demo()
-    demo.queue()
-    # Gradio 6: js/head belong on launch(), not Blocks(). Scripts in gr.HTML
-    # are stripped; this is the documented way to run page JS.
-    orbit_js = _ORBIT_JS.read_text(encoding="utf-8")
-    kwargs = {
-        "js": orbit_js,
-        # Off-screen File slot: display:none can block input.click() for Load OBJ.
-        "css": (
-            "#sn-cmd-wrap { display: none !important; }"
-            "#sn-obj-file-slot {"
-            " position: fixed !important; left: -100vw !important; top: 0 !important;"
-            " width: 8px !important; height: 8px !important; overflow: hidden !important;"
-            " opacity: 0 !important; pointer-events: none !important;"
-            "}"
-            "#sn-obj-file-slot .file-preview-holder, #sn-obj-file-slot table,"
-            " #sn-obj-file-slot .filename { display: none !important; }"
-            "#sn-orbit-host.sn-drop-over { outline: 2px solid #f5a623; outline-offset: -2px; }"
-            "#sn-drop-hint {"
-            " position: absolute; left: 0; right: 0; top: 12px;"
-            " text-align: center; pointer-events: none; z-index: 2;"
-            " font-size: 13px; line-height: 1.3; color: #aabbcc;"
-            " text-shadow: 0 1px 2px #1a1a20;"
-            "}"
-        ),
-        "allowed_paths": [str(_glb_dir())],
-    }
-    port_env = os.environ.get("PORT")
-    if port_env:
-        demo.launch(server_name="0.0.0.0", server_port=int(port_env), **kwargs)
-        return
-    demo.launch(server_name="127.0.0.1", server_port=7860, **kwargs)
+    on_space = bool(os.environ.get("SPACE_ID") or os.environ.get("PORT"))
+    port = int(os.environ["PORT"]) if os.environ.get("PORT") else 7860
+    host = "0.0.0.0" if on_space else "127.0.0.1"
+    demo.launch(server_name=host, server_port=port)
 
 
 if __name__ == "__main__":

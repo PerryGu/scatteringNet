@@ -1,12 +1,33 @@
 # Occupancy Gradio demo
 
-Thin Hugging Face Gradio UI for occupancy **fill**. The inspect tool is still the Three.js page in [`src/viewer`](../viewer/README.md) (`open_viewer.bat`). The two UIs stay separate: this folder does not replace that viewer and does not change occupancy training. Both default to the **INSPECT** alias in [`docs/inspect_checkpoint.yaml`](../../docs/inspect_checkpoint.yaml).
+A public page that fills a mesh with the points the network labels **inside**. You bring an OBJ (or pick a sample), press **Run model**, and orbit the result. It is the same fill as the inspect viewer — not a second model.
 
-Upload an OBJ → mesh on an XZ **floor** of thin GridHelper-style lines plus RGB AxesHelper lines (Y-up). **Drop the OBJ on the 3D view** (or **Load OBJ**). **Run model** fills with occupancy points. **Mesh opacity** (default 50%) uses a GLTF blend material so inside points show through. **Wireframe** overlays crease edges on the solid shell (inspect-style, not every triangle). **Dot size** (default 8 px) scales occupancy points without remounting the camera. The 3D pane is a persistent Babylon canvas (`orbit.js`). Loading a sample, drop, **Load OBJ**, sliders, and **Run model** keep the orbit. **Reset view** returns to the start camera (45° / 70°, origin). Same Job B path as the helper (`obj_fill` + `infer_uploaded_obj`).
+This tool exists out of curiosity. Filling a volume is a geometry problem. A ray test, or the first-and-last-hit trick in **[scatteringNode](https://github.com/PerryGu/scatteringNode)** (a Maya C++ plugin from a production job, almost a decade ago), does it accurately and faster than a network. scatteringNet is the same job done with a trained head, on purpose — not a replacement for that method. If the math already works, keep the math. The longer version is in the root [README](../../README.md#project-inspiration).
 
-## Launch
+The inspect tool stays the Three.js page in [`src/viewer`](../viewer/README.md). This folder is only the Gradio demo. Both load the **INSPECT** weights in [`docs/inspect_checkpoint.yaml`](../../docs/inspect_checkpoint.yaml).
 
-Conda env **scatteringNet** (PyTorch already there):
+Live: [huggingface.co/spaces/guyPerry/scatteringnet](https://huggingface.co/spaces/guyPerry/scatteringnet)
+
+## Controls
+
+Drop an OBJ on the 3D view, or use **Load OBJ** / a sample. Drag to orbit. There is no model picker and no NPZ / Truth / Errors view — that stays on the inspect page.
+
+| Control | What it does |
+|---|---|
+| **Load OBJ** | File picker for an `.obj`. Same as dropping a file on the view. |
+| **Density** | How tight the query lattice is (0 = coarse, 100 = dense, default 71 ≈ training spacing). **Run model** builds a new lattice at this setting. Cap **80,000** points. |
+| **Inside cut** | After a run, a point is inside if its sigmoid *p* is at least this value (default 0.50). Lower counts more points as inside. Dragging re-cuts the last run — no extra forward pass. |
+| **Mesh opacity** | Shell transparency (default 50%) so inside points show through. |
+| **Dot size** | Occupancy point size in the view (1–24 px, default 8). Display only. |
+| **Show outside points** | Draw the points the network labeled outside (off by default). |
+| **Wireframe** | Crease-edge overlay on the mesh (not every triangle). |
+| **Run model** | Fill the bounding box at the current **Density**, then classify. Needs an OBJ on the floor. |
+| **Reset view** | Camera back to the start (45° / 70°, origin). Does not clear the mesh or the fill. |
+| **Sample OBJ** | Holdout meshes (Obese, horse, Player, dog, Helix_bend, TorusX3_box). None of these were in the training catalog. |
+
+## Open it locally
+
+Conda env **scatteringNet**:
 
 ```text
 pip install -e .
@@ -14,34 +35,22 @@ pip install -r src/gradio/requirements.txt
 python src/gradio/app.py
 ```
 
-Or double-click `open_gradio.bat` in this folder. Browser: `http://127.0.0.1:7860`. Sample meshes under `examples/` (Obese, horse, Player, dog, Helix_bend, TorusX3_box) appear in the **Sample OBJ** row. A line above that row states they were not in the training catalog.
+Or double-click `open_gradio.bat` in this folder. Browser: `http://127.0.0.1:7860`.
 
-Put the Space checkpoint at `models/<run_id>/best.pt`. The demo loads `default_run_id()`: the INSPECT pointer `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6` when that file exists, else the newest `best.pt`. There is no model picker. `09-16` and `pos_weight` are A/B logs, not this alias.
+Put `models/<run_id>/best.pt` in the repo. The demo uses the INSPECT run (`2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`) when that file is there, otherwise the newest `best.pt`. CUDA if the box has it, otherwise CPU.
 
 ## Hugging Face Space
 
-Space: [huggingface.co/spaces/guyPerry/scatteringnet](https://huggingface.co/spaces/guyPerry/scatteringnet). Push **this whole repo**. The Space reads the root [`requirements.txt`](../../requirements.txt) (`-e .`) and `app_file: src/gradio/app.py` from the README frontmatter. Local install can still use this folder’s [`requirements.txt`](requirements.txt) (`-e ../..`). The demo does **not** need Open3D or the training catalog.
-
-**GPU is optional.** Occupancy infer already maps the head with `.to(device)`: CUDA if `torch.cuda.is_available()`, otherwise **CPU**. A CPU Basic Space is the intended free path (example cube is fine; a dense 80k lattice is slower, not broken). Paid GPU / **ZeroGPU** only if you want the inspect-like wait on big meshes.
-
-Force CPU even on a GPU box:
+The live page is a slim copy of this demo plus occupancy infer — not the training repo. To refresh it, from the repo root:
 
 ```text
-SCATTERINGNET_DEVICE=cpu
+python space/push_space.py
 ```
 
-`SCATTERINGNET_DEVICE=cuda` uses CUDA only when it is actually available; otherwise it falls back to CPU (no crash).
+Then put INSPECT `best.pt` in the Space Files UI (git ignores `*.pt`). [`space/`](../../space/README.md) is that ship kit, not a second app.
 
-**Weights.** Put `models/<run_id>/best.pt` on the Space (INSPECT id `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6` if you have it). Repo `.gitignore` skips `*.pt` — use Git LFS or the Space files UI; do not expect `git push` of this repo to upload the checkpoint. `config.yaml` `data_dir` can stay as a local path; Gradio infer does not require that folder.
+A free visitor shares Hugging Face’s ZeroGPU daily allowance. The fill itself is small; CPU is enough.
 
-This demo is not the Three.js inspect UI.
+## Versus the inspect viewer
 
-## Why this folder is named `gradio`
-
-It sits next to `src/viewer` on purpose. It is **not** a Python package (no `__init__.py`) so `pip install -e .` does not ship a fake `gradio` library. Occupancy code is `import scatteringnet…`. This folder only holds the demo scripts (`figure`, `pipeline`, `app`). Launch `app.py` as a script after `import gradio` from site-packages.
-
-## Limits (vs the local viewer)
-
-- Lattice cap **80,000** points (viewer 200,000). The GLB draws that same set (not a 25k subsample).
-- No NPZ Truth / Errors, no envelope overlay, no recents / IndexedDB.
-- Inside cut recuts stored sigmoid probs (no extra GPU pass), same idea as the inspect slider.
+The lattice caps at **80,000** points (inspect allows 200,000). No envelope overlay, no recents, no file labels. **Inside cut** re-thresholds the last run from stored probabilities — same idea as the inspect slider, no extra forward pass.

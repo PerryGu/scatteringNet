@@ -1,0 +1,4 @@
+numpy
+pyyaml
+trimesh>=4.0
+torch

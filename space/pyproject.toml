@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scatteringnet"
+version = "0.1.0"
+description = "Occupancy fill demo (Gradio Space)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pyyaml",
+    "trimesh>=4.0",
+]
+
+[tool.setuptools]
+package-dir = { "scatteringnet" = "src" }
+packages = [
+    "scatteringnet",
+    "scatteringnet.geometry",
+    "scatteringnet.viewer",
+]
