@@ -54,6 +54,7 @@ class YamlKnobs(TypedDict):
     n_surface: int
     knn_k: int
     knn_local_dim: int | None
+    knn_pool: str
     shape_encoder: str
     # Explicit BCE pos_weight; None when omitted or when auto is set.
     pos_weight: float | None
@@ -230,6 +231,18 @@ def _as_optional_latent_dim(raw: Mapping[str, Any]) -> int | None:
 _ALLOWED_OPTIMIZERS = ("adam", "adamw", "sgd")
 # ``none`` = OccupancyMLP (xyz only). ``surface`` = envelope encoder.
 _ALLOWED_SHAPE_ENCODERS = ("none", "surface")
+# Local k-NN pool. Omit YAML → max (INSPECT / older best.pt).
+_ALLOWED_KNN_POOLS = ("max", "concat")
+
+
+def _as_knn_pool(value: Any) -> str:
+    """How the k neighbor rows become z_local."""
+    if value is None or (isinstance(value, str) and not str(value).strip()):
+        return "max"
+    name = str(value).strip().lower()
+    if name not in _ALLOWED_KNN_POOLS:
+        raise ValueError(f"knn_pool must be max or concat, got {value!r}")
+    return name
 
 
 def _as_optimizer(value: Any) -> str:
@@ -417,6 +430,9 @@ def load_yaml_knobs(path: Path) -> YamlKnobs:
             if "knn_local_dim" in raw
             else None
         ),
+        "knn_pool": (
+            _as_knn_pool(raw["knn_pool"]) if "knn_pool" in raw else "max"
+        ),
         "shape_encoder": (
             _as_shape_encoder(raw["shape_encoder"])
             if "shape_encoder" in raw
@@ -486,6 +502,8 @@ class OccupancyConfig:
     knn_k: int = 0
     # Width of z_local; None → same as occupancy latent_dim / hidden.
     knn_local_dim: int | None = None
+    # ``max`` = PointNet pool (older best.pt). ``concat`` = flatten k rows.
+    knn_pool: str = "max"
     # ``none`` keeps OccupancyMLP; ``surface`` uses the envelope PointNet.
     shape_encoder: str = "none"
     # BCE inside-class weight. None + auto=False = unweighted (legacy).
@@ -543,6 +561,7 @@ def load_config(
         n_surface=knobs["n_surface"],
         knn_k=knobs["knn_k"],
         knn_local_dim=knobs["knn_local_dim"],
+        knn_pool=knobs["knn_pool"],
         shape_encoder=knobs["shape_encoder"],
         pos_weight=knobs["pos_weight"],
         pos_weight_auto=knobs["pos_weight_auto"],
@@ -600,6 +619,7 @@ def format_config(cfg: OccupancyConfig) -> str:
         f"  n_surface={cfg.n_surface}\n"
         f"  knn_k={cfg.knn_k}\n"
         f"  knn_local_dim={cfg.knn_local_dim}\n"
+        f"  knn_pool={cfg.knn_pool}\n"
         f"  shape_encoder={cfg.shape_encoder}\n"
         f"  pos_weight={cfg.pos_weight}\n"
         f"  pos_weight_auto={cfg.pos_weight_auto}\n"

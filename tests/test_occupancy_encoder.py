@@ -12,11 +12,13 @@ import torch
 from scatteringnet.infer_multi_npz import load_occupancy_model
 from scatteringnet.occupancy_encoder import (
     CHECKPOINT_KIND,
+    LocalConcatEncoder,
     OccupancyEncoder,
     SurfaceEncoder,
     envelope_dim_from_ckpt,
     envelope_seed_from_ckpt,
     knn_offsets,
+    knn_pool_from_ckpt,
 )
 
 
@@ -150,6 +152,46 @@ class OccupancyEncoderTests(unittest.TestCase):
         model = OccupancyEncoder(hidden=8, depth=1, latent_dim=4, knn_k=0)
         self.assertFalse(hasattr(model, "local"))
         self.assertEqual(model.knn_k, 0)
+
+    def test_knn_pool_default_is_max(self) -> None:
+        model = OccupancyEncoder(hidden=8, depth=1, latent_dim=4, knn_k=4)
+        self.assertEqual(model.knn_pool, "max")
+        self.assertIsInstance(model.local, SurfaceEncoder)
+
+    def test_knn_concat_logits_and_grad(self) -> None:
+        model = OccupancyEncoder(
+            hidden=16, depth=2, latent_dim=8, knn_k=4, knn_pool="concat"
+        )
+        self.assertIsInstance(model.local, LocalConcatEncoder)
+        xyz = torch.randn(5, 3, requires_grad=True)
+        envelope = torch.randn(5, 20, 6)
+        shape_id = torch.zeros(5, dtype=torch.long)
+        logits = model(xyz, envelope, shape_id)
+        self.assertEqual(tuple(logits.shape), (5, 1))
+        logits.sum().backward()
+        self.assertIsNotNone(xyz.grad)
+        self.assertTrue(xyz.grad.abs().sum().item() > 0.0)
+
+    def test_knn_pool_from_ckpt_defaults_to_max(self) -> None:
+        self.assertEqual(knn_pool_from_ckpt({}), "max")
+        self.assertEqual(knn_pool_from_ckpt({"knn_pool": "concat"}), "concat")
+
+    def test_load_old_knn_checkpoint_stays_max_pool(self) -> None:
+        old = OccupancyEncoder(hidden=8, depth=1, latent_dim=4, knn_k=4)
+        ckpt = {
+            "kind": CHECKPOINT_KIND,
+            "state_dict": old.state_dict(),
+            "hidden": 8,
+            "depth": 1,
+            "latent_dim": 4,
+            "shape_encoder": "surface",
+            "knn_k": 4,
+            "knn_local_dim": 4,
+            "envelope_dim": 6,
+        }
+        loaded = load_occupancy_model(ckpt, torch.device("cpu"))
+        self.assertEqual(loaded.knn_pool, "max")
+        self.assertIsInstance(loaded.local, SurfaceEncoder)
 
 
 if __name__ == "__main__":

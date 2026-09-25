@@ -10,13 +10,11 @@ seed: 1           # Same seed as the previous extrude_nr1 train
 data_dir: "E:/Work_stuff/scatteringNet/data"  # Base root directory where all NPZ dataset files are stored
 
 # --- Training Hyperparameters ---
-epochs: 20        # Same length as the knn24-n2048 G5 clone (compare IoU to that best.pt)
+epochs: 2         # Pipeline smoke (max-pool). Set back to 20 for a real catalog train.
 lr: 0.001         # Initial learning rate
 batch_size: 1024  # Points per optimizer step (GPU mini-batch)
 optimizer: adam   # adam | adamw | sgd
-# BCE inside-class weight. auto = n_outside / n_inside on the train split.
-# Omit or null = unweighted BCE (legacy / 18-09-31 clone). Head is unchanged.
-pos_weight: auto
+# Omit = unweighted BCE. Do not stack pos_weight (auto lost Fill vs inspect).
 
 # --- Split ---
 # Whole meshes: 80% train / 20% val of unique OBJs. All NPZs of one OBJ stay on one side.
@@ -28,7 +26,13 @@ val_fraction: 0.20
 # Occupancy labels stay in the NPZ. New trains write envelope_dim=6 on best.pt.
 shape_encoder: surface   # none / surface
 n_surface: 2048          # Envelope samples on the joined OBJ (area-weighted face darts)
-knn_k: 24                # Neighbors per query (not envelope count). Same head as knn24-n2048 inspect / G5 clone. Fresh train; do not resume that mix-75 best.pt.
+knn_k: 24                # Neighbors per query (not envelope count). Same k as inspect.
+# How those k neighbor rows become one local vector. Live default / omit = max.
+#   max    — INSPECT method (best Fill so far): per-neighbor MLP, then keep
+#            the strongest channel across the k rows (PointNet).
+#   concat — flatten the k rows (24×6 = 144-D), then MLP. A/B only; worse Fill.
+#            Do not resume a max best.pt into concat, or the reverse.
+knn_pool: max
 # knn_local_dim: 64      # z_local width; omit to use latent_dim / hidden
 # latent_dim: 64         # OccupancyEncoder z width; omit to use hidden
 
@@ -62,7 +66,7 @@ max_files_per_shape: 2
 
 # --- Run logs ---
 # Suffix for runs/<YYYY-MM-DD_HH-MM-SS>_<name>/. Device is detected at runtime, not stored here.
-run_name: prim_extruded_nr45_knn24_n2048_n6_pw 
+run_name: prim_extruded_nr45_knn24_n2048_n6_test
 
 # --- Checkpoints ---
 # Scalar used to decide models/<run_id>/best.pt (strict improve). No last.pt.

@@ -6,6 +6,18 @@ Format: newest entries at the top. Headings: ``## YYYY-MM-DD HH:00`` (date and h
 Catalog trains get a short ``Train:`` note (run id, score, wall). The full write-up is linked from each note to [docs/training_log.md](docs/training_log.md).
 
 
+## 2026-09-25 13:00 — Live YAML: 2-epoch max-pool smoke
+
+``config.yaml`` ``epochs: 2`` for a SageMaker pipeline check of ``knn_pool: max``. Set back to 20 after the smoke. Occupancy code unchanged.
+
+## 2026-09-25 10:00 — Train: knn24 n2048 concat pool
+
+Train: ``2026-09-24_13-05-13_prim_extruded_nr45_knn24_n2048_n6_concat`` — val IoU **0.956** · acc **0.993** @ 14, wall **9h 31m** (A10G). Local ``knn_pool: concat``. Viewer Fill vs INSPECT max-pool is slightly worse (more leak on thin OOD parts). Write-up: [docs/training_log.md](docs/training_log.md#2026-09-25-1000--knn24-n2048-concat-pool).
+
+## 2026-09-24 15:00 — Occupancy: ``knn_pool: concat``
+
+Local k-NN can flatten the ``k`` neighbor rows (``LocalConcatEncoder``) instead of max-pooling them, so surround vs one-sided is still in ``z_local``. YAML ``knn_pool`` is ``max`` (omit / older ``best.pt`` / INSPECT) or ``concat``. Do not resume a max-pool ``best.pt`` into concat. Live ``config.yaml`` is the next concat A/B (unweighted BCE). Occupancy INSPECT weights are unchanged.
+
 ## 2026-09-23 18:00 — Docs: Gradio link under Video Showcase
 
 Root [`README.md`](README.md) links the Hugging Face Space under Video Showcase (before Image Gallery). Occupancy code unchanged.

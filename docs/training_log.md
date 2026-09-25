@@ -21,6 +21,7 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 
 | Run id                                          | Name                                                       | Score                      |
 | ----------------------------------------------- | ---------------------------------------------------------- | -------------------------- |
+| `2026-09-24_13-05-13_prim_extruded_nr45_knn24_n2048_n6_concat` | Same knn24 n2048 area-only, local `knn_pool: concat` | IoU 0.956 · acc 0.993 @ 14 |
 | `2026-09-22_10-08-18_prim_extruded_nr45_knn24_n2048_n6_pw` | Same knn24 n2048 area-only, BCE `pos_weight: auto`   | IoU 0.971 · acc 0.995 @ 14 |
 | `2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6` | Same knn24 n2048 catalog, area-only envelope (no Mix 75) | IoU 0.974 · acc 0.996 @ 20 |
 | `2026-09-14_19-00-37_prim_nr45_knn16_n6_nosmooth` | Same n6 head, catalog without smooth `extruded_*`        | IoU 0.978 · acc 0.996 @ 17 |
@@ -44,6 +45,101 @@ After every catalog train: append an entry. Point at `runs/<id>/` and `models/<i
 | `2026-08-29_19-43-15_extrude_nr1_surface`       | Envelope + xyz, file holdout                               | IoU 0.691 · acc 0.970 @ 18 |
 | `2026-08-29_09-28-54_extrude_nr1`               | Xyz-only, pooled point split                               | acc 0.853 @ 20             |
 
+
+---
+
+## 2026-09-25 10:00 — knn24 n2048 concat pool
+
+Fresh train. Same catalog, seed, mesh val, `h64/d4`, `knn_k: 24`, `n_surface: 2048`, area-only envelope, unweighted BCE as [`2026-09-16_18-09-31_prim_extruded_nr45_knn24_n2048_n6`](#2026-09-17-1000--knn24-n2048-area-only-drop-mix-75). **Not** a resume of that `best.pt` or of INSPECT [`2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`](#2026-09-14-2100--knn24-n2048-envelope-2048). The only train knob is local `knn_pool: concat` (flatten the 24 neighbor rows, then MLP). Older / INSPECT graphs stay max-pool. Job `scatteringnet-n6-20260924155610`. Goal: does keeping the set of neighbor directions clean OOD Fill vs the unweighted knn24 / 2048 inspect? Success is **viewer Fill**, not a higher val IoU.
+
+Run id (Artifacts, not the heading): `2026-09-24_13-05-13_prim_extruded_nr45_knn24_n2048_n6_concat`. Stills are in the **Fill** table immediately below — open **Preview**, not the outline.
+
+### Fill (viewer) — 25 Sep 2026 — unweighted 09-14 vs concat
+
+Same geometries, same lattice. Left is the knn24 / 2048 inspect (`2026-09-14_07-43-34_…_n6`, max-pool). Right is this run (`knn_pool: concat`). Overlay Count does not change infer. The helper posted the selected `run_id`; inside counts differ, so the switch is real.
+
+**User conclusion.** No Fill win. Where the inspect head already leaked a little, concat leaked slightly more (Lion tail, Doguinho ear / muzzle, mix cone–cylinder, Human2 hand). Helix_bend and TorusX3_box stay the same class of fill.
+
+**None of these stills were training identities** (Lion / Doguinho / mix / Human2). Helix is a catalog *family*, but not this bent mesh. TorusX3_box is locked holdout (a cube in a 3-torus), not a catalog train mesh.
+
+<table>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_ref_lion.png"><img src="media/2026-09-25_ref_lion.png" alt="Lion unweighted 09-14" width="100%"/></a><br/>Lion — unweighted 09-14 (25,866 inside; tail clean)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_concat_lion.png"><img src="media/2026-09-25_concat_lion.png" alt="Lion concat" width="100%"/></a><br/>Lion — concat (26,494 inside; spray off the tail tip)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_ref_doguinho.png"><img src="media/2026-09-25_ref_doguinho.png" alt="Doguinho unweighted 09-14" width="100%"/></a><br/>Doguinho — unweighted 09-14 (24,724 inside; a few ear specks)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_concat_doguinho.png"><img src="media/2026-09-25_concat_doguinho.png" alt="Doguinho concat" width="100%"/></a><br/>Doguinho — concat (25,143 inside; more ear / muzzle leftover)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_ref_mix.png"><img src="media/2026-09-25_ref_mix.png" alt="mix unweighted 09-14" width="100%"/></a><br/>mix primitives — unweighted 09-14 (28,894 inside; small leftover at the cone / cylinder)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_concat_mix.png"><img src="media/2026-09-25_concat_mix.png" alt="mix concat" width="100%"/></a><br/>mix primitives — concat (28,627 inside; more leak at that join)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_ref_human2.png"><img src="media/2026-09-25_ref_human2.png" alt="Human2 unweighted 09-14" width="100%"/></a><br/>Human2 — unweighted 09-14 (14,120 inside; hand stays empty / in-volume)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_concat_human2.png"><img src="media/2026-09-25_concat_human2.png" alt="Human2 concat" width="100%"/></a><br/>Human2 — concat (14,132 inside; spray in the hand)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_ref_helix_bend.png"><img src="media/2026-09-25_ref_helix_bend.png" alt="Helix_bend unweighted 09-14" width="100%"/></a><br/>Helix_bend — unweighted 09-14 (23,721 inside; same class of coil fill)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_concat_helix_bend.png"><img src="media/2026-09-25_concat_helix_bend.png" alt="Helix_bend concat" width="100%"/></a><br/>Helix_bend — concat (23,071 inside; no clear win)</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_ref_torusx3_box.png"><img src="media/2026-09-25_ref_torusx3_box.png" alt="TorusX3_box unweighted 09-14" width="100%"/></a><br/>TorusX3_box — unweighted 09-14 (8,631 inside; cube hole empty)</td>
+<td align="center" valign="top" width="50%"><a href="media/2026-09-25_concat_torusx3_box.png"><img src="media/2026-09-25_concat_torusx3_box.png" alt="TorusX3_box concat" width="100%"/></a><br/>TorusX3_box — concat (8,290 inside; same class of fill)</td>
+</tr>
+</table>
+
+### What ran
+
+| Knob | Value |
+|---|---|
+| Script | `src/train_multi_npz.py` via `sagemaker/entry.py` (from scratch; not a resume) |
+| Catalog | Same YAML `npz_catalog` as area-only knn24 n2048 (primitives + smooth `extruded_*` + capped `nr1`/`nr4`/`nr5`) |
+| `run_name` | `prim_extruded_nr45_knn24_n2048_n6_concat` |
+| Files | 2454 NPZs, 1227 unique OBJs |
+| Points | 41.99M (train 35.07M / val 6.92M) |
+| Geometry | `n_surface=2048`, area-weighted envelope (no `envelope_mix`), `knn_k=24`, `knn_pool=concat`, `shape_encoder=surface`, `envelope_dim=6` |
+| Loss | unweighted `BCEWithLogitsLoss` (`pos_weight` omitted) |
+| Split | **Mesh** identity (`n_train_meshes=982` / `n_val_meshes=245`, seed 1) |
+| Model | OccupancyEncoder `hidden=64` `depth=4`; `LocalConcatEncoder` flattens 24×6 neighbor rows → 144-D, then MLP |
+| Device | `cuda` / NVIDIA A10G (`ml.g5.xlarge`, `eu-north-1`) |
+| Optimizer | Adam, `lr=0.001` |
+| Batch | 1024 |
+| Epochs | 20 |
+| Seed | 1 |
+| Selection | `checkpoint_metric: val_iou` |
+| Duration | **9h 31m 21.89s** |
+
+**Artifacts**
+
+- Run: `runs/2026-09-24_13-05-13_prim_extruded_nr45_knn24_n2048_n6_concat/`
+- Weights: `models/2026-09-24_13-05-13_prim_extruded_nr45_knn24_n2048_n6_concat/best.pt`
+- S3: `s3://scatteringnet-sagemaker-bucket/scatteringNet/output/scatteringnet-n6-20260924155610/output/`
+- Wall: **9h 31m 21.89s** (`started=2026-09-24T13:05:01` → `finished=2026-09-24T22:36:22`)
+- `best_epoch: 14`, `best_metric: 0.955674` (val_iou); epochs 15–20 did not replace it
+- Snapshot `gpu: NVIDIA A10G`; `knn_pool: concat`; `pos_weight: null`; `data_dir` is the Linux channel (`/opt/ml/input/data/training`)
+
+### Vs unweighted knn24 n2048 (same catalog / split)
+
+| | **09-14 best @ 20** | **09-16 best @ 20** | **this run best @ 14** |
+|---|---|---|---|
+| val_acc | 0.996 | 0.996 | 0.993 |
+| val_iou / val_f1 | 0.974 / 0.987 | 0.974 / 0.987 | 0.956 / 0.977 |
+| train_acc | 0.997 | 0.998 | 0.995 |
+| loss | 0.0072 | 0.0062 | 0.0142 |
+| local pool | max | max | **concat** |
+| wall | 9h 29m | 9h 24m | **9h 31m** |
+| meshes / NPZs | 1227 / 2454 | same | same |
+| val points | 6.92M | same | same |
+
+Same box, catalog, seed, and mesh split as `18-09-31`. Wall is the same class (~9.5 h); concat is a local-head graph, not extra k or N. Val IoU **dropped** (0.974 → 0.956) and `best.pt` stopped at epoch 14 while later ticks got worse. The inspect `best.pt` and this file have different `local.*` keys (`point_mlp` vs `mlp` 144→64); the viewer cannot silently mix them. A resume into the max-pool graph is not valid. Do not read the extra inside counts on Lion / Doguinho / Human2 as a Fill win — those stills grew leak.
+
+**Not shown by this run**
+
+- That a wider / deeper concat MLP would recover the 09-14 Fill (thin-sheet k-NN is the leftover error; capacity is not the first bet)
+- That a per-neighbor encode-then-attention aggregator would help
+
+**Bottom line:** `knn_pool: concat` **hurt** Fill vs the unweighted knn24 / 2048 inspect (`07-43-34`). Keep using that older `best.pt` for viewer / Gradio. Do not pick this run from val IoU. Leave `knn_pool` at max (omit / INSPECT) unless a new A/B says otherwise.
 
 ---
 

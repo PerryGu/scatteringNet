@@ -1,0 +1,79 @@
+batch_size: 1024
+best_epoch: 14
+best_metric: 0.9556738472027376
+catalog_file: catalog.txt
+catalog_n: 2454
+checkpoint: 14
+checkpoint_metric: val_iou
+data_dir: /opt/ml/input/data/training
+depth: 4
+device: cuda
+epochs: 20
+finished_at: '2026-09-24T22:36:22'
+gpu: NVIDIA A10G
+hidden: 64
+knn_k: 24
+knn_local_dim: null
+knn_pool: concat
+latent_dim: null
+lr: 0.001
+max_files_per_shape: 2
+n_files: 2454
+n_meshes: 1227
+n_points: 41990554
+n_surface: 2048
+n_test: 6923130
+n_test_files: 490
+n_test_meshes: 245
+n_train: 35067424
+n_train_files: 1964
+n_train_in: 6642067
+n_train_meshes: 982
+n_train_out: 28425357
+n_val: 6923130
+n_val_files: 490
+n_val_meshes: 245
+npz_catalog:
+- glob: exports/dataset/cone_*.npz
+  max_shapes: null
+- glob: exports/dataset/cube_*.npz
+  max_shapes: null
+- glob: exports/dataset/cyl_*.npz
+  max_shapes: null
+- glob: exports/dataset/gear_*.npz
+  max_shapes: null
+- glob: exports/dataset/helix_*.npz
+  max_shapes: null
+- glob: exports/dataset/pipe_*.npz
+  max_shapes: null
+- glob: exports/dataset/platonic_*.npz
+  max_shapes: null
+- glob: exports/dataset/prism_*.npz
+  max_shapes: null
+- glob: exports/dataset/sphere_*.npz
+  max_shapes: null
+- glob: exports/dataset/torus_*.npz
+  max_shapes: null
+- glob: exports/dataset/extruded_*occupancy_s0.08*.npz
+  max_shapes: null
+- glob: exports/dataset/extrude_*_nr1_*.npz
+  max_shapes: 40
+- glob: exports/dataset/extrude_*_nr4_*occupancy_s0.08*.npz
+  max_shapes: 90
+- glob: exports/dataset/extrude_*_nr5_*occupancy_s0.08*.npz
+  max_shapes: null
+npz_glob: exports/dataset/*.npz
+optimizer: adam
+pos_weight: null
+pos_weight_auto: false
+run_dir: runs/2026-09-24_13-05-13_prim_extruded_nr45_knn24_n2048_n6_concat
+run_id: 2026-09-24_13-05-13_prim_extruded_nr45_knn24_n2048_n6_concat
+run_name: prim_extruded_nr45_knn24_n2048_n6_concat
+seed: 1
+shape_encoder: surface
+split: mesh
+started_at: '2026-09-24T13:05:01'
+total: 20
+val_fraction: 0.2
+wall: 9h 31m 21.89s
+wall_seconds: 34281.893

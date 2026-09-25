@@ -116,6 +116,7 @@ def occupancy_config_snapshot(
         "n_surface": int(cfg.n_surface),
         "knn_k": int(cfg.knn_k),
         "knn_local_dim": cfg.knn_local_dim,
+        "knn_pool": str(cfg.knn_pool),
         "shape_encoder": str(cfg.shape_encoder),
         "pos_weight": cfg.pos_weight,
         "pos_weight_auto": bool(cfg.pos_weight_auto),

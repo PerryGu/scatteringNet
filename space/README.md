@@ -14,7 +14,9 @@ short_description: "Occupancy fill: label inside points on a 3D mesh."
 
 Public Gradio demo. Upload an OBJ (or pick a sample) and **Run model** to label query points inside the solid.
 
-[Code](https://github.com/PerryGu/scatteringNet) · [Video](https://youtu.be/vU45O0Mu0o4)
+[Code](https://github.com/PerryGu/scatteringNet)
+
+[Video](https://youtu.be/vU45O0Mu0o4)
 
 These sample meshes were not in the training catalog.
 

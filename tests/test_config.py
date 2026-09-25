@@ -109,6 +109,7 @@ class OccupancyConfigTests(unittest.TestCase):
         self.assertIn("n_surface=", rendered)
         self.assertNotIn("envelope_mix=", rendered)
         self.assertIn("knn_k=", rendered)
+        self.assertIn("knn_pool=", rendered)
         self.assertIn("shape_encoder=", rendered)
         self.assertIn("pos_weight=", rendered)
         self.assertIn("pos_weight_auto=", rendered)
@@ -235,6 +236,7 @@ class OccupancyConfigTests(unittest.TestCase):
             self.assertEqual(knobs["latent_dim"], 16)
             self.assertNotIn("envelope_mix", knobs)
             self.assertEqual(knobs["knn_k"], 0)
+            self.assertEqual(knobs["knn_pool"], "max")
             self.assertIsNone(knobs["pos_weight"])
             self.assertFalse(knobs["pos_weight_auto"])
 

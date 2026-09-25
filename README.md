@@ -4,8 +4,8 @@
 
 - PyTorch occupancy network that labels 3D query points **inside** a mesh volume (not on the surface, not outside).
 - Input is an OBJ (or a labeled occupancy NPZ). Output is an inside / outside point cloud. How you display it is up to the host tool.
-- **INSPECT** Fill (the one alias both UIs default to): envelope of **2048** skin dots and **24** nearest neighbors (`2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`). Pointer: [`docs/inspect_checkpoint.yaml`](docs/inspect_checkpoint.yaml). Area-only `09-16` and `pos_weight` are documented A/B logs, not this alias.
-- Trained on CAD primitives and extrudes only. The frozen inspect OBJ list ([`docs/locked_holdout_objs.yaml`](docs/locked_holdout_objs.yaml)) must never enter `npz_catalog`.
+- **INSPECT** Fill (the one alias both UIs default to): envelope of **2048** skin dots and **24** nearest neighbors (`2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`). Area-only `09-16`, `pos_weight`, and `concat` are documented A/B logs, not this alias.
+- Trained on CAD primitives and extrudes only. The frozen inspect OBJ list must never enter `npz_catalog`.
 - This is **not** how you should fill a volume in production. There are plenty of tools and libraries that do this quickly and accurately. This repo exists because I had already built that plugin, and I wanted to see the same job done with a network.
 
 ---
@@ -24,7 +24,7 @@
 ## Image Gallery
 
 Fill stills below are the **INSPECT** checkpoint (`knn_k: 24`, `n_surface: 2048`, mix-75: `2026-09-14_07-43-34_prim_extruded_nr45_knn24_n2048_n6`).  
-Area-only `09-16` and `pos_weight` are A/B logs only. **None of the human / animal / combo stills were in the training catalog.** Gear is in-catalog. Helix is a catalog *family*, but not these bent / FFD meshes. Extrudes are a catalog family (`nr4` / `nr5`). The inspect OBJ names are locked in [`docs/locked_holdout_objs.yaml`](docs/locked_holdout_objs.yaml).
+Area-only `09-16`, `pos_weight`, and `concat` are A/B logs only. **None of the human / animal / combo stills were in the training catalog.** Gear is in-catalog. Helix is a catalog *family*, but not these bent / FFD meshes. Extrudes are a catalog family (`nr4` / `nr5`). The inspect OBJ names are locked in [`docs/locked_holdout_objs.yaml`](docs/locked_holdout_objs.yaml).
 
 
 |                                                                             |                                                                                                  |                                                                                             |
@@ -84,6 +84,26 @@ The mesh is also reduced to an **envelope**: `n_surface` area-weighted samples o
 The occupancy head is small on purpose (`hidden: 64`, `depth: 4`). What changed the Fill quality was not a wider MLP. It was **how each query reads** that envelope: a PointNet over the whole cloud, then a local k-NN of nearby skin dots.
 
 Catalog val IoU is a useful health check. It is **not** the success bar. Success is viewer **Fill** on shapes the split never saw.
+
+---
+
+## What we tried
+
+We trained only on simple CAD parts (boxes, gears, extrudes). We judged success by how well the fill looked on people, animals, and other shapes that were **never** in that folder. A higher training score was not enough.
+
+- **Points only.** The first trains saw a query location and no skin. They could copy the training shapes. They did not understand a new mesh.
+- **Skin dots.** We reduced each mesh to a cloud of dots on the surface (the envelope). That is still how the network “sees” a shape.
+- **Reading the triangles.** We tried feeding the faces themselves. The fill got worse. We dropped it.
+- **A bigger network.** Wider and deeper layers moved the numbers. The pictures did not get better.
+- **Extra dots on sharp edges (the 75% mix).** This looked useful on paper. For the fills we care about, it did not beat spreading dots by face size. The default pictures still come from a run that used that mix; turning it off later did not unlock a new win.
+- **Which way the surface faces (normals).** Adding a direction to each skin dot is the step that first filled humans and animals the training set had never seen.
+- **More nearby dots, denser skin.** We raised the local neighborhood from 16 to **24** neighbors, and the skin cloud from 1,024 to **2,048** dots. **Those two together** gave the cleanest fill we have. That is the model both viewers open by default.
+- **Paying extra for “inside” mistakes.** The training set is mostly air, so we tried making a missed interior point cost more. Leaks and holes got worse. We left that off.
+- **Looking at all 24 neighbors as one long list.** Instead of keeping the strongest signal from the neighborhood, we lined every neighbor up and read them together. Leaks on thin parts got slightly worse. We went back to the older method.
+
+The default model is still **2,048 skin dots + 24 nearby dots + surface directions**, trained without those last two tricks.
+
+Full notes for every train (scores, stills, and what not to claim): [`docs/training_log.md`](docs/training_log.md).
 
 ---
 
@@ -539,6 +559,7 @@ python -m unittest discover -s tests
 shape_encoder : surface     # envelope OccupancyEncoder (xyz-only is "none")
 n_surface     : 1024|2048   # envelope count (skin dots, area-weighted)
 knn_k         : 16|24       # neighbors per query (not envelope count)
+knn_pool      : max|concat  # max = INSPECT PointNet; concat = flatten k rows
 hidden/depth  : 64 / 4
 checkpoint_metric : val_iou
 ```

@@ -213,6 +213,7 @@ def _checkpoint_payload(
         "n_surface": int(cfg.n_surface),
         "knn_k": int(cfg.knn_k),
         "knn_local_dim": encoder_knn_local_dim(cfg) if int(cfg.knn_k) > 0 else 0,
+        "knn_pool": str(cfg.knn_pool) if int(cfg.knn_k) > 0 else "max",
         "latent_dim": encoder_latent_dim(cfg),
         "envelope_dim": (
             int(model.envelope_dim) if isinstance(model, OccupancyEncoder) else None
@@ -387,6 +388,7 @@ def train_multi_npz(
             shape_encoder=str(cfg.shape_encoder),
             knn_k=int(cfg.knn_k),
             knn_local_dim=encoder_knn_local_dim(cfg) if int(cfg.knn_k) > 0 else None,
+            knn_pool=str(cfg.knn_pool),
         ).to(cfg.device)
     else:
         model = OccupancyMLP(hidden=cfg.hidden, depth=cfg.depth).to(cfg.device)
@@ -413,7 +415,7 @@ def train_multi_npz(
         f"gpu={gpu_name(cfg.device)} "
         f"hidden={cfg.hidden} depth={cfg.depth} "
         f"shape_encoder={cfg.shape_encoder} n_surface={cfg.n_surface} "
-        f"knn_k={cfg.knn_k} "
+        f"knn_k={cfg.knn_k} knn_pool={cfg.knn_pool} "
         f"latent_dim={encoder_latent_dim(cfg)} "
         f"pos_weight={cfg.pos_weight} "
         f"pos_weight_auto={cfg.pos_weight_auto} "

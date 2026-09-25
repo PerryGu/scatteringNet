@@ -21,6 +21,7 @@ from scatteringnet.metrics import occupancy_metrics
 from scatteringnet.normalize import apply_normalization
 from scatteringnet.occupancy_encoder import (
     OccupancyEncoder,
+    knn_pool_from_ckpt,
     envelope_dim_from_ckpt,
     envelope_seed_from_ckpt,
 )
@@ -88,6 +89,7 @@ def load_occupancy_model(
             shape_encoder=enc,
             knn_k=knn_k,
             knn_local_dim=knn_local,
+            knn_pool=knn_pool_from_ckpt(ckpt),
             envelope_dim=envelope_dim_from_ckpt(ckpt),
         )
     else:

@@ -347,7 +347,9 @@ def build_demo() -> gr.Blocks:
 A trained occupancy network that fills a 3D mesh with points it labels
 **inside** the solid (not outside).
 
-[Code](https://github.com/PerryGu/scatteringNet) · [Video](https://youtu.be/vU45O0Mu0o4)
+[Code](https://github.com/PerryGu/scatteringNet)
+
+[Video](https://youtu.be/vU45O0Mu0o4)
             """.strip()
         )
         state = gr.State(None)
