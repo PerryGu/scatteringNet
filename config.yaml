@@ -10,7 +10,7 @@ seed: 1           # Same seed as the previous extrude_nr1 train
 data_dir: "E:/Work_stuff/scatteringNet/data"  # Base root directory where all NPZ dataset files are stored
 
 # --- Training Hyperparameters ---
-epochs: 2         # Pipeline smoke (max-pool). Set back to 20 for a real catalog train.
+epochs: 20         # Pipeline smoke (max-pool). Set back to 20 for a real catalog train.
 lr: 0.001         # Initial learning rate
 batch_size: 1024  # Points per optimizer step (GPU mini-batch)
 optimizer: adam   # adam | adamw | sgd
