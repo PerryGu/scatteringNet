@@ -605,7 +605,7 @@ How to run, samples, and limits: [`src/gradio/README.md`](src/gradio/README.md).
 
 ## Contact & Author
 
-**Perry Guy** - Programmer  
+**Perry Guy** - Software Engineer & Technical Artist   
 *Extensive experience in 3D Graphics, Tool Development, and Performance Optimization.*
 
 📧 **Email**: [perryguy2@gmail.com](mailto:perryguy2@gmail.com)
